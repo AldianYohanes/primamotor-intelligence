@@ -6,6 +6,9 @@ import { ColorSchemeScript, mantineHtmlProps } from "@mantine/core";
 import type { Metadata } from "next";
 import { Forum, Outfit } from "next/font/google";
 import { Providers } from "../lib/mantine/providers";
+import { createClient } from "../lib/supabase/server";
+import { SessionProvider } from "../lib/supabase/session-provider";
+import { Header, Footer } from "../components/Layout";
 
 const outfit = Outfit({
   subsets: ["latin"],
@@ -25,11 +28,16 @@ export const metadata: Metadata = {
   description: "Healthcare intelligence application",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   return (
     <html
       lang="id"
@@ -45,7 +53,13 @@ export default function RootLayout({
         />
       </head>
       <body>
-        <Providers>{children}</Providers>
+        <Providers>
+          <SessionProvider initialUser={user}>
+            <Header />
+            {children}
+            <Footer />
+          </SessionProvider>
+        </Providers>
       </body>
     </html>
   );
