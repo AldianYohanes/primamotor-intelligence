@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { agentExecutionMetricSchema } from "@/src/lib/agents/metrics-schema";
+import { logger } from "@/src/lib/logging/logger";
 
 /**
  * Menyimpan satu baris metrik performa per giliran chat (runAgentTurn) —
@@ -65,10 +66,17 @@ export async function POST(req: NextRequest) {
   });
 
   // Gagal simpan metrics TIDAK BOLEH jadi error keras ke client — ini
-  // observability, bukan bagian dari alur transaksi stok. Cukup log server-side
-  // (lewat status non-2xx) supaya masih kelihatan di monitoring, tapi
-  // orchestrator.ts memanggil endpoint ini tanpa menunggu/menangani hasilnya.
+  // observability, bukan bagian dari alur transaksi stok. Tetap di-log
+  // terstruktur (server-side) supaya kegagalan insert tidak sepenuhnya hilang,
+  // tapi orchestrator.ts memanggil endpoint ini tanpa menunggu/menangani hasilnya.
   if (error) {
+    logger.error("Gagal menyimpan agent_execution_metrics", {
+      route: "agent/metrics",
+      business_id: staffRow.business_id,
+      conversation_id: body.conversation_id,
+      agent_type: body.agent_type,
+      error,
+    });
     return NextResponse.json(
       { error: "Gagal menyimpan metrics" },
       { status: 500 },

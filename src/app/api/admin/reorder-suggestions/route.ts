@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { parsePagination, buildPaginatedResponse } from "@/src/lib/pagination";
+import { logger } from "@/src/lib/logging/logger";
 
 async function requireStaff() {
   const supabase = await createClient();
@@ -65,8 +66,14 @@ export async function GET(req: NextRequest) {
   if (isSuggestionStatus(statusParam)) query = query.eq("status", statusParam);
 
   const { data: suggestions, error, count } = await query;
-  if (error)
+  if (error) {
+    logger.error("Gagal memuat reorder suggestions", {
+      route: "admin/reorder-suggestions",
+      business_id: staffRow.business_id,
+      error,
+    });
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   const acknowledgedByIds = Array.from(
     new Set(

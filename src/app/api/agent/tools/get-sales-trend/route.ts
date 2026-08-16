@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
+import { logger } from '@/src/lib/logging/logger'
 
 const querySchema = z.object({
   product_id: z.string().uuid(),
@@ -36,6 +37,14 @@ export async function GET(req: NextRequest) {
     p_months: parsed.data.months,
   })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    logger.error('RPC get_sales_trend gagal (tool getSalesTrend)', {
+      route: 'agent/tools/get-sales-trend',
+      business_id: staffRow.business_id,
+      product_id: parsed.data.product_id,
+      error,
+    })
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
   return NextResponse.json({ product_name: product.name, trend: data })
 }

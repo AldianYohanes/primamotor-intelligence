@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { toSyntheticEmail, isValidPin } from "@/src/lib/auth/synthetic-email";
 import { parsePagination, buildPaginatedResponse } from "@/src/lib/pagination";
+import { logger } from "@/src/lib/logging/logger";
 
 const createStaffSchema = z.object({
   username: z
@@ -67,8 +68,13 @@ export async function GET(req: NextRequest) {
     .order("created_at", { ascending: false })
     .range(from, to);
 
-  if (error)
+  if (error) {
+    logger.error("Gagal memuat daftar staf", {
+      route: "admin/staff",
+      error,
+    });
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   return NextResponse.json(
     buildPaginatedResponse(data ?? [], count, page, pageSize),
   );
@@ -106,6 +112,12 @@ export async function POST(req: NextRequest) {
       email_confirm: true,
     });
   if (authError || !authUser.user) {
+    logger.error("Gagal membuat auth user untuk staf baru", {
+      route: "admin/staff",
+      business_id: staffRow.business_id,
+      created_by_staff_id: staffRow.id,
+      error: authError,
+    });
     return NextResponse.json(
       { error: authError?.message ?? "Gagal membuat akun" },
       { status: 500 },
@@ -125,7 +137,31 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (staffError) {
-    await admin.auth.admin.deleteUser(authUser.user.id);
+    // Auth user SUDAH terbuat di titik ini — kalau insert staff gagal, kita
+    // rollback manual dengan deleteUser supaya tidak nyisa auth.users tanpa
+    // pasangan staff row (bisa bikin username kepakai "hantu" di percobaan
+    // signup berikutnya). Rollback ini sendiri bisa gagal (mis. race/network),
+    // makanya juga di-log terpisah — kalau gagal, orphan auth user itu perlu
+    // dibersihkan manual dari Supabase dashboard.
+    const { error: rollbackError } = await admin.auth.admin.deleteUser(
+      authUser.user.id,
+    );
+    logger.error("Gagal insert staff row setelah auth user dibuat — rollback dijalankan", {
+      route: "admin/staff",
+      business_id: staffRow.business_id,
+      created_by_staff_id: staffRow.id,
+      auth_user_id: authUser.user.id,
+      rollback_succeeded: !rollbackError,
+      error: staffError,
+    });
+    if (rollbackError) {
+      logger.error("Rollback deleteUser JUGA gagal — ada orphan auth user, perlu dibersihkan manual", {
+        route: "admin/staff",
+        business_id: staffRow.business_id,
+        auth_user_id: authUser.user.id,
+        error: rollbackError,
+      });
+    }
     return NextResponse.json({ error: staffError.message }, { status: 422 });
   }
 

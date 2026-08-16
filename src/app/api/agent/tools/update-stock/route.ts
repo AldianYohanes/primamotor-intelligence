@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { updateStockSchema } from "@/src/lib/agents/tool-schemas";
+import { logger } from "@/src/lib/logging/logger";
 
 /**
  * Tahap 1 dari pola HITL dua-tahap: catat niat agent ke agent_audit_log (status
@@ -78,9 +79,20 @@ export async function POST(req: NextRequest) {
   // Bersihkan reservasi 'pending' yang sudah basi dulu (staf lama menutup tab tanpa
   // klik Batal/kirim PIN) — supaya reserve_stock di bawah tidak salah menolak gara-gara
   // stok "dipegang" transaksi yang sebenarnya sudah ditinggalkan. Lihat 0023_stock_reservations.sql.
-  await admin.rpc("expire_stale_pending_reservations", {
-    p_business_id: body.business_id,
-  });
+  const { error: expireError } = await admin.rpc(
+    "expire_stale_pending_reservations",
+    { p_business_id: body.business_id },
+  );
+  if (expireError) {
+    // Best-effort cleanup — gagal di sini tidak menghentikan alur (reserve_stock
+    // di bawah tetap dicoba), tapi kalau sering gagal, reservasi basi bisa
+    // menumpuk dan salah menolak reserve_stock berikutnya. Worth di-log.
+    logger.warn("expire_stale_pending_reservations gagal (best-effort cleanup)", {
+      route: "agent/tools/update-stock",
+      business_id: body.business_id,
+      error: expireError,
+    });
+  }
 
   if (body.direction === "keluar") {
     // reserve_stock (0010_stock.sql) melakukan cek KETERSEDIAAN + reservasi dalam satu
@@ -94,6 +106,18 @@ export async function POST(req: NextRequest) {
       p_quantity: body.quantity,
     });
     if (reserveError) {
+      // Ke staf tetap ditampilkan pesan generik "stok tidak mencukupi" (UX yang
+      // sudah ada) — tapi error aslinya bisa jadi bukan itu (mis. RPC error lain).
+      // Server-side tetap dicatat detailnya biar gak salah diagnosis kalau
+      // ternyata reserve_stock memang sering gagal karena sebab lain.
+      logger.warn("reserve_stock gagal (ditampilkan sebagai 'stok tidak mencukupi')", {
+        route: "agent/tools/update-stock",
+        business_id: body.business_id,
+        product_id: body.product_id,
+        location_id: body.location_id,
+        quantity: body.quantity,
+        error: reserveError,
+      });
       return NextResponse.json(
         { error: "Stok tersedia tidak mencukupi untuk transaksi ini" },
         { status: 422 },
@@ -116,11 +140,29 @@ export async function POST(req: NextRequest) {
     .select()
     .single();
 
-  if (error || !auditLog)
+  if (error || !auditLog) {
+    // Kalau direction 'keluar', reserve_stock di atas SUDAH sukses sebelum baris
+    // ini gagal — reservasi jadi nyangkut tanpa audit_log_id yang bisa dipakai
+    // staf buat confirm/reject secara normal. Sampai expire_stale_pending_reservations
+    // membersihkannya nanti, ini worth di-log sebagai error kritis, bukan cuma
+    // "gagal mencatat niat transaksi" yang terkesan ringan.
+    logger.error(
+      "Gagal insert agent_audit_log untuk updateStock — reservasi (jika 'keluar') berpotensi nyangkut",
+      {
+        route: "agent/tools/update-stock",
+        business_id: body.business_id,
+        staff_id: staffRow.id,
+        conversation_id: body.conversation_id,
+        product_id: body.product_id,
+        direction: body.direction,
+        error,
+      },
+    );
     return NextResponse.json(
       { error: "Gagal mencatat niat transaksi" },
       { status: 500 },
     );
+  }
 
   return NextResponse.json({
     audit_log_id: auditLog.id,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { parsePagination, buildPaginatedResponse } from "@/src/lib/pagination";
+import { logger } from "@/src/lib/logging/logger";
 
 const productSchema = z.object({
   part_number: z.string().optional(),
@@ -90,8 +91,13 @@ export async function GET(req: NextRequest) {
   // default (tidak dikirim / 'all'): tidak difilter is_active sama sekali
 
   const { data, error, count } = await query;
-  if (error)
+  if (error) {
+    logger.error("Gagal memuat daftar produk", {
+      route: "admin/products",
+      error,
+    });
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   return NextResponse.json(
     buildPaginatedResponse(data ?? [], count, page, pageSize),
   );
@@ -118,21 +124,36 @@ export async function POST(req: NextRequest) {
     .select()
     .single();
 
-  if (error)
+  if (error) {
+    logger.error("Gagal membuat produk baru", {
+      route: "admin/products",
+      business_id: staffRow.business_id,
+      error,
+    });
     return NextResponse.json({ error: error.message }, { status: 422 });
+  }
 
   if (aliases && aliases.length > 0 && product) {
-    await supabase
-      .from("product_aliases")
-      .insert(
-        aliases
-          .filter(Boolean)
-          .map((alias) => ({
-            product_id: product.id,
-            alias,
-            source: "admin_input",
-          })),
-      );
+    const { error: aliasError } = await supabase.from("product_aliases").insert(
+      aliases
+        .filter(Boolean)
+        .map((alias) => ({
+          product_id: product.id,
+          alias,
+          source: "admin_input",
+        })),
+    );
+    if (aliasError) {
+      // Produk utamanya SUDAH berhasil dibuat — aliases itu data pelengkap
+      // (bantu pencarian getStock Query Agent), jadi tidak dianggap gagal total,
+      // tapi tetap perlu ke-log supaya ketahuan aliases-nya belum lengkap.
+      logger.error("Produk berhasil dibuat tapi gagal menyimpan aliases", {
+        route: "admin/products",
+        business_id: staffRow.business_id,
+        product_id: product.id,
+        error: aliasError,
+      });
+    }
   }
 
   return NextResponse.json({ product });

@@ -6,6 +6,7 @@ import type {
   UpdateStockInput,
   TransferStockInput,
 } from "@/src/lib/agents/tool-schemas";
+import { logger } from "@/src/lib/logging/logger";
 
 const rejectSchema = z.object({ audit_log_id: z.string().uuid() });
 
@@ -86,7 +87,14 @@ export async function POST(req: NextRequest) {
     // Reservasi gagal dilepas (mis. input_params korup) — tetap lanjut tandai
     // 'rejected' di bawah. Row 'pending' nyangkut selamanya lebih buruk daripada
     // reservasi nyangkut sampai expire_stale_pending_reservations membersihkannya nanti.
-    console.error("Gagal melepas reservasi stok saat reject:", err);
+    logger.error("Gagal melepas reservasi stok saat reject", {
+      route: "agent/tools/reject",
+      business_id: staffRow.business_id,
+      staff_id: staffRow.id,
+      audit_log_id: parsed.data.audit_log_id,
+      tool_name: log.tool_name,
+      error: err,
+    });
   }
 
   await admin

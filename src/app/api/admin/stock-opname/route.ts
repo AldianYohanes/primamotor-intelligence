@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parsePagination, buildPaginatedResponse } from "@/src/lib/pagination";
+import { logger } from "@/src/lib/logging/logger";
 
 const opnameSchema = z.object({
   product_id: z.string().uuid(),
@@ -24,8 +25,13 @@ export async function GET(req: NextRequest) {
   if (productId) query = query.eq("product_id", productId);
 
   const { data, error, count } = await query;
-  if (error)
+  if (error) {
+    logger.error("Gagal memuat riwayat stock opname", {
+      route: "admin/stock-opname",
+      error,
+    });
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   return NextResponse.json(
     buildPaginatedResponse(data ?? [], count, page, pageSize),
   );
@@ -87,8 +93,17 @@ export async function POST(req: NextRequest) {
     .select()
     .single();
 
-  if (opnameError)
+  if (opnameError) {
+    logger.error("Gagal menyimpan hasil stock opname", {
+      route: "admin/stock-opname",
+      business_id: staffRow.business_id,
+      staff_id: staffRow.id,
+      product_id: body.product_id,
+      location_id: body.location_id,
+      error: opnameError,
+    });
     return NextResponse.json({ error: opnameError.message }, { status: 422 });
+  }
 
   let transactionId: string | null = null;
   if (discrepancy !== 0) {
@@ -105,11 +120,29 @@ export async function POST(req: NextRequest) {
         p_notes: `Hasil stock opname #${opnameRow.id}: sistem ${systemQuantity} vs fisik ${body.counted_quantity} (${discrepancy > 0 ? "+" : ""}${discrepancy})`,
       },
     );
-    if (rpcError)
+    if (rpcError) {
+      // opnameRow SUDAH tersimpan (baris audit stock_opname ada) tapi transaksi
+      // penyesuaiannya gagal — saldo stock jadi TIDAK sinkron dengan catatan
+      // opname ini sampai ada intervensi manual. Ini salah satu error paling
+      // penting buat di-log di seluruh modul stock opname.
+      logger.error(
+        "RPC record_stock_transaction gagal setelah stock_opname tersimpan — saldo stock tidak sinkron",
+        {
+          route: "admin/stock-opname",
+          business_id: staffRow.business_id,
+          staff_id: staffRow.id,
+          opname_id: opnameRow.id,
+          product_id: body.product_id,
+          location_id: body.location_id,
+          discrepancy,
+          error: rpcError,
+        },
+      );
       return NextResponse.json(
         { error: rpcError.message, opname: opnameRow },
         { status: 500 },
       );
+    }
     transactionId = txnId;
   }
 

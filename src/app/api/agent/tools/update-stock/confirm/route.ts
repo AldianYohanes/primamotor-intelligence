@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { updateStockConfirmSchema } from "@/src/lib/agents/tool-schemas";
 import { reconfirmPin } from "@/src/lib/auth/confirm-pin";
+import { logger } from "@/src/lib/logging/logger";
 
 export async function POST(req: NextRequest) {
   const parsed = updateStockConfirmSchema.safeParse(await req.json());
@@ -37,10 +38,29 @@ export async function POST(req: NextRequest) {
   );
 
   if (rpcError) {
+    // Ini eksekusi transaksi stok yang sudah lolos verifikasi PIN — gagal di
+    // titik ini (RPC atomik confirm_update_stock) berarti staf sudah yakin
+    // mau transaksi tapi gagal tersimpan. Wajib ke-log detail buat investigasi,
+    // bukan cuma tampil sebagai pesan error generik ke staf.
+    logger.error("RPC confirm_update_stock gagal", {
+      route: "agent/tools/update-stock/confirm",
+      business_slug,
+      staff_id,
+      audit_log_id,
+      error: rpcError,
+    });
     return NextResponse.json({ error: rpcError.message }, { status: 500 });
   }
 
   if (!result?.ok) {
+    logger.warn("confirm_update_stock ditolak (bukan error server)", {
+      route: "agent/tools/update-stock/confirm",
+      business_slug,
+      staff_id,
+      audit_log_id,
+      reject_reason: result?.error,
+      previous_status: result?.status,
+    });
     const status =
       result?.error === "not_found"
         ? 404

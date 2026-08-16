@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
+import { logger } from '@/src/lib/logging/logger'
 
 // Sama seperti productSchema di ../route.ts, tapi semua field opsional (PATCH
 // parsial) — sengaja tidak diimpor dari route.ts (route segment tidak boleh
@@ -57,7 +58,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .select()
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 422 })
+  if (error) {
+    logger.error('Gagal update produk', {
+      route: 'admin/products/[id]',
+      business_id: staffRow.business_id,
+      product_id: id,
+      error,
+    })
+    return NextResponse.json({ error: error.message }, { status: 422 })
+  }
   return NextResponse.json({ product: data })
 }
 
@@ -74,6 +83,14 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     .update({ is_active: false })
     .eq('id', id)
     .eq('business_id', staffRow.business_id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 422 })
+  if (error) {
+    logger.error('Gagal soft-delete produk', {
+      route: 'admin/products/[id]',
+      business_id: staffRow.business_id,
+      product_id: id,
+      error,
+    })
+    return NextResponse.json({ error: error.message }, { status: 422 })
+  }
   return NextResponse.json({ ok: true })
 }

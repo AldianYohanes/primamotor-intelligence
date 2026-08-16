@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { transferStockSchema } from "@/src/lib/agents/tool-schemas";
+import { logger } from "@/src/lib/logging/logger";
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
@@ -75,9 +76,17 @@ export async function POST(req: NextRequest) {
   // Sama seperti update-stock/route.ts: bersihkan reservasi basi dulu, lalu reserve_stock
   // di lokasi ASAL (from_location_id) — lokasi tujuan tidak perlu direservasi, cuma
   // menerima. Menggantikan SELECT manual "melihat" yang lama.
-  await admin.rpc("expire_stale_pending_reservations", {
-    p_business_id: body.business_id,
-  });
+  const { error: expireError } = await admin.rpc(
+    "expire_stale_pending_reservations",
+    { p_business_id: body.business_id },
+  );
+  if (expireError) {
+    logger.warn("expire_stale_pending_reservations gagal (best-effort cleanup)", {
+      route: "agent/tools/transfer-stock",
+      business_id: body.business_id,
+      error: expireError,
+    });
+  }
 
   const { error: reserveError } = await admin.rpc("reserve_stock", {
     p_product_id: body.product_id,
@@ -85,6 +94,14 @@ export async function POST(req: NextRequest) {
     p_quantity: body.quantity,
   });
   if (reserveError) {
+    logger.warn("reserve_stock gagal saat transferStock (ditampilkan sebagai 'stok tidak mencukupi')", {
+      route: "agent/tools/transfer-stock",
+      business_id: body.business_id,
+      product_id: body.product_id,
+      from_location_id: body.from_location_id,
+      quantity: body.quantity,
+      error: reserveError,
+    });
     return NextResponse.json(
       {
         error: `Stok tersedia di ${fromLoc.name} tidak mencukupi untuk transfer ini`,
@@ -108,11 +125,25 @@ export async function POST(req: NextRequest) {
     .select()
     .single();
 
-  if (error || !auditLog)
+  if (error || !auditLog) {
+    logger.error(
+      "Gagal insert agent_audit_log untuk transferStock — reservasi di lokasi asal berpotensi nyangkut",
+      {
+        route: "agent/tools/transfer-stock",
+        business_id: body.business_id,
+        staff_id: staffRow.id,
+        conversation_id: body.conversation_id,
+        product_id: body.product_id,
+        from_location_id: body.from_location_id,
+        to_location_id: body.to_location_id,
+        error,
+      },
+    );
     return NextResponse.json(
       { error: "Gagal mencatat niat transfer" },
       { status: 500 },
     );
+  }
 
   return NextResponse.json({
     audit_log_id: auditLog.id,

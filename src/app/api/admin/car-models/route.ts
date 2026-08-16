@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { parsePagination, buildPaginatedResponse } from "@/src/lib/pagination";
+import { logger } from "@/src/lib/logging/logger";
 
 /**
  * car_models adalah tabel referensi BERSAMA lintas tenant, tanpa business_id
@@ -33,8 +34,13 @@ export async function GET(req: NextRequest) {
   if (q) query = query.ilike("name", `%${q}%`);
 
   const { data, error, count } = await query;
-  if (error)
+  if (error) {
+    logger.error("Gagal memuat car_models", {
+      route: "admin/car-models",
+      error,
+    });
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   return NextResponse.json(
     buildPaginatedResponse(data ?? [], count, page, pageSize),
   );

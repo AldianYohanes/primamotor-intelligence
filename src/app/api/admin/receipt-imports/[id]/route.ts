@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { logger } from '@/src/lib/logging/logger'
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -15,7 +16,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   ])
 
   if (importError || !importRow) return NextResponse.json({ error: 'Import tidak ditemukan' }, { status: 404 })
-  if (itemsError) return NextResponse.json({ error: itemsError.message }, { status: 500 })
+  if (itemsError) {
+    logger.error('Gagal memuat item receipt import', {
+      route: 'admin/receipt-imports/[id]',
+      import_id: id,
+      error: itemsError,
+    })
+    return NextResponse.json({ error: itemsError.message }, { status: 500 })
+  }
 
   return NextResponse.json({ import: importRow, items })
 }

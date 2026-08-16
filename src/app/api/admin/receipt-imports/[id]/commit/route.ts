@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { logger } from '@/src/lib/logging/logger'
 
 /**
  * Tahap akhir §4.4: hanya item berstatus 'confirmed' yang di-commit jadi transaksi
@@ -38,7 +39,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     }
 
     // Lokasi default = toko pertama tenant ini (barang masuk dari bon biasanya langsung ke toko)
-    const { data: defaultLocation } = await admin
+    const { data: defaultLocation, error: locationError } = await admin
       .from('locations')
       .select('id')
       .eq('business_id', importRow.business_id)
@@ -46,6 +47,17 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       .limit(1)
       .maybeSingle()
 
+    if (locationError) {
+      logger.error('Gagal query lokasi default saat commit receipt import', {
+        route: 'admin/receipt-imports/commit',
+        business_id: importRow.business_id,
+        import_id: id,
+        item_id: item.id,
+        error: locationError,
+      })
+      failed.push({ item_id: item.id, error: 'Gagal mencari lokasi toko default' })
+      continue
+    }
     if (!defaultLocation) {
       failed.push({ item_id: item.id, error: 'Lokasi toko default tidak ditemukan' })
       continue
@@ -63,15 +75,57 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     })
 
     if (rpcError) {
+      // Ini titik paling kritis di alur commit — kalau record_stock_transaction
+      // gagal, item bon ini TIDAK jadi stok masuk sama sekali, meski staf sudah
+      // review & confirm manual sebelumnya. Wajib ke-log detail (bukan cuma
+      // masuk array `failed` yang cuma kelihatan kalau staf buka lagi hasil
+      // commit-nya).
+      logger.error('RPC record_stock_transaction gagal saat commit receipt import', {
+        route: 'admin/receipt-imports/commit',
+        business_id: importRow.business_id,
+        staff_id: staffRow.id,
+        import_id: id,
+        item_id: item.id,
+        product_id: item.matched_product_id,
+        error: rpcError,
+      })
       failed.push({ item_id: item.id, error: rpcError.message })
       continue
     }
 
-    await admin.from('receipt_import_items').update({ resulting_transaction_id: txnId }).eq('id', item.id)
+    const { error: updateItemError } = await admin
+      .from('receipt_import_items')
+      .update({ resulting_transaction_id: txnId })
+      .eq('id', item.id)
+    if (updateItemError) {
+      // Transaksi stoknya SUDAH berhasil (txnId ada) — ini cuma gagal mencatat
+      // linknya balik ke receipt_import_items, jadi tetap dianggap committed
+      // (jangan double-insert transaksi kalau di-retry), tapi harus ke-log
+      // supaya ketahuan link-nya belum lengkap.
+      logger.error('Gagal update resulting_transaction_id di receipt_import_items', {
+        route: 'admin/receipt-imports/commit',
+        business_id: importRow.business_id,
+        import_id: id,
+        item_id: item.id,
+        transaction_id: txnId,
+        error: updateItemError,
+      })
+    }
     committed.push(item.id)
   }
 
-  await admin.from('receipt_imports').update({ status: 'completed' }).eq('id', id)
+  const { error: finalizeError } = await admin
+    .from('receipt_imports')
+    .update({ status: 'completed' })
+    .eq('id', id)
+  if (finalizeError) {
+    logger.error('Gagal menandai receipt_imports sebagai completed', {
+      route: 'admin/receipt-imports/commit',
+      business_id: importRow.business_id,
+      import_id: id,
+      error: finalizeError,
+    })
+  }
 
   return NextResponse.json({ committed_count: committed.length, failed })
 }

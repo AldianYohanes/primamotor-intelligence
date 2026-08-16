@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { transferStockConfirmSchema } from "@/src/lib/agents/tool-schemas";
 import { reconfirmPin } from "@/src/lib/auth/confirm-pin";
+import { logger } from "@/src/lib/logging/logger";
 
 export async function POST(req: NextRequest) {
   const parsed = transferStockConfirmSchema.safeParse(await req.json());
@@ -34,10 +35,25 @@ export async function POST(req: NextRequest) {
   );
 
   if (rpcError) {
+    logger.error("RPC confirm_transfer_stock gagal", {
+      route: "agent/tools/transfer-stock/confirm",
+      business_slug,
+      staff_id,
+      audit_log_id,
+      error: rpcError,
+    });
     return NextResponse.json({ error: rpcError.message }, { status: 500 });
   }
 
   if (!result?.ok) {
+    logger.warn("confirm_transfer_stock ditolak (bukan error server)", {
+      route: "agent/tools/transfer-stock/confirm",
+      business_slug,
+      staff_id,
+      audit_log_id,
+      reject_reason: result?.error,
+      previous_status: result?.status,
+    });
     const status =
       result?.error === "not_found"
         ? 404

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createReorderSuggestionSchema } from "@/src/lib/agents/tool-schemas";
 import type { Database } from "@/src/lib/db/types";
+import { logger } from "@/src/lib/logging/logger";
 
 /**
  * Berbeda dari tool lain: ini TIDAK dipanggil dari percakapan chat (Router tidak
@@ -41,7 +42,14 @@ export async function POST(req: NextRequest) {
     .select()
     .single();
 
-  if (error)
+  if (error) {
+    logger.error("Gagal insert reorder_suggestions dari cron", {
+      route: "agent/tools/create-reorder-suggestion",
+      business_id: body.business_id,
+      product_id: body.product_id,
+      error,
+    });
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   return NextResponse.json({ suggestion: data });
 }

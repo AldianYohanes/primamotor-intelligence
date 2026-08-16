@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
+import { logger } from '@/src/lib/logging/logger'
 
 async function requireStaff() {
   const supabase = await createClient()
@@ -43,7 +44,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .select()
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 422 })
+  if (error) {
+    logger.error('Gagal update lokasi', {
+      route: 'admin/locations/[id]',
+      business_id: staffRow.business_id,
+      location_id: id,
+      error,
+    })
+    return NextResponse.json({ error: error.message }, { status: 422 })
+  }
   return NextResponse.json({ location: data })
 }
 
@@ -71,6 +80,12 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
         { status: 409 }
       )
     }
+    logger.error('Gagal hapus lokasi (bukan constraint 23503 yang sudah diketahui)', {
+      route: 'admin/locations/[id]',
+      business_id: staffRow.business_id,
+      location_id: id,
+      error,
+    })
     return NextResponse.json({ error: error.message }, { status: 422 })
   }
   return NextResponse.json({ ok: true })

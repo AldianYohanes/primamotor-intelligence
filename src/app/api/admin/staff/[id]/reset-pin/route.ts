@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidPin } from "@/src/lib/auth/synthetic-email";
+import { logger } from "@/src/lib/logging/logger";
 
 const resetSchema = z.object({ new_pin: z.string().min(6) });
 
@@ -60,13 +61,31 @@ export async function POST(
       password: parsed.data.new_pin,
     },
   );
-  if (error)
+  if (error) {
+    logger.error("Gagal reset PIN staf (updateUserById)", {
+      route: "admin/staff/[id]/reset-pin",
+      target_staff_id: id,
+      requested_by_role: requester.role,
+      error,
+    });
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
-  await admin
+  const { error: unlockError } = await admin
     .from("staff")
     .update({ failed_login_attempts: 0, locked_until: null })
     .eq("id", id);
+  if (unlockError) {
+    // PIN-nya SUDAH berhasil diganti di titik ini — ini cuma gagal membuka
+    // lockout lamanya, jadi tidak dianggap gagal total (tetap balas ok), tapi
+    // staf bisa jadi masih "terkunci" walau PIN baru sudah benar sampai
+    // lockout lama expire sendiri (§8, 15 menit) — worth di-log.
+    logger.warn("PIN staf berhasil direset tapi gagal membuka status lockout", {
+      route: "admin/staff/[id]/reset-pin",
+      target_staff_id: id,
+      error: unlockError,
+    });
+  }
 
   return NextResponse.json({ ok: true });
 }

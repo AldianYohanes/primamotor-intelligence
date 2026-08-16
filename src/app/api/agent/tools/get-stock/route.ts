@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
+import { logger } from '@/src/lib/logging/logger'
 
 const querySchema = z.object({
   query: z.string().min(1),
@@ -36,7 +37,15 @@ export async function GET(req: NextRequest) {
     p_limit: parsed.data.limit,
   })
 
-  if (searchError) return NextResponse.json({ error: searchError.message }, { status: 500 })
+  if (searchError) {
+    logger.error('RPC search_products gagal (tool getStock)', {
+      route: 'agent/tools/get-stock',
+      business_id: staffRow.business_id,
+      query: parsed.data.query,
+      error: searchError,
+    })
+    return NextResponse.json({ error: searchError.message }, { status: 500 })
+  }
   if (!matches || matches.length === 0) return NextResponse.json({ results: [] })
 
   const productIds = matches.map((m) => m.product_id)
@@ -45,7 +54,14 @@ export async function GET(req: NextRequest) {
     .select('product_id, location_id, quantity, reserved_quantity, available_quantity, locations(name, type)')
     .in('product_id', productIds)
 
-  if (stockError) return NextResponse.json({ error: stockError.message }, { status: 500 })
+  if (stockError) {
+    logger.error('Query stock gagal (tool getStock)', {
+      route: 'agent/tools/get-stock',
+      business_id: staffRow.business_id,
+      error: stockError,
+    })
+    return NextResponse.json({ error: stockError.message }, { status: 500 })
+  }
 
   const results = matches.map((product) => ({
     ...product,

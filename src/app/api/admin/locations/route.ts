@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { parsePagination, buildPaginatedResponse } from "@/src/lib/pagination";
+import { logger } from "@/src/lib/logging/logger";
 
 async function requireStaff() {
   const supabase = await createClient();
@@ -52,8 +53,14 @@ export async function GET(req: NextRequest) {
     .order("name", { ascending: true })
     .range(from, to);
 
-  if (error)
+  if (error) {
+    logger.error("Gagal memuat daftar lokasi", {
+      route: "admin/locations",
+      business_id: staffRow.business_id,
+      error,
+    });
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   return NextResponse.json(
     buildPaginatedResponse(data ?? [], count, page, pageSize),
   );
@@ -79,7 +86,13 @@ export async function POST(req: NextRequest) {
     .select()
     .single();
 
-  if (error)
+  if (error) {
+    logger.error("Gagal membuat lokasi baru", {
+      route: "admin/locations",
+      business_id: staffRow.business_id,
+      error,
+    });
     return NextResponse.json({ error: error.message }, { status: 422 });
+  }
   return NextResponse.json({ location: data }, { status: 201 });
 }

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { toSyntheticEmail, isValidPin } from "@/src/lib/auth/synthetic-email";
 import { slugify, isValidSlug } from "@/src/lib/validation/slug";
+import { logger } from "@/src/lib/logging/logger";
 
 /**
  * Self-service signup (keputusan produk Ronde 3 #3): siapa pun bisa mendaftarkan
@@ -73,6 +74,10 @@ export async function POST(req: NextRequest) {
     suffix += 1;
     slug = `${baseSlug}-${suffix}`;
     if (suffix > 50) {
+      logger.error("Gagal membuat slug unik untuk signup (>50 percobaan)", {
+        route: "auth/signup",
+        base_slug: baseSlug,
+      });
       return NextResponse.json(
         { error: "Gagal membuat slug unik, coba nama bisnis lain" },
         { status: 500 },
@@ -93,6 +98,11 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (businessError || !business) {
+    logger.error("Gagal insert business baru saat signup", {
+      route: "auth/signup",
+      slug,
+      error: businessError,
+    });
     return NextResponse.json(
       { error: "Gagal membuat bisnis baru" },
       { status: 500 },
@@ -110,7 +120,27 @@ export async function POST(req: NextRequest) {
 
   if (authError || !authUser.user) {
     // rollback business supaya tidak ada tenant "yatim" tanpa owner
-    await admin.from("businesses").delete().eq("id", business.id);
+    const { error: rollbackError } = await admin
+      .from("businesses")
+      .delete()
+      .eq("id", business.id);
+    logger.error(
+      "Gagal membuat auth user owner saat signup — rollback business dijalankan",
+      {
+        route: "auth/signup",
+        business_id: business.id,
+        slug,
+        rollback_succeeded: !rollbackError,
+        error: authError,
+      },
+    );
+    if (rollbackError) {
+      logger.error("Rollback delete business JUGA gagal — ada business_id yatim", {
+        route: "auth/signup",
+        business_id: business.id,
+        error: rollbackError,
+      });
+    }
     return NextResponse.json(
       { error: authError?.message ?? "Gagal membuat akun owner" },
       { status: 500 },
@@ -127,8 +157,33 @@ export async function POST(req: NextRequest) {
   });
 
   if (staffError) {
-    await admin.auth.admin.deleteUser(authUser.user.id);
-    await admin.from("businesses").delete().eq("id", business.id);
+    const { error: deleteUserError } = await admin.auth.admin.deleteUser(
+      authUser.user.id,
+    );
+    const { error: deleteBusinessError } = await admin
+      .from("businesses")
+      .delete()
+      .eq("id", business.id);
+    logger.error(
+      "Gagal insert staff owner saat signup — rollback auth user + business dijalankan",
+      {
+        route: "auth/signup",
+        business_id: business.id,
+        auth_user_id: authUser.user.id,
+        rollback_auth_succeeded: !deleteUserError,
+        rollback_business_succeeded: !deleteBusinessError,
+        error: staffError,
+      },
+    );
+    if (deleteUserError || deleteBusinessError) {
+      logger.error("Rollback signup TIDAK lengkap — ada data yatim, perlu dibersihkan manual", {
+        route: "auth/signup",
+        business_id: business.id,
+        auth_user_id: authUser.user.id,
+        delete_user_error: deleteUserError,
+        delete_business_error: deleteBusinessError,
+      });
+    }
     return NextResponse.json(
       { error: "Gagal membuat akun staf owner" },
       { status: 500 },
@@ -136,10 +191,20 @@ export async function POST(req: NextRequest) {
   }
 
   // 5. Buat 2 lokasi default (toko + gudang) supaya tenant baru langsung siap pakai setelah di-approve
-  await admin.from("locations").insert([
+  const { error: locationsError } = await admin.from("locations").insert([
     { business_id: business.id, name: "Toko", type: "toko" },
     { business_id: business.id, name: "Gudang", type: "gudang" },
   ]);
+  if (locationsError) {
+    // Tenant & owner-nya SUDAH berhasil dibuat — lokasi default cuma kemudahan
+    // awal (staf masih bisa bikin lokasi manual dari admin setelah approve),
+    // jadi tidak di-rollback, cukup dicatat.
+    logger.error("Signup berhasil tapi gagal membuat lokasi default", {
+      route: "auth/signup",
+      business_id: business.id,
+      error: locationsError,
+    });
+  }
 
   return NextResponse.json({
     message:

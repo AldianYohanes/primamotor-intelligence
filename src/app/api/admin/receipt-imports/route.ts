@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { extractReceiptWithGemini } from "@/src/lib/ocr/gemini";
 import { parsePagination, buildPaginatedResponse } from "@/src/lib/pagination";
 import { checkOcrRateLimit } from "@/src/lib/rate-limit/ocr-rate-limit";
+import { logger } from "@/src/lib/logging/logger";
 
 /**
  * Alur: upload foto → simpan ke storage bucket 'receipts' → panggil Gemini →
@@ -37,6 +38,11 @@ export async function POST(req: NextRequest) {
   try {
     rateLimit = await checkOcrRateLimit(supabase, staffRow.business_id);
   } catch (err) {
+    logger.error("Gagal cek OCR rate limit", {
+      route: "admin/receipt-imports",
+      business_id: staffRow.business_id,
+      error: err,
+    });
     return NextResponse.json(
       {
         error:
@@ -76,11 +82,17 @@ export async function POST(req: NextRequest) {
     })
     .select()
     .single();
-  if (importError || !importRow)
+  if (importError || !importRow) {
+    logger.error("Gagal membuat catatan receipt_imports", {
+      route: "admin/receipt-imports",
+      business_id: staffRow.business_id,
+      error: importError,
+    });
     return NextResponse.json(
       { error: "Gagal membuat catatan import" },
       { status: 500 },
     );
+  }
 
   const arrayBuffer = await file.arrayBuffer();
   const base64 = Buffer.from(arrayBuffer).toString("base64");
@@ -94,6 +106,12 @@ export async function POST(req: NextRequest) {
       upsert: true,
     });
   if (uploadError) {
+    logger.error("Gagal upload foto bon ke storage", {
+      route: "admin/receipt-imports",
+      business_id: staffRow.business_id,
+      import_id: importRow.id,
+      error: uploadError,
+    });
     await admin
       .from("receipt_imports")
       .update({ status: "failed" })
@@ -142,6 +160,16 @@ export async function POST(req: NextRequest) {
       items_count: itemsToInsert.length,
     });
   } catch (err) {
+    // Gagal di titik ini biasanya berarti Gemini API error/timeout, atau
+    // search_products RPC bermasalah — worth dibedakan dari upload gagal di atas
+    // karena ini kegagalan di tengah proses OCR (biaya API sudah/belum kepakai
+    // tergantung di mana persisnya gagal, itu sendiri worth diketahui).
+    logger.error("Proses OCR/ekstraksi bon gagal", {
+      route: "admin/receipt-imports",
+      business_id: staffRow.business_id,
+      import_id: importRow.id,
+      error: err,
+    });
     await admin
       .from("receipt_imports")
       .update({ status: "failed" })
@@ -163,8 +191,13 @@ export async function GET(req: NextRequest) {
     .order("created_at", { ascending: false })
     .range(from, to);
 
-  if (error)
+  if (error) {
+    logger.error("Gagal memuat daftar receipt imports", {
+      route: "admin/receipt-imports",
+      error,
+    });
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   return NextResponse.json(
     buildPaginatedResponse(data ?? [], count, page, pageSize),
   );
