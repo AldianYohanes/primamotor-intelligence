@@ -1,65 +1,38 @@
-import "@mantine/core/styles.css";
-import "@mantine/notifications/styles.css";
-import "@/src/styles/globals.css";
-
-import { ColorSchemeScript, mantineHtmlProps } from "@mantine/core";
-import type { Metadata } from "next";
-import { Forum, Outfit } from "next/font/google";
-import { Providers } from "../lib/mantine/providers";
-import { createClient } from "../lib/supabase/server";
-import { SessionProvider } from "../lib/supabase/session-provider";
-import { Header, Footer } from "../components/Layout";
-
-const outfit = Outfit({
-  subsets: ["latin"],
-  variable: "--font-outfit",
-  display: "swap",
-});
-
-const forum = Forum({
-  subsets: ["latin"],
-  weight: "400",
-  variable: "--font-forum",
-  display: "swap",
-});
+import type { Metadata, Viewport } from "next";
+import "../styles/globals.css";
+import { MantineProvider } from "@mantine/core";
+import ServiceWorkerRegistration from "../components/ServiceWorkerRegistration";
 
 export const metadata: Metadata = {
-  title: "Stokgent",
-  description: "Healthcare intelligence application",
+  title: "Prima Motor Volvo — Manajemen Stok",
+  description:
+    "Aplikasi manajemen suku cadang Volvo dengan asisten AI berbasis percakapan",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Prima Motor Volvo",
+  },
 };
 
-export default async function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  themeColor: "#1d4ed8",
+};
 
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <html
-      lang="id"
-      {...mantineHtmlProps}
-      className={`${outfit.variable} ${forum.variable}`}
-    >
-      <head>
-        <ColorSchemeScript defaultColorScheme="light" />
-        <link rel="shortcut icon" href="/favicon.svg" />
-        <meta
-          name="viewport"
-          content="minimum-scale=1, initial-scale=1, width=device-width, user-scalable=no"
-        />
-      </head>
+    <html lang="id">
       <body>
-        <Providers>
-          <SessionProvider initialUser={user}>
-            <Header />
-            {children}
-            <Footer />
-          </SessionProvider>
-        </Providers>
+        <MantineProvider>{children}</MantineProvider>
+
+        <ServiceWorkerRegistration />
       </body>
     </html>
   );
