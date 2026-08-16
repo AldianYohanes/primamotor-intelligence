@@ -2,18 +2,20 @@ import { Affix, Group, Image, Stack, Text } from "@mantine/core";
 
 export const Footer = () => {
   return (
-    <Affix position={{ bottom: 0, left: 0, right: 0 }}>
+    <Affix position={{ bottom: 0, left: 0, right: 0 }} zIndex={1} bg="dark">
       <Stack
-        style={{ borderTop: "0.5px solid rgba(48, 47, 44, 0.5)" }}
+        style={{ borderTop: "0.5px solid rgba(48, 47, 44, 0.25)" }}
         h="7dvh"
         justify="center"
       >
         <Group justify="space-between" px="xs">
           <Stack gap={0} maw="40%">
-            <Text fz={10} style={{ lineHeight: 1 }}>
+            <Text fz={10} style={{ lineHeight: 1 }} c="dark.1">
               Prima Motor Volvo
             </Text>
-            <Text fz={8}>Lantai 3A, Blok M Square, Jakarta Selatan</Text>
+            <Text fz={8} c="dark.1">
+              Lantai 3A, Blok M Square, Jakarta Selatan
+            </Text>
           </Stack>
 
           <Image
