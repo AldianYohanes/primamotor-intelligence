@@ -6,6 +6,8 @@ import { QUERY_AGENT_SYSTEM_PROMPT } from "@/src/lib/agents/prompts/query-agent"
 import { TRANSACTION_AGENT_SYSTEM_PROMPT } from "@/src/lib/agents/prompts/transaction-agent";
 import { AGENT_TOOL_DEFINITIONS } from "@/src/lib/agents/tool-schemas";
 import { searchCachedStock } from "@/src/lib/cache/indexeddb";
+import { MODEL_ID } from "@/src/lib/agents/webllm-engine";
+import type { AgentExecutionMetricPayload } from "@/src/lib/agents/metrics-schema";
 
 export type ChatRole = "user" | "assistant" | "system" | "tool";
 
@@ -52,8 +54,19 @@ interface StreamChunkDelta {
     function?: { name?: string; arguments?: string };
   }[];
 }
+interface StreamChunkUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+}
 interface StreamChunk {
   choices: { delta?: StreamChunkDelta }[];
+  // Chunk terakhir dari stream OpenAI-compatible (yang ditiru WebLLM) bisa punya
+  // `choices: []` + `usage` terisi kalau diminta lewat `stream_options:
+  // { include_usage: true }` di create(). Tidak semua versi runtime WebLLM
+  // menjaminnya, makanya semua pemakaian field ini di bawah dibuat opsional
+  // dengan fallback null — jangan sampai fitur metrics ini bikin chat gagal
+  // total kalau usage ternyata tidak dikirim.
+  usage?: StreamChunkUsage;
 }
 
 /**
@@ -72,7 +85,11 @@ async function streamChatCompletion(
   messages: ChatMessage[],
   tools: typeof AGENT_TOOL_DEFINITIONS,
   onToken?: (partialText: string) => void,
-): Promise<{ content: string; toolCalls: AccumulatedToolCall[] }> {
+): Promise<{
+  content: string;
+  toolCalls: AccumulatedToolCall[];
+  usage: StreamChunkUsage | null;
+}> {
   // WebLLM mengharapkan union tipe pesan yang didiskriminasi ketat per role (mis.
   // pesan 'tool' wajib punya tool_call_id, dst) — ChatMessage kita sengaja lebih
   // longgar (satu shape untuk semua role) supaya gampang dipakai di seluruh modul
@@ -85,12 +102,16 @@ async function streamChatCompletion(
     tools,
     temperature: 0.2,
     stream: true,
+    stream_options: { include_usage: true },
   } as unknown as CreateParams)) as AsyncIterable<StreamChunk>;
 
   let content = "";
   const toolCallsByIndex = new Map<number, AccumulatedToolCall>();
+  let usage: StreamChunkUsage | null = null;
 
   for await (const chunk of stream) {
+    if (chunk.usage) usage = chunk.usage;
+
     const delta = chunk.choices[0]?.delta;
     if (!delta) continue;
 
@@ -115,7 +136,25 @@ async function streamChatCompletion(
     }
   }
 
-  return { content, toolCalls: Array.from(toolCallsByIndex.values()) };
+  return { content, toolCalls: Array.from(toolCallsByIndex.values()), usage };
+}
+
+/**
+ * Kirim satu baris metrics ke /api/agent/metrics — fire-and-forget murni.
+ * `keepalive: true` supaya request tetap sempat terkirim walau dipanggil pas
+ * runAgentTurn sudah resolve dan komponen pemanggil re-render/unmount duluan.
+ * Sengaja tidak pernah throw ke pemanggil: kegagalan endpoint metrics adalah
+ * masalah observability, bukan alasan untuk mengganggu pengalaman chat staf.
+ */
+function reportAgentExecutionMetric(payload: AgentExecutionMetricPayload) {
+  fetch("/api/agent/metrics", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    keepalive: true,
+  }).catch(() => {
+    // Diamkan — lihat catatan di atas fungsi.
+  });
 }
 
 /**
@@ -208,10 +247,18 @@ async function executeTool(
   }
 }
 
+interface NonStreamUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+}
+
 async function routeMessage(
   engine: MLCEngineInterface,
   userMessage: string,
-): Promise<"query" | "transaction" | "off_topic"> {
+): Promise<{
+  agentType: "query" | "transaction" | "off_topic";
+  usage: NonStreamUsage | null;
+}> {
   const completion = await engine.chat.completions.create({
     messages: [
       { role: "system", content: ROUTER_SYSTEM_PROMPT },
@@ -220,25 +267,35 @@ async function routeMessage(
     temperature: 0,
   });
   const text = completion.choices[0]?.message?.content ?? "";
-  if (text.includes("TRANSACTION_AGENT")) return "transaction";
-  if (text.includes("QUERY_AGENT")) return "query";
-  return "off_topic";
+  const usage = (completion as unknown as { usage?: NonStreamUsage }).usage ?? null;
+  if (text.includes("TRANSACTION_AGENT")) return { agentType: "transaction", usage };
+  if (text.includes("QUERY_AGENT")) return { agentType: "query", usage };
+  return { agentType: "off_topic", usage };
 }
 
 /**
- * Jalankan satu giliran percakapan penuh: routing lalu tool-calling loop dengan
- * batas iterasi (MAX_TOOL_ITERATIONS) supaya tidak infinite loop kalau model
- * "ngotot" memanggil tool terus-menerus.
+ * Jalankan tool-calling loop + routing tanpa instrumentasi metrics — dipisah dari
+ * runAgentTurn (pembungkusnya) supaya logika timing/reporting di bawah tidak
+ * bercampur dengan logika percakapan itu sendiri. Token usage diakumulasi lewat
+ * parameter `usageAcc` (side effect terkontrol, satu-satunya alasan dipisah jadi
+ * fungsi sendiri alih-alih inline).
  */
-export async function runAgentTurn(
+async function runAgentTurnInner(
   engine: MLCEngineInterface,
   history: ChatMessage[],
   userMessage: string,
   conversationId: string,
   businessId: string,
+  usageAcc: { promptTokens: number; completionTokens: number; hasUsage: boolean },
   onToken?: (partialText: string) => void,
 ): Promise<AgentTurnResult> {
-  const agentType = await routeMessage(engine, userMessage);
+  const routed = await routeMessage(engine, userMessage);
+  const agentType = routed.agentType;
+  if (routed.usage) {
+    usageAcc.hasUsage = true;
+    usageAcc.promptTokens += routed.usage.prompt_tokens ?? 0;
+    usageAcc.completionTokens += routed.usage.completion_tokens ?? 0;
+  }
   const toolTrace: AgentTurnResult["toolTrace"] = [];
 
   if (agentType === "off_topic") {
@@ -265,12 +322,17 @@ export async function runAgentTurn(
     // UI lewat onToken — kalau iterasi ini ujung-ujungnya cuma tool_calls tanpa teks,
     // draft yang sempat tampil di UI otomatis kosong lagi, itu wajar (model memang
     // tidak menulis apa-apa sebelum memanggil tool).
-    const { content, toolCalls } = await streamChatCompletion(
+    const { content, toolCalls, usage } = await streamChatCompletion(
       engine,
       messages,
       AGENT_TOOL_DEFINITIONS,
       onToken,
     );
+    if (usage) {
+      usageAcc.hasUsage = true;
+      usageAcc.promptTokens += usage.prompt_tokens ?? 0;
+      usageAcc.completionTokens += usage.completion_tokens ?? 0;
+    }
 
     if (toolCalls.length === 0) {
       return { agentType, assistantText: content, toolTrace };
@@ -338,4 +400,75 @@ export async function runAgentTurn(
       "Maaf, permintaan ini terlalu kompleks untuk saya proses sekarang. Coba lebih spesifik ya.",
     toolTrace,
   };
+}
+
+/**
+ * Jalankan satu giliran percakapan penuh: routing lalu tool-calling loop dengan
+ * batas iterasi (MAX_TOOL_ITERATIONS) supaya tidak infinite loop kalau model
+ * "ngotot" memanggil tool terus-menerus.
+ *
+ * Membungkus runAgentTurnInner dengan timing + pelaporan metrics: SATU baris
+ * agent_execution_metrics per giliran chat (bukan per pemanggilan LLM individual
+ * di dalam loop) — cukup granular untuk evaluasi BAB 4, tidak membanjiri tabel.
+ * Pelaporan metrics fire-and-forget dan tidak pernah mengubah perilaku/hasil
+ * yang dilihat staf, termasuk saat runAgentTurnInner melempar error: error tetap
+ * dilaporkan ke metrics (succeeded: false) lalu di-rethrow apa adanya ke pemanggil
+ * (ChatWindow.tsx) supaya penanganan error UI existing tidak berubah.
+ */
+export async function runAgentTurn(
+  engine: MLCEngineInterface,
+  history: ChatMessage[],
+  userMessage: string,
+  conversationId: string,
+  businessId: string,
+  onToken?: (partialText: string) => void,
+): Promise<AgentTurnResult> {
+  const startedAt = performance.now();
+  // Perkiraan panjang konteks di awal giliran (karakter, bukan token exact dari
+  // tokenizer) — proxy kasar tapi cukup untuk melihat tren "percakapan makin
+  // panjang -> makin lambat" di evaluasi BAB 4, tanpa perlu tokenizer WebLLM
+  // di-load terpisah cuma untuk menghitung ini.
+  const contextLengthAtCall =
+    history.reduce((sum, m) => sum + m.content.length, 0) + userMessage.length;
+  const usageAcc = { promptTokens: 0, completionTokens: 0, hasUsage: false };
+
+  try {
+    const result = await runAgentTurnInner(
+      engine,
+      history,
+      userMessage,
+      conversationId,
+      businessId,
+      usageAcc,
+      onToken,
+    );
+    reportAgentExecutionMetric({
+      conversation_id: conversationId,
+      agent_type: result.agentType,
+      model_name: MODEL_ID,
+      prompt_tokens: usageAcc.hasUsage ? usageAcc.promptTokens : null,
+      completion_tokens: usageAcc.hasUsage ? usageAcc.completionTokens : null,
+      context_length_at_call: contextLengthAtCall,
+      latency_ms: Math.round(performance.now() - startedAt),
+      succeeded: true,
+      error_message: null,
+    });
+    return result;
+  } catch (err) {
+    // agent_type tidak diketahui pasti kalau error terjadi sebelum/di tengah
+    // routing (mis. engine belum siap) — "off_topic" dipakai sebagai nilai
+    // netral di kolom yang NOT NULL, bukan klaim bahwa pesannya off-topic.
+    reportAgentExecutionMetric({
+      conversation_id: conversationId,
+      agent_type: "off_topic",
+      model_name: MODEL_ID,
+      prompt_tokens: usageAcc.hasUsage ? usageAcc.promptTokens : null,
+      completion_tokens: usageAcc.hasUsage ? usageAcc.completionTokens : null,
+      context_length_at_call: contextLengthAtCall,
+      latency_ms: Math.round(performance.now() - startedAt),
+      succeeded: false,
+      error_message: err instanceof Error ? err.message : String(err),
+    });
+    throw err;
+  }
 }
