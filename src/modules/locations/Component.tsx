@@ -135,10 +135,10 @@ export function LocationsModule() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-slate-900">Lokasi</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-slate-900">Lokasi</h1>
         <button
           onClick={() => (formMode ? closeForm() : openCreateForm())}
-          className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white"
+          className="btn btn-primary"
         >
           {formMode ? "Tutup" : "+ Tambah Lokasi"}
         </button>
@@ -147,41 +147,41 @@ export function LocationsModule() {
       {formMode && (
         <form
           onSubmit={handleSubmit}
-          className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2"
+          className="grid grid-cols-1 gap-3 card p-4 sm:grid-cols-2"
         >
-          <p className="text-sm font-medium text-slate-700 sm:col-span-2">
+          <p className="text-sm font-semibold text-slate-900 sm:col-span-2">
             {formMode === "edit" ? "Edit Lokasi" : "Lokasi Baru"}
           </p>
           <div>
-            <label className="text-xs font-medium text-slate-600">
+            <label className="field-label">
               Nama Lokasi
             </label>
             <input
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               required
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none"
+              className="field-input mt-1"
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-slate-600">Jenis</label>
+            <label className="field-label">Jenis</label>
             <select
               value={form.type}
               onChange={(e) =>
                 setForm({ ...form, type: e.target.value as LocationType })
               }
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none"
+              className="field-input mt-1"
             >
               <option value="toko">Toko</option>
               <option value="gudang">Gudang</option>
             </select>
           </div>
           <div className="sm:col-span-2">
-            <label className="text-xs font-medium text-slate-600">Alamat</label>
+            <label className="field-label">Alamat</label>
             <input
               value={form.address}
               onChange={(e) => setForm({ ...form, address: e.target.value })}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none"
+              className="field-input mt-1"
             />
           </div>
           {formError && (
@@ -190,7 +190,7 @@ export function LocationsModule() {
           <div className="flex gap-2 sm:col-span-2">
             <button
               disabled={isCreating || isUpdating}
-              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="btn btn-primary"
             >
               {isCreating || isUpdating
                 ? "Menyimpan…"
@@ -201,7 +201,7 @@ export function LocationsModule() {
             <button
               type="button"
               onClick={closeForm}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
+              className="btn btn-secondary"
             >
               Batal
             </button>

@@ -53,19 +53,19 @@ export function StockOpnameModule() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-semibold text-slate-900">Stock Opname</h1>
+      <h1 className="text-xl font-semibold tracking-tight text-slate-900">Stock Opname</h1>
 
       <form
         onSubmit={handleSubmit}
-        className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2"
+        className="grid grid-cols-1 gap-3 card p-4 sm:grid-cols-2"
       >
         <div>
-          <label className="text-xs font-medium text-slate-600">Produk</label>
+          <label className="field-label">Produk</label>
           <select
             value={form.product_id}
             onChange={(e) => setForm({ ...form, product_id: e.target.value })}
             required
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            className="field-input mt-1"
           >
             <option value="">Pilih produk</option>
             {products.map((p) => (
@@ -76,12 +76,12 @@ export function StockOpnameModule() {
           </select>
         </div>
         <div>
-          <label className="text-xs font-medium text-slate-600">Lokasi</label>
+          <label className="field-label">Lokasi</label>
           <select
             value={form.location_id}
             onChange={(e) => setForm({ ...form, location_id: e.target.value })}
             required
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            className="field-input mt-1"
           >
             <option value="">Pilih lokasi</option>
             {locations.map((l) => (
@@ -92,7 +92,7 @@ export function StockOpnameModule() {
           </select>
         </div>
         <div>
-          <label className="text-xs font-medium text-slate-600">
+          <label className="field-label">
             Jumlah Hasil Hitung Fisik
           </label>
           <input
@@ -103,17 +103,17 @@ export function StockOpnameModule() {
               setForm({ ...form, counted_quantity: e.target.value })
             }
             required
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            className="field-input mt-1"
           />
         </div>
         <div>
-          <label className="text-xs font-medium text-slate-600">
+          <label className="field-label">
             Catatan (opsional)
           </label>
           <input
             value={form.notes}
             onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            className="field-input mt-1"
           />
         </div>
         {result && (
@@ -122,7 +122,7 @@ export function StockOpnameModule() {
         <div className="sm:col-span-2">
           <button
             disabled={isCreating}
-            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className="btn btn-primary"
           >
             {isCreating ? "Menyimpan…" : "Catat Hasil Opname"}
           </button>
@@ -130,7 +130,7 @@ export function StockOpnameModule() {
       </form>
 
       <div>
-        <h2 className="mb-2 text-sm font-semibold text-slate-700">Riwayat</h2>
+        <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-slate-500">Riwayat</h2>
         <DataTable
           columns={opnameColumns}
           data={history}

@@ -9,10 +9,10 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
     <div className={clsx("flex", isUser ? "justify-end" : "justify-start")}>
       <div
         className={clsx(
-          "max-w-[80%] rounded-2xl px-4 py-2 text-sm whitespace-pre-wrap",
+          "max-w-[80%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
           isUser
-            ? "bg-brand-600 text-white rounded-br-sm"
-            : "bg-white text-slate-900 border border-slate-200 rounded-bl-sm",
+            ? "rounded-br-md bg-brand-600 text-white"
+            : "rounded-bl-md border border-slate-200 bg-white text-slate-800 shadow-xs",
         )}
       >
         {message.content}

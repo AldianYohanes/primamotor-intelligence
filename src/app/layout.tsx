@@ -1,7 +1,13 @@
 import type { Metadata, Viewport } from "next";
+import { Inter } from "next/font/google";
 import "../styles/globals.css";
-import { MantineProvider } from "@mantine/core";
 import ServiceWorkerRegistration from "../components/ServiceWorkerRegistration";
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Prima Motor Volvo — Manajemen Stok",
@@ -19,7 +25,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
-  themeColor: "#1d4ed8",
+  themeColor: "#2563eb",
 };
 
 export default function RootLayout({
@@ -28,10 +34,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="id">
+    <html lang="id" className={inter.variable}>
       <body>
-        <MantineProvider>{children}</MantineProvider>
-
+        {children}
         <ServiceWorkerRegistration />
       </body>
     </html>

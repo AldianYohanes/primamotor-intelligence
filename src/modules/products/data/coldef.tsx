@@ -61,8 +61,8 @@ export function createProductColumns(options: {
         <span
           className={
             row.original.isActive
-              ? 'rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700'
-              : 'rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500'
+              ? 'badge badge-emerald'
+              : 'badge badge-slate'
           }
         >
           {row.original.statusLabel}
@@ -78,14 +78,14 @@ export function createProductColumns(options: {
           <button
             onClick={() => options.onEdit(row.original)}
             disabled={options.isUpdatingId === row.original.id}
-            className="text-xs text-slate-600 underline disabled:opacity-50"
+            className="text-xs font-medium text-slate-600 transition-colors hover:text-slate-900 disabled:opacity-50 disabled:hover:text-slate-600"
           >
             Edit
           </button>
           <button
             onClick={() => options.onToggleActive(row.original)}
             disabled={options.isUpdatingId === row.original.id}
-            className="text-xs text-brand-600 underline disabled:opacity-50"
+            className="text-xs font-medium text-brand-600 transition-colors hover:text-brand-700 disabled:opacity-50 disabled:hover:text-brand-600"
           >
             {options.isUpdatingId === row.original.id ? 'Memproses…' : row.original.isActive ? 'Nonaktifkan' : 'Aktifkan'}
           </button>

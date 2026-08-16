@@ -57,7 +57,7 @@ export function createReorderSuggestionColumns(options: {
       cell: ({ row }) => (
         <div>
           <span
-            className={`rounded-full px-2 py-0.5 text-xs font-medium ${row.original.statusBadgeClass}`}
+            className={`badge ${row.original.statusBadgeClass}`}
           >
             {row.original.statusLabel}
           </span>
@@ -82,7 +82,7 @@ export function createReorderSuggestionColumns(options: {
               <button
                 onClick={() => options.onAction(row.original, "acknowledged")}
                 disabled={busy}
-                className="text-xs text-slate-600 underline disabled:opacity-50"
+                className="text-xs font-medium text-slate-600 transition-colors hover:text-slate-900 disabled:opacity-50 disabled:hover:text-slate-600"
               >
                 Tandai Dilihat
               </button>
@@ -90,14 +90,14 @@ export function createReorderSuggestionColumns(options: {
             <button
               onClick={() => options.onAction(row.original, "ordered")}
               disabled={busy}
-              className="text-xs text-brand-600 underline disabled:opacity-50"
+              className="text-xs font-medium text-brand-600 transition-colors hover:text-brand-700 disabled:opacity-50 disabled:hover:text-brand-600"
             >
               Sudah Dipesan
             </button>
             <button
               onClick={() => options.onAction(row.original, "dismissed")}
               disabled={busy}
-              className="text-xs text-slate-500 underline disabled:opacity-50"
+              className="text-xs font-medium text-slate-500 transition-colors hover:text-slate-700 disabled:opacity-50 disabled:hover:text-slate-500"
             >
               {busy ? "Memproses…" : "Abaikan"}
             </button>

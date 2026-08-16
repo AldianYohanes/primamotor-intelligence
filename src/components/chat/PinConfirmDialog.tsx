@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ShieldCheck, AlertCircle } from "lucide-react";
 import type { PendingConfirmation } from "@/src/lib/agents/orchestrator";
 
 interface Props {
@@ -80,12 +81,17 @@ export function PinConfirmDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
-        <h2 className="text-base font-semibold text-slate-900">
-          Konfirmasi PIN
-        </h2>
-        <p className="mt-1 text-sm text-slate-600">{pending.message}</p>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-4 backdrop-blur-[1px] sm:items-center">
+      <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-5 shadow-popover">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-600">
+            <ShieldCheck size={16} />
+          </div>
+          <h2 className="text-base font-semibold text-slate-900">
+            Konfirmasi PIN
+          </h2>
+        </div>
+        <p className="mt-2 text-sm text-slate-600">{pending.message}</p>
 
         <input
           type="password"
@@ -95,23 +101,28 @@ export function PinConfirmDialog({
           onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
           placeholder="Masukkan PIN"
           maxLength={12}
-          className="mt-4 w-full rounded-lg border border-slate-300 px-3 py-2 text-center text-lg tracking-widest focus:border-brand-600 focus:outline-none"
+          className="field-input mt-4 text-center text-lg tracking-widest"
         />
 
-        {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+        {error && (
+          <div className="mt-3 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <AlertCircle size={15} className="mt-0.5 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
 
         <div className="mt-4 flex gap-2">
           <button
             onClick={handleCancel}
             disabled={submitting || cancelling}
-            className="flex-1 rounded-lg border border-slate-300 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+            className="btn btn-secondary flex-1 py-2"
           >
             {cancelling ? "Membatalkan…" : "Batal"}
           </button>
           <button
             onClick={handleConfirm}
             disabled={submitting || pin.length < 6}
-            className="flex-1 rounded-lg bg-brand-600 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className="btn btn-primary flex-1 py-2"
           >
             {submitting ? "Memproses…" : "Konfirmasi"}
           </button>

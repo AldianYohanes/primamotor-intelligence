@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BellRing } from "lucide-react";
 import {
   enablePushNotifications,
   getPushSupportStatus,
@@ -38,7 +39,8 @@ export function EnableNotificationsBanner() {
 
   return (
     <div className="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs">
-      <span className="text-amber-800">
+      <span className="flex items-center gap-1.5 text-amber-800">
+        <BellRing size={14} className="shrink-0" />
         Aktifkan notifikasi supaya dapat kabar saran restock & stok menipis.
       </span>
       <div className="flex shrink-0 items-center gap-2">
@@ -46,7 +48,7 @@ export function EnableNotificationsBanner() {
         <button
           onClick={handleEnable}
           disabled={busy}
-          className="rounded-full bg-amber-600 px-3 py-1 font-medium text-white disabled:opacity-50"
+          className="rounded-full bg-amber-600 px-3 py-1 font-medium text-white transition-colors hover:bg-amber-700 disabled:opacity-50"
         >
           {busy ? "Memproses…" : "Aktifkan"}
         </button>

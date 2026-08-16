@@ -22,11 +22,11 @@ export function createStaffColumns(options: {
       cell: ({ row }) => {
         const vm = row.original
         const cls = vm.isLocked
-          ? 'bg-red-100 text-red-700'
+          ? 'badge-red'
           : vm.isActive
-            ? 'bg-emerald-100 text-emerald-700'
-            : 'bg-slate-100 text-slate-500'
-        return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{vm.statusLabel}</span>
+            ? 'badge-emerald'
+            : 'badge-slate'
+        return <span className={`badge ${cls}`}>{vm.statusLabel}</span>
       },
     },
     {
@@ -37,11 +37,11 @@ export function createStaffColumns(options: {
           <button
             onClick={() => options.onToggleActive(row.original)}
             disabled={options.isUpdatingId === row.original.id}
-            className="text-xs text-brand-600 underline disabled:opacity-50"
+            className="text-xs font-medium text-brand-600 transition-colors hover:text-brand-700 disabled:opacity-50 disabled:hover:text-brand-600"
           >
             {row.original.isActive ? 'Nonaktifkan' : 'Aktifkan'}
           </button>
-          <button onClick={() => options.onResetPin(row.original)} className="text-xs text-brand-600 underline">
+          <button onClick={() => options.onResetPin(row.original)} className="text-xs font-medium text-brand-600 transition-colors hover:text-brand-700">
             Reset PIN
           </button>
         </div>

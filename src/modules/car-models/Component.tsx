@@ -33,7 +33,7 @@ export function CarModelsModule() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold text-slate-900">
+        <h1 className="text-xl font-semibold tracking-tight text-slate-900">
           Referensi Model Mobil
         </h1>
         <p className="text-sm text-slate-500">
@@ -49,7 +49,7 @@ export function CarModelsModule() {
           setPage(1);
         }}
         placeholder="Cari model…"
-        className="w-full max-w-xs rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none"
+        className="field-input w-full max-w-xs"
       />
 
       {error && (

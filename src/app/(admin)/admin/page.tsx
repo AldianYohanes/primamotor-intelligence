@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ArrowRight, Bell, PackageSearch } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { TenantApprovalList } from "@/src/components/admin/TenantApprovalList";
 
@@ -48,27 +49,44 @@ export default async function AdminDashboardPage({
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-xl font-semibold text-slate-900">Dashboard</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-slate-900">Dashboard</h1>
         <p className="text-sm text-slate-500">
           Ringkasan kondisi toko hari ini
         </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <StatCard
+          icon={PackageSearch}
+          label="Saran Restock Menunggu"
+          value={suggestions?.length ?? 0}
+          href="/admin/audit-log"
+          tone="amber"
+        />
+        <StatCard
+          icon={Bell}
+          label="Notifikasi"
+          value={notifCount ?? 0}
+          tone="blue"
+        />
       </div>
 
       {staffRow?.role === "admin" && <TenantApprovalList />}
 
       <section>
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-700">
+          <h2 className="text-[13px] font-semibold uppercase tracking-wide text-slate-500">
             Saran Restock ({suggestions?.length ?? 0})
           </h2>
           <Link
             href="/admin/audit-log"
-            className="text-xs text-brand-600 underline"
+            className="flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700"
           >
-            Lihat riwayat lengkap →
+            Lihat riwayat lengkap
+            <ArrowRight size={12} />
           </Link>
         </div>
-        <div className="mt-2 divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
+        <div className="card mt-2 divide-y divide-slate-100">
           {(suggestions ?? []).length === 0 && (
             <p className="p-4 text-sm text-slate-400">
               Tidak ada saran restock saat ini.
@@ -83,7 +101,7 @@ export default async function AdminDashboardPage({
                 </p>
                 <p className="text-xs text-slate-500">{s.reason}</p>
               </div>
-              <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-700">
+              <span className="badge badge-amber">
                 +{s.suggested_quantity} unit
               </span>
             </div>
@@ -93,7 +111,7 @@ export default async function AdminDashboardPage({
 
       <section>
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-700">
+          <h2 className="text-[13px] font-semibold uppercase tracking-wide text-slate-500">
             Notifikasi ({notifCount ?? 0})
           </h2>
           {totalNotifPages > 1 && (
@@ -107,7 +125,7 @@ export default async function AdminDashboardPage({
                 className={
                   notifPage <= 1
                     ? "pointer-events-none text-slate-300"
-                    : "text-brand-600 underline"
+                    : "font-medium text-brand-600 hover:text-brand-700"
                 }
               >
                 Sebelumnya
@@ -118,7 +136,7 @@ export default async function AdminDashboardPage({
                 className={
                   notifPage >= totalNotifPages
                     ? "pointer-events-none text-slate-300"
-                    : "text-brand-600 underline"
+                    : "font-medium text-brand-600 hover:text-brand-700"
                 }
               >
                 Berikutnya
@@ -126,7 +144,7 @@ export default async function AdminDashboardPage({
             </div>
           )}
         </div>
-        <div className="mt-2 divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
+        <div className="card mt-2 divide-y divide-slate-100">
           {(notifications ?? []).length === 0 && (
             <p className="p-4 text-sm text-slate-400">Belum ada notifikasi.</p>
           )}
@@ -139,5 +157,41 @@ export default async function AdminDashboardPage({
         </div>
       </section>
     </div>
+  );
+}
+
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  href,
+  tone,
+}: {
+  icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
+  label: string;
+  value: number;
+  href?: string;
+  tone: "amber" | "blue";
+}) {
+  const iconTone =
+    tone === "amber" ? "bg-amber-50 text-amber-600" : "bg-brand-50 text-brand-600";
+
+  const content = (
+    <div className="card flex items-center gap-4 p-5">
+      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${iconTone}`}>
+        <Icon size={19} strokeWidth={2} />
+      </div>
+      <div>
+        <p className="text-2xl font-semibold tracking-tight text-slate-900">{value}</p>
+        <p className="text-xs text-slate-500">{label}</p>
+      </div>
+    </div>
+  );
+
+  if (!href) return content;
+  return (
+    <Link href={href} className="transition-transform hover:-translate-y-0.5">
+      {content}
+    </Link>
   );
 }

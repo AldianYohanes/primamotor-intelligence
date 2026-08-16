@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, MonitorX, AlertTriangle, Send, Plus, WifiOff } from "lucide-react";
+import Link from "next/link";
 import type { MLCEngineInterface, InitProgressReport } from "@mlc-ai/web-llm";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -236,9 +238,12 @@ export function ChatWindow({
 
   if (!webgpuOk) {
     return (
-      <div className="flex h-dvh items-center justify-center p-6 text-center">
-        <div className="max-w-sm space-y-2">
-          <p className="text-sm font-medium text-slate-700">
+      <div className="flex h-dvh items-center justify-center bg-[#f7f8fa] p-6 text-center">
+        <div className="card max-w-sm space-y-2.5 p-6">
+          <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-500">
+            <MonitorX size={20} />
+          </div>
+          <p className="text-sm font-semibold text-slate-900">
             Perangkat ini belum bisa menjalankan Asisten AI
           </p>
           <p className="text-sm text-slate-600">
@@ -259,15 +264,18 @@ export function ChatWindow({
 
   if (engineError) {
     return (
-      <div className="flex h-dvh items-center justify-center p-6 text-center">
-        <div className="max-w-sm space-y-2">
-          <p className="text-sm font-medium text-slate-700">
+      <div className="flex h-dvh items-center justify-center bg-[#f7f8fa] p-6 text-center">
+        <div className="card max-w-sm space-y-2.5 p-6">
+          <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-red-50 text-red-600">
+            <AlertTriangle size={20} />
+          </div>
+          <p className="text-sm font-semibold text-slate-900">
             Asisten AI gagal dimuat
           </p>
           <p className="text-sm text-slate-600">{engineError}</p>
           <button
             onClick={() => window.location.reload()}
-            className="mt-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white"
+            className="btn btn-primary mt-1"
           >
             Muat Ulang
           </button>
@@ -281,10 +289,13 @@ export function ChatWindow({
       ? Math.round(loadProgress.progress * 100)
       : 0;
     return (
-      <div className="flex h-dvh flex-col items-center justify-center gap-3 p-6 text-center">
-        <div className="h-2 w-64 overflow-hidden rounded-full bg-slate-200">
+      <div className="flex h-dvh flex-col items-center justify-center gap-3 bg-[#f7f8fa] p-6 text-center">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">
+          PV
+        </div>
+        <div className="h-1.5 w-64 overflow-hidden rounded-full bg-slate-200">
           <div
-            className="h-full bg-brand-600 transition-all"
+            className="h-full rounded-full bg-brand-600 transition-all"
             style={{ width: `${pct}%` }}
           />
         </div>
@@ -299,29 +310,42 @@ export function ChatWindow({
   }
 
   return (
-    <div className="flex h-dvh flex-col bg-slate-50">
+    <div className="flex h-dvh flex-col bg-[#f7f8fa]">
       <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
-        <div>
-          <p className="text-sm font-semibold">Asisten Stok</p>
-          <p className="text-xs text-slate-500">Halo, {fullName}</p>
+        <div className="flex items-center gap-2.5">
+          <Link
+            href="/admin"
+            className="hidden rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 sm:flex"
+            aria-label="Kembali ke dashboard"
+          >
+            <ArrowLeft size={17} />
+          </Link>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Asisten Stok</p>
+            <p className="text-xs text-slate-500">Halo, {fullName}</p>
+          </div>
         </div>
         <button
           onClick={handleNewConversation}
           disabled={isThinking}
-          className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 disabled:opacity-50"
+          className="btn btn-secondary rounded-full !text-xs !py-1.5 !px-3"
         >
-          + Percakapan Baru
+          <Plus size={13} />
+          Percakapan Baru
         </button>
       </header>
 
       <EnableNotificationsBanner />
 
       {!isOnline && (
-        <div className="border-b border-slate-300 bg-slate-100 px-4 py-2 text-xs text-slate-600">
-          Sedang offline — cari stok masih bisa pakai data terakhir yang
-          tersimpan, tapi catat barang masuk/keluar/transfer butuh koneksi untuk
-          verifikasi PIN. Pesan tetap tersimpan dan otomatis terkirim begitu
-          sinyal kembali.
+        <div className="flex items-start gap-2 border-b border-slate-200 bg-slate-100 px-4 py-2 text-xs text-slate-600">
+          <WifiOff size={14} className="mt-0.5 shrink-0" />
+          <span>
+            Sedang offline — cari stok masih bisa pakai data terakhir yang
+            tersimpan, tapi catat barang masuk/keluar/transfer butuh koneksi
+            untuk verifikasi PIN. Pesan tetap tersimpan dan otomatis terkirim
+            begitu sinyal kembali.
+          </span>
         </div>
       )}
 
@@ -332,10 +356,15 @@ export function ChatWindow({
           </p>
         )}
         {!loadingHistory && messages.length === 0 && (
-          <p className="mt-8 text-center text-sm text-slate-400">
-            Coba tanya: &quot;ada radiator 240 gak?&quot; atau &quot;masuk
-            barang 10 pcs filter oli&quot;
-          </p>
+          <div className="mx-auto mt-10 max-w-xs text-center">
+            <div className="mx-auto mb-3 flex h-9 w-9 items-center justify-center rounded-full bg-brand-50 text-brand-600">
+              <Send size={15} />
+            </div>
+            <p className="text-sm text-slate-400">
+              Coba tanya: &quot;ada radiator 240 gak?&quot; atau &quot;masuk
+              barang 10 pcs filter oli&quot;
+            </p>
+          </div>
         )}
         {messages.map((m, i) => (
           <MessageBubble key={i} message={m} />
@@ -347,7 +376,14 @@ export function ChatWindow({
                 message={{ role: "assistant", content: draftText }}
               />
             ) : (
-              <p className="text-xs text-slate-400">Asisten sedang berpikir…</p>
+              <div className="flex items-center gap-1.5 px-1 text-xs text-slate-400">
+                <span className="flex gap-0.5">
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300 [animation-delay:-0.3s]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300 [animation-delay:-0.15s]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300" />
+                </span>
+                Asisten sedang berpikir…
+              </div>
             )}
           </>
         )}
@@ -360,13 +396,14 @@ export function ChatWindow({
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
             placeholder="Ketik pesan…"
-            className="flex-1 rounded-full border border-slate-300 px-4 py-2 text-sm focus:border-brand-600 focus:outline-none"
+            className="field-input flex-1 rounded-full"
           />
           <button
             onClick={handleSend}
             disabled={isThinking}
-            className="rounded-full bg-brand-600 px-5 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className="btn btn-primary rounded-full px-5"
           >
+            <Send size={14} />
             Kirim
           </button>
         </div>

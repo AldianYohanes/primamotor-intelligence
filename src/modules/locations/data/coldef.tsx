@@ -34,10 +34,10 @@ export function createLocationColumns(options: {
         const busy = options.isBusyId === row.original.id
         return (
           <div className="flex items-center gap-3">
-            <button onClick={() => options.onEdit(row.original)} disabled={busy} className="text-xs text-slate-600 underline disabled:opacity-50">
+            <button onClick={() => options.onEdit(row.original)} disabled={busy} className="text-xs font-medium text-slate-600 transition-colors hover:text-slate-900 disabled:opacity-50 disabled:hover:text-slate-600">
               Edit
             </button>
-            <button onClick={() => options.onDelete(row.original)} disabled={busy} className="text-xs text-red-600 underline disabled:opacity-50">
+            <button onClick={() => options.onDelete(row.original)} disabled={busy} className="text-xs font-medium text-red-600 transition-colors hover:text-red-700 disabled:opacity-50 disabled:hover:text-red-600">
               {busy ? 'Memproses…' : 'Hapus'}
             </button>
           </div>

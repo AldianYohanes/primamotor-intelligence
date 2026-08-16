@@ -47,7 +47,7 @@ export function createAuditLogColumns(): ColumnDef<AuditLogViewModel>[] {
       header: 'Status',
       enableSorting: false,
       cell: ({ row }) => (
-        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${row.original.statusBadgeClass}`}>{row.original.statusLabel}</span>
+        <span className={`badge ${row.original.statusBadgeClass}`}>{row.original.statusLabel}</span>
       ),
     },
     {

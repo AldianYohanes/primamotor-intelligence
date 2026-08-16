@@ -207,10 +207,10 @@ export function ProductsModule() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-slate-900">Produk</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-slate-900">Produk</h1>
         <button
           onClick={() => (formMode ? closeForm() : openCreateForm())}
-          className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white"
+          className="btn btn-primary"
         >
           {formMode ? "Tutup" : "+ Tambah Produk"}
         </button>
@@ -219,9 +219,9 @@ export function ProductsModule() {
       {formMode && (
         <form
           onSubmit={handleSubmit}
-          className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2"
+          className="grid grid-cols-1 gap-3 card p-4 sm:grid-cols-2"
         >
-          <p className="text-sm font-medium text-slate-700 sm:col-span-2">
+          <p className="text-sm font-semibold text-slate-900 sm:col-span-2">
             {formMode === "edit" ? "Edit Produk" : "Produk Baru"}
           </p>
           <Input
@@ -264,7 +264,7 @@ export function ProductsModule() {
             onChange={(v) => setForm({ ...form, selling_price: Number(v) })}
           />
           <div>
-            <label className="text-xs font-medium text-slate-600">
+            <label className="field-label">
               Supplier Utama
             </label>
             <select
@@ -272,7 +272,7 @@ export function ProductsModule() {
               onChange={(e) =>
                 setForm({ ...form, preferred_supplier_id: e.target.value })
               }
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none"
+              className="field-input mt-1"
             >
               <option value="">— Tidak ditentukan —</option>
               {supplierOptions.map((s) => (
@@ -296,7 +296,7 @@ export function ProductsModule() {
           <div className="flex gap-2 sm:col-span-2">
             <button
               disabled={isCreating || isUpdating}
-              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="btn btn-primary"
             >
               {isCreating || isUpdating
                 ? "Menyimpan…"
@@ -307,7 +307,7 @@ export function ProductsModule() {
             <button
               type="button"
               onClick={closeForm}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
+              className="btn btn-secondary"
             >
               Batal
             </button>
@@ -323,7 +323,7 @@ export function ProductsModule() {
             setPage(1);
           }}
           placeholder="Cari produk…"
-          className="w-full max-w-xs rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none"
+          className="field-input w-full max-w-xs"
         />
         <select
           value={statusFilter}
@@ -331,7 +331,7 @@ export function ProductsModule() {
             setStatusFilter(e.target.value as ProductStatusFilter);
             setPage(1);
           }}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none"
+          className="field-input"
         >
           <option value="active">Aktif</option>
           <option value="inactive">Nonaktif</option>
@@ -390,14 +390,14 @@ function Input({
 }) {
   return (
     <div>
-      <label className="text-xs font-medium text-slate-600">{label}</label>
+      <label className="field-label">{label}</label>
       <input
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         required={required}
         placeholder={placeholder}
-        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none"
+        className="field-input mt-1"
       />
     </div>
   );

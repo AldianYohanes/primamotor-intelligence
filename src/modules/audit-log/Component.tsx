@@ -39,7 +39,7 @@ export function AuditLogModule() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold text-slate-900">
+        <h1 className="text-xl font-semibold tracking-tight text-slate-900">
           Riwayat Aksi Agent
         </h1>
         <p className="text-sm text-slate-500">
@@ -112,7 +112,7 @@ function AgentActionsTab() {
             setStatusFilter(e.target.value as AuditStatusFilter);
             setPage(1);
           }}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none"
+          className="field-input"
         >
           <option value="all">Semua Status</option>
           <option value="pending">Menunggu PIN</option>
@@ -126,7 +126,7 @@ function AgentActionsTab() {
             setToolFilter(e.target.value as AuditToolFilter);
             setPage(1);
           }}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none"
+          className="field-input"
         >
           <option value="all">Semua Aksi</option>
           <option value="updateStock">Ubah Stok</option>
@@ -224,7 +224,7 @@ function ReorderSuggestionsTab() {
             setStatusFilter(e.target.value as ReorderStatusFilter);
             setPage(1);
           }}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none"
+          className="field-input"
         >
           <option value="all">Semua Status</option>
           <option value="pending">Menunggu Tindak Lanjut</option>

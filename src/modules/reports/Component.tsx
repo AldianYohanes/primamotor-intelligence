@@ -12,12 +12,12 @@ export function ReportsModule() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold text-slate-900">Laporan Tren Penjualan</h1>
+      <h1 className="text-xl font-semibold tracking-tight text-slate-900">Laporan Tren Penjualan</h1>
 
       <select
         value={productId}
         onChange={(e) => setProductId(e.target.value)}
-        className="w-full max-w-sm rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        className="field-input w-full max-w-sm"
       >
         <option value="">Pilih produk untuk lihat tren…</option>
         {products.map((p) => (
@@ -30,21 +30,47 @@ export function ReportsModule() {
       {isLoading && <p className="text-sm text-slate-400">Memuat data…</p>}
 
       {!isLoading && productId && trend.length > 0 && (
-        <div className="h-80 rounded-xl border border-slate-200 bg-white p-4">
+        <div className="h-80 card p-5">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={trend}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey="periodLabel" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Line type="monotone" dataKey="totalKeluar" stroke="#2563eb" strokeWidth={2} name="Unit Terjual" />
+            <LineChart data={trend} margin={{ top: 4, right: 8, left: -12, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" vertical={false} />
+              <XAxis
+                dataKey="periodLabel"
+                tick={{ fontSize: 12, fill: '#64748b' }}
+                axisLine={{ stroke: '#e2e8f0' }}
+                tickLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 12, fill: '#64748b' }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip
+                contentStyle={{
+                  borderRadius: 8,
+                  border: '1px solid #e2e8f0',
+                  boxShadow: '0 4px 12px -2px rgb(15 23 42 / 0.08)',
+                  fontSize: 12,
+                }}
+              />
+              <Line
+                type="monotone"
+                dataKey="totalKeluar"
+                stroke="#2563eb"
+                strokeWidth={2}
+                dot={{ r: 3, fill: '#2563eb', strokeWidth: 0 }}
+                activeDot={{ r: 5 }}
+                name="Unit Terjual"
+              />
             </LineChart>
           </ResponsiveContainer>
         </div>
       )}
 
       {!isLoading && productId && trend.length === 0 && (
-        <p className="text-sm text-slate-400">Belum ada data transaksi keluar untuk produk ini.</p>
+        <div className="card flex flex-col items-center gap-1.5 px-4 py-14 text-center text-slate-400">
+          <p className="text-sm">Belum ada data transaksi keluar untuk produk ini.</p>
+        </div>
       )}
     </div>
   )

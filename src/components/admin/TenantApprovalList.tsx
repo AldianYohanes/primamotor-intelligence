@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Store } from 'lucide-react'
 
 interface Business {
   id: string
@@ -36,8 +37,11 @@ export function TenantApprovalList() {
 
   return (
     <section>
-      <h2 className="text-sm font-semibold text-slate-700">Toko Menunggu Verifikasi ({businesses.length})</h2>
-      <div className="mt-2 divide-y divide-slate-100 rounded-xl border border-amber-200 bg-amber-50">
+      <h2 className="flex items-center gap-1.5 text-[13px] font-semibold uppercase tracking-wide text-amber-700">
+        <Store size={13} />
+        Toko Menunggu Verifikasi ({businesses.length})
+      </h2>
+      <div className="mt-2 divide-y divide-amber-100 rounded-xl border border-amber-200 bg-amber-50">
         {businesses.map((b) => (
           <div key={b.id} className="flex items-center justify-between p-4">
             <div>
@@ -45,10 +49,16 @@ export function TenantApprovalList() {
               <p className="text-xs text-slate-500">Kode: {b.slug}</p>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => act(b.id, 'reject')} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600">
+              <button
+                onClick={() => act(b.id, 'reject')}
+                className="btn btn-secondary !text-xs !py-1.5 !px-3"
+              >
                 Tolak
               </button>
-              <button onClick={() => act(b.id, 'approve')} className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white">
+              <button
+                onClick={() => act(b.id, 'approve')}
+                className="btn btn-primary !text-xs !py-1.5 !px-3"
+              >
                 Setujui
               </button>
             </div>

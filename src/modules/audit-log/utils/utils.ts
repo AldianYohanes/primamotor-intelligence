@@ -38,14 +38,14 @@ export function statusLabel(status: AuditStatus): string {
 export function statusBadgeClass(status: AuditStatus): string {
   switch (status) {
     case 'executed':
-      return 'bg-emerald-100 text-emerald-700'
+      return 'badge-emerald'
     case 'pending':
-      return 'bg-amber-100 text-amber-700'
+      return 'badge-amber'
     case 'failed':
     case 'rejected':
-      return 'bg-red-100 text-red-700'
+      return 'badge-red'
     default:
-      return 'bg-slate-100 text-slate-600'
+      return 'badge-slate'
   }
 }
 
@@ -66,12 +66,12 @@ export function reorderStatusLabel(status: ReorderStatus): string {
 export function reorderStatusBadgeClass(status: ReorderStatus): string {
   switch (status) {
     case 'ordered':
-      return 'bg-emerald-100 text-emerald-700'
+      return 'badge-emerald'
     case 'pending':
-      return 'bg-amber-100 text-amber-700'
+      return 'badge-amber'
     case 'dismissed':
-      return 'bg-slate-100 text-slate-500'
+      return 'badge-slate'
     default:
-      return 'bg-blue-100 text-blue-700'
+      return 'badge-blue'
   }
 }
