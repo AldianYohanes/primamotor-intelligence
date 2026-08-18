@@ -37,12 +37,22 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Route-protection example — adjust matcher/paths to your app's routes.
-  if (
-    !user &&
-    !request.nextUrl.pathname.startsWith("/login") &&
-    !request.nextUrl.pathname.startsWith("/auth")
-  ) {
+  // Rute publik yang boleh diakses tanpa login. Sebelumnya hanya
+  // `/login` dan `/auth` yang dikecualikan — akibatnya landing page ("/"),
+  // halaman daftar ("/signup"), DAN endpoint API yang justru dipakai untuk
+  // proses login/daftar itu sendiri ("/api/auth/*") ikut di-redirect paksa
+  // ke /login sebelum sempat dijalankan. Form login yang fetch ke
+  // /api/auth/login jadi gagal total untuk pengunjung yang belum punya sesi.
+  const isPublicPath =
+    request.nextUrl.pathname === "/" ||
+    request.nextUrl.pathname.startsWith("/login") ||
+    request.nextUrl.pathname.startsWith("/signup") ||
+    request.nextUrl.pathname.startsWith("/auth") ||
+    request.nextUrl.pathname.startsWith("/api/auth") ||
+    request.nextUrl.pathname === "/manifest.json" ||
+    request.nextUrl.pathname === "/sw.js";
+
+  if (!user && !isPublicPath) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
