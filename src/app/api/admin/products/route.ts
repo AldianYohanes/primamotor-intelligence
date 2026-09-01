@@ -11,10 +11,15 @@ const productSchema = z.object({
   unit: z.string().default("pcs"),
   description: z.string().optional(),
   min_threshold: z.number().int().min(0).default(0),
+  lead_time_days: z.number().int().min(0).default(0),
+  safety_stock: z.number().int().min(0).default(0),
   unit_cost: z.number().min(0).default(0),
   selling_price: z.number().min(0).default(0),
   preferred_supplier_id: z.string().uuid().optional(),
   aliases: z.array(z.string()).optional(),
+  // Migration 0028 — null/undefined = garansi tidak dilacak utk produk ini
+  // (default). Dipakai fitur klaim garansi POS (lihat modul pos-sales).
+  warranty_days: z.number().int().min(0).max(3650).optional(),
 });
 
 async function requireStaff() {

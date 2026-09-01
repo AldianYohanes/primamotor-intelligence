@@ -15,10 +15,15 @@ const productPatchSchema = z
     unit: z.string().optional(),
     description: z.string().optional(),
     min_threshold: z.number().int().min(0).optional(),
+    lead_time_days: z.number().int().min(0).optional(),
+    safety_stock: z.number().int().min(0).optional(),
     unit_cost: z.number().min(0).optional(),
     selling_price: z.number().min(0).optional(),
     preferred_supplier_id: z.string().uuid().nullable().optional(),
     is_active: z.boolean().optional(),
+    // Migration 0028 — nullable eksplisit supaya admin bisa MENGHAPUS garansi
+    // (set null lagi), bukan cuma mengisi.
+    warranty_days: z.number().int().min(0).max(3650).nullable().optional(),
   })
   .strict()
 
