@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendPushNotification } from "@/src/lib/notifications/send-push";
 import { logger } from "@/src/lib/logging/logger";
+import {
+  calculateReorder,
+  REORDER_OBSERVATION_DAYS,
+  shouldCreateReorderSuggestion,
+} from "@/src/lib/inventory/reorder-calculation";
 
 export const maxDuration = 300; // Vercel Cron: analisis semua tenant bisa memakan waktu
 
@@ -9,9 +14,9 @@ export const maxDuration = 300; // Vercel Cron: analisis semua tenant bisa memak
  * Monitoring Agent — TIDAK reaktif, dijalankan Vercel Cron (lihat vercel.json),
  * bukan dipicu percakapan. Logikanya heuristik sederhana di sini (bukan lewat
  * WebLLM, karena tidak ada percakapan/browser yang aktif saat cron jalan):
- * bandingkan rata-rata keluar/bulan (3 bulan terakhir) terhadap available_quantity
- * dan min_threshold. Prompt di lib/agents/prompts/monitoring-agent.ts tetap jadi
- * acuan aturan bisnisnya supaya konsisten kalau nanti mau diarahkan ke LLM juga.
+ * hitung rata-rata harian pada jendela rolling 90 hari, ROP berdasarkan lead
+ * time + safety stock, lalu bandingkan ambang efektif terhadap stok tersedia.
+ * Kalkulasi ditempatkan di fungsi murni agar deterministik dan dapat diuji.
  */
 export async function GET(req: NextRequest) {
   const cronSecret = req.headers.get("authorization")?.replace("Bearer ", "");
@@ -55,7 +60,9 @@ export async function GET(req: NextRequest) {
     try {
       const { data: products, error: productsError } = await admin
         .from("products")
-        .select("id, name, min_threshold, preferred_supplier_id")
+        .select(
+          "id, name, min_threshold, lead_time_days, safety_stock, preferred_supplier_id",
+        )
         .eq("business_id", business.id)
         .eq("is_active", true);
       if (productsError) {
@@ -72,7 +79,24 @@ export async function GET(req: NextRequest) {
       let created = 0;
 
       for (const product of products ?? []) {
-        const { data: trend, error: trendError } = await admin.rpc(
+        const { data: totalOutboundData, error: outboundError } =
+          await admin.rpc("get_outbound_total", {
+            p_product_id: product.id,
+            p_days: REORDER_OBSERVATION_DAYS,
+          });
+        if (outboundError) {
+          logger.error("Gagal ambil total transaksi keluar saat monitoring", {
+            route: "cron/monitor",
+            business_id: business.id,
+            product_id: product.id,
+            error: outboundError,
+          });
+          continue;
+        }
+
+        // Tren bulanan dipertahankan di snapshot agar rekomendasi dapat
+        // ditelusuri oleh owner, tetapi keputusan ROP memakai rolling 90 hari.
+        const { data: monthlyTrend, error: trendError } = await admin.rpc(
           "get_sales_trend",
           { p_product_id: product.id, p_months: 3 },
         );
@@ -85,12 +109,6 @@ export async function GET(req: NextRequest) {
           });
           continue; // lanjut ke produk lain, jangan gagalkan seluruh tenant
         }
-        const totalKeluar = (trend ?? []).reduce(
-          (sum, t) => sum + t.total_keluar,
-          0,
-        );
-        const avgPerMonth =
-          (trend?.length ?? 0) > 0 ? totalKeluar / (trend?.length ?? 1) : 0;
 
         const { data: stockRows, error: stockError } = await admin
           .from("stock")
@@ -110,13 +128,15 @@ export async function GET(req: NextRequest) {
           0,
         );
 
-        const belowThreshold =
-          product.min_threshold != null &&
-          totalAvailable < product.min_threshold;
-        const willRunOutSoon =
-          avgPerMonth > 0 && totalAvailable / avgPerMonth < 1;
+        const calculation = calculateReorder({
+          totalOutbound: Number(totalOutboundData ?? 0),
+          totalAvailable,
+          minThreshold: product.min_threshold ?? 0,
+          leadTimeDays: product.lead_time_days,
+          safetyStock: product.safety_stock,
+        });
 
-        if (belowThreshold || willRunOutSoon) {
+        if (calculation.shouldReorder) {
           const { data: existing, error: existingError } = await admin
             .from("reorder_suggestions")
             .select("id")
@@ -132,27 +152,34 @@ export async function GET(req: NextRequest) {
             });
             continue;
           }
-          if (existing) continue;
+          if (!shouldCreateReorderSuggestion(calculation, !!existing)) continue;
 
-          const suggestedQuantity = Math.max(
-            Math.ceil(avgPerMonth * 1.5) - totalAvailable,
-            1,
-          );
-          const reason = belowThreshold
-            ? `Stok tersedia (${totalAvailable}) di bawah ambang batas minimum (${product.min_threshold})`
-            : `Rata-rata keluar ${avgPerMonth.toFixed(1)}/bulan, stok tersisa ${totalAvailable} (diperkirakan habis <1 bulan)`;
+          const reason =
+            `Stok tersedia ${totalAvailable} unit, ROP ${calculation.reorderPoint}, ` +
+            `ambang efektif ${calculation.effectiveThreshold}, dan rata-rata keluar ` +
+            `${calculation.averageDailyOutbound.toFixed(3)} unit/hari (rolling ` +
+            `${calculation.observationDays} hari)`;
 
           const { error: suggestionError } = await admin
             .from("reorder_suggestions")
             .insert({
               business_id: business.id,
               product_id: product.id,
-              suggested_quantity: suggestedQuantity,
+              suggested_quantity: calculation.suggestedQuantity,
               reason,
               trend_snapshot: {
-                trend,
-                avg_per_month: avgPerMonth,
-                total_available: totalAvailable,
+                monthly_trend: monthlyTrend,
+                observation_days: calculation.observationDays,
+                target_days: calculation.targetDays,
+                total_outbound: calculation.totalOutbound,
+                average_daily_outbound: calculation.averageDailyOutbound,
+                lead_time_days: product.lead_time_days,
+                safety_stock: product.safety_stock,
+                min_threshold: product.min_threshold ?? 0,
+                reorder_point: calculation.reorderPoint,
+                effective_threshold: calculation.effectiveThreshold,
+                target_stock: calculation.targetStock,
+                total_available: calculation.totalAvailable,
               },
               suggested_supplier_id: product.preferred_supplier_id,
               status: "pending",
