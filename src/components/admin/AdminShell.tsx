@@ -17,6 +17,10 @@ import {
   Menu,
   X,
   MessageSquare,
+  Receipt,
+  ShoppingCart,
+  Wallet,
+  Clock,
 } from "lucide-react";
 import { LogoutButton } from "./LogoutButton";
 
@@ -27,6 +31,9 @@ const NAV = [
   { href: "/admin/suppliers", label: "Supplier", icon: Truck },
   { href: "/admin/staff", label: "Staf", icon: Users },
   { href: "/admin/stock-opname", label: "Stock Opname", icon: ClipboardList },
+  { href: "/admin/pos/sales", label: "Riwayat Penjualan", icon: Receipt },
+  { href: "/admin/pos/shifts", label: "Riwayat Shift Kasir", icon: Clock },
+  { href: "/admin/pos/customers", label: "Pelanggan Piutang", icon: Wallet },
   { href: "/admin/receipt-imports", label: "Review Bon", icon: ScanLine },
   { href: "/admin/reports", label: "Laporan", icon: BarChart3 },
   { href: "/admin/audit-log", label: "Riwayat Aksi Agent", icon: History },
@@ -97,13 +104,22 @@ export function AdminShell({ businessName, staffName, children }: Props) {
           <span className="text-sm font-semibold text-slate-900">
             {businessName ?? "Prima Motor Volvo"}
           </span>
-          <Link
-            href="/chat"
-            className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100"
-            aria-label="Buka asisten chat"
-          >
-            <MessageSquare size={20} />
-          </Link>
+          <div className="flex items-center gap-1">
+            <Link
+              href="/pos"
+              className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100"
+              aria-label="Buka kasir"
+            >
+              <ShoppingCart size={20} />
+            </Link>
+            <Link
+              href="/chat"
+              className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100"
+              aria-label="Buka asisten chat"
+            >
+              <MessageSquare size={20} />
+            </Link>
+          </div>
         </header>
 
         <main className="flex-1 overflow-y-auto p-4 sm:p-8">
@@ -162,6 +178,14 @@ function SidebarContent({
       </nav>
 
       <div className="space-y-1 border-t border-slate-100 px-2.5 py-3">
+        <Link
+          href="/pos"
+          onClick={onNavigate}
+          className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium text-brand-700 transition-colors hover:bg-brand-50"
+        >
+          <ShoppingCart size={16} strokeWidth={2} className="shrink-0" />
+          Buka Kasir
+        </Link>
         <Link
           href="/chat"
           onClick={onNavigate}
