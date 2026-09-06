@@ -10,6 +10,7 @@ import {
   Text,
   Title,
 } from "@mantine/core";
+import Link from "next/link";
 
 export const Navigation = () => {
   // const {ref, hovered} = useHover();
@@ -18,8 +19,11 @@ export const Navigation = () => {
       <SimpleGrid cols={{ base: 1, xs: 2, sm: 3, md: 4 }} spacing={8}>
         {AppModules.map((mod) => {
           const Icon = mod.Icon;
-          return (
-            <Card key={mod.key} shadow="xs">
+          const card = (
+            <Card
+              shadow="xs"
+              style={{ cursor: mod.href ? "pointer" : "default" }}
+            >
               <Box
                 style={{
                   top: `${getRandomInt(0, 100)}%`,
@@ -61,6 +65,24 @@ export const Navigation = () => {
                 </Stack>
               </Group>
             </Card>
+          );
+
+          // PENTING: jangan pakai `component={Link}` di sini. Home/Navigation
+          // adalah Server Component, dan Card/Button dari Mantine adalah
+          // Client Component — melempar referensi fungsi (komponen Link)
+          // sebagai PROP lewat batas server→client tidak bisa di-serialize
+          // React ("Functions cannot be passed directly to Client
+          // Components..."). Membungkus sebagai children (seperti di bawah)
+          // aman karena children punya jalur serialisasi RSC sendiri.
+          if (!mod.href) return <div key={mod.key}>{card}</div>;
+          return (
+            <Link
+              key={mod.key}
+              href={mod.href}
+              style={{ textDecoration: "none", color: "inherit" }}
+            >
+              {card}
+            </Link>
           );
         })}
       </SimpleGrid>
