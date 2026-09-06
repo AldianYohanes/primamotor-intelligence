@@ -14,6 +14,8 @@ export interface ProductViewModel {
   category: string
   unit: string
   minThreshold: number
+  leadTimeDays: number
+  safetyStock: number
   unitCost: number
   unitCostFormatted: string
   sellingPrice: number
@@ -33,6 +35,8 @@ export function mapProductResponseToViewModel(product: ProductResponse): Product
     category: product.category ?? '-',
     unit: product.unit,
     minThreshold: product.min_threshold ?? 0,
+    leadTimeDays: product.lead_time_days,
+    safetyStock: product.safety_stock,
     unitCost: product.unit_cost,
     unitCostFormatted: formatRupiah(product.unit_cost),
     sellingPrice: product.selling_price,

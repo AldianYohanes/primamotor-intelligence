@@ -14,4 +14,6 @@ export interface CreateProductPayload {
   selling_price?: number
   preferred_supplier_id?: string
   aliases?: string[]
+  // Migration 0028 — dipakai fitur klaim garansi POS (modules/pos-sales).
+  warranty_days?: number
 }

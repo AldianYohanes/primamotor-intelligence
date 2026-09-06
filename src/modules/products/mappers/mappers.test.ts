@@ -11,10 +11,13 @@ const baseProduct: ProductResponse = {
   unit: 'pcs',
   description: null,
   min_threshold: 3,
+  lead_time_days: 14,
+  safety_stock: 4,
   unit_cost: 150000,
   selling_price: 225000,
   preferred_supplier_id: 's1',
   is_active: true,
+  warranty_days: null,
   created_at: '2026-01-15T10:00:00Z',
   updated_at: '2026-01-15T10:00:00Z',
   suppliers: { name: 'Sparepart Jaya' },
@@ -45,6 +48,12 @@ describe('mapProductResponseToViewModel', () => {
   it('min_threshold null di-default jadi 0, bukan NaN/undefined', () => {
     const vm = mapProductResponseToViewModel({ ...baseProduct, min_threshold: null })
     expect(vm.minThreshold).toBe(0)
+  })
+
+  it('membawa parameter ROP untuk form edit', () => {
+    const vm = mapProductResponseToViewModel(baseProduct)
+    expect(vm.leadTimeDays).toBe(14)
+    expect(vm.safetyStock).toBe(4)
   })
 
   it('membawa raw response utuh untuk kebutuhan form edit (Component.tsx openEditForm)', () => {

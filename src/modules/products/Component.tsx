@@ -28,6 +28,9 @@ const emptyForm = {
   selling_price: 0,
   preferred_supplier_id: "",
   aliases: "",
+  // Migration 0028 — string kosong = tidak diisi (dikirim sebagai undefined
+  // saat submit), bukan "0 hari". Dipakai fitur klaim garansi POS.
+  warranty_days: "",
 };
 
 type FormState = typeof emptyForm;
@@ -110,6 +113,7 @@ export function ProductsModule() {
       selling_price: raw.selling_price,
       preferred_supplier_id: raw.preferred_supplier_id ?? "",
       aliases: "", // PATCH tidak mendukung update aliases (lihat route [id]) — sengaja dikosongkan, bukan bug
+      warranty_days: raw.warranty_days != null ? String(raw.warranty_days) : "",
     });
     setFormError(null);
     setEditingId(product.id);
@@ -183,11 +187,13 @@ export function ProductsModule() {
           unit_cost: form.unit_cost,
           selling_price: form.selling_price,
           preferred_supplier_id: form.preferred_supplier_id || undefined,
+          warranty_days: form.warranty_days === "" ? undefined : Number(form.warranty_days),
         });
       } else {
         await createProduct({
           ...form,
           preferred_supplier_id: form.preferred_supplier_id || undefined,
+          warranty_days: form.warranty_days === "" ? undefined : Number(form.warranty_days),
           aliases: form.aliases
             .split(",")
             .map((a) => a.trim())
@@ -262,6 +268,12 @@ export function ProductsModule() {
             type="number"
             value={String(form.selling_price)}
             onChange={(v) => setForm({ ...form, selling_price: Number(v) })}
+          />
+          <Input
+            label="Garansi (hari, opsional)"
+            type="number"
+            value={form.warranty_days}
+            onChange={(v) => setForm({ ...form, warranty_days: v })}
           />
           <div>
             <label className="field-label">

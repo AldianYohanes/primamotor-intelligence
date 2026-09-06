@@ -16,6 +16,8 @@ export interface ProductResponse {
   selling_price: number
   preferred_supplier_id: string | null
   is_active: boolean
+  // Migration 0028 — null = garansi tidak dilacak utk produk ini (default).
+  warranty_days: number | null
   created_at: string
   updated_at: string
   suppliers: { name: string } | null
