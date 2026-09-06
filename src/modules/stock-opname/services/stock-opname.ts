@@ -1,30 +1,46 @@
-import { createClient } from '@/lib/supabase/client'
-import type { OpnameListParams } from '../data/params'
-import { buildOpnameListQueryString } from '../data/params'
-import type { OpnameListResponse, OpnameResponse, SelectOption } from '../data/response'
-import type { CreateOpnamePayload } from '../data/payload'
+import { createClient } from "@/src/lib/supabase/client";
+import type { OpnameListParams } from "../data/params";
+import { buildOpnameListQueryString } from "../data/params";
+import type {
+  OpnameListResponse,
+  OpnameResponse,
+  SelectOption,
+} from "../data/response";
+import type { CreateOpnamePayload } from "../data/payload";
 
 async function parseJsonOrThrow<T>(res: Response): Promise<T> {
-  const body = await res.json().catch(() => null)
+  const body = await res.json().catch(() => null);
   if (!res.ok) {
-    const message = (body && typeof body === 'object' && 'error' in body ? String(body.error) : null) ?? `HTTP ${res.status}`
-    throw new Error(message)
+    const message =
+      (body && typeof body === "object" && "error" in body
+        ? String(body.error)
+        : null) ?? `HTTP ${res.status}`;
+    throw new Error(message);
   }
-  return body as T
+  return body as T;
 }
 
-export async function fetchOpnameHistory(params: OpnameListParams): Promise<OpnameListResponse> {
-  const res = await fetch(`/api/admin/stock-opname?${buildOpnameListQueryString(params)}`)
-  return parseJsonOrThrow<OpnameListResponse>(res)
+export async function fetchOpnameHistory(
+  params: OpnameListParams,
+): Promise<OpnameListResponse> {
+  const res = await fetch(
+    `/api/admin/stock-opname?${buildOpnameListQueryString(params)}`,
+  );
+  return parseJsonOrThrow<OpnameListResponse>(res);
 }
 
-export async function createOpname(payload: CreateOpnamePayload): Promise<{ opname: OpnameResponse; transaction_id: string | null }> {
-  const res = await fetch('/api/admin/stock-opname', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+export async function createOpname(
+  payload: CreateOpnamePayload,
+): Promise<{ opname: OpnameResponse; transaction_id: string | null }> {
+  const res = await fetch("/api/admin/stock-opname", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-  })
-  return parseJsonOrThrow<{ opname: OpnameResponse; transaction_id: string | null }>(res)
+  });
+  return parseJsonOrThrow<{
+    opname: OpnameResponse;
+    transaction_id: string | null;
+  }>(res);
 }
 
 /**
@@ -34,13 +50,20 @@ export async function createOpname(payload: CreateOpnamePayload): Promise<{ opna
  * yang perlu dijaga di server untuk kasus ini, jadi tidak perlu route baru.
  */
 export async function fetchProductOptions(): Promise<SelectOption[]> {
-  const supabase = createClient()
-  const { data } = await supabase.from('products').select('id, name').eq('is_active', true).order('name')
-  return data ?? []
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("products")
+    .select("id, name")
+    .eq("is_active", true)
+    .order("name");
+  return data ?? [];
 }
 
 export async function fetchLocationOptions(): Promise<SelectOption[]> {
-  const supabase = createClient()
-  const { data } = await supabase.from('locations').select('id, name').order('name')
-  return data ?? []
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("locations")
+    .select("id, name")
+    .order("name");
+  return data ?? [];
 }
