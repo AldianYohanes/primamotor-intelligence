@@ -1,14 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, MonitorX, AlertTriangle, Send, Plus, WifiOff } from "lucide-react";
+import {
+  ArrowLeft,
+  MonitorX,
+  AlertTriangle,
+  Send,
+  Plus,
+  WifiOff,
+} from "lucide-react";
 import Link from "next/link";
 import type { MLCEngineInterface, InitProgressReport } from "@mlc-ai/web-llm";
-import { createClient } from "@/lib/supabase/client";
-import {
-  getWebLLMEngine,
-  isWebGPUAvailable,
-} from "@/src/lib/agents/webllm-engine";
+import { createClient } from "@/src/lib/supabase/client";
+import { isWebGPUAvailable } from "@/src/lib/agents/webgpu-support";
 import {
   runAgentTurn,
   type ChatMessage,
@@ -89,21 +93,49 @@ export function ChatWindow({
     syncStockCache(supabase, businessId);
 
     if (webgpuOk) {
-      getWebLLMEngine((report) => !cancelled && setLoadProgress(report))
-        .then((e) => !cancelled && setEngine(e))
-        .catch((err) => {
-          // Sebelumnya kegagalan di sini cuma console.error — UI tetap menampilkan
-          // progress bar selamanya tanpa penjelasan (mis. WebGPU ada tapi VRAM
-          // device tidak cukup untuk model). Sesuai keputusan produk: tidak ada
-          // fallback ke API berbayar, jadi kalau WebLLM gagal dimuat, tampilkan
-          // error yang jelas saja — bukan diam-diam menggantung.
-          console.error("Gagal memuat model WebLLM:", err);
-          if (!cancelled) {
-            setEngineError(
-              "Model AI gagal dimuat di perangkat ini (biasanya karena RAM/VRAM tidak cukup). Coba tutup aplikasi lain lalu muat ulang, atau pakai perangkat lain.",
-            );
-          }
-        });
+      // Dynamic import, bukan static import di atas — `webllm-engine.ts`
+      // meng-import seluruh library `@mlc-ai/web-llm` (besar) di top-level.
+      // Kalau di-import statis, kode itu ikut ke chunk awal /chat dan harus
+      // di-parse browser sebelum UI (daftar pesan, kotak input) sempat
+      // render. Dengan import() di sini, downloadnya baru mulai setelah
+      // komponen mount dan lolos cek `webgpuOk` — shell chat tetap tampil
+      // cepat, baik di device yang WebGPU-nya nggak didukung sekalipun.
+      import("@/src/lib/agents/webllm-engine").then(
+        ({ getWebLLMEngine, resetWebLLMEngine }) => {
+          if (cancelled) return;
+          getWebLLMEngine(
+            (report) => !cancelled && setLoadProgress(report),
+            // Error yang terjadi SETELAH engine berhasil dimuat (mis. GPU device
+            // menolak buffer saat lagi inference) sebelumnya cuma nyangkut di
+            // console sebagai "uncaptured error" browser — tidak ada cara bagi
+            // UI untuk tahu dan bereaksi. Sekarang ditangkap di sini supaya
+            // percakapan tidak diam-diam macet: tampilkan error yang jelas dan
+            // reset engine supaya kalau user reload, tidak mencoba pakai device
+            // yang sama yang sudah rusak.
+            (err) => {
+              console.error("WebLLM device error:", err);
+              if (cancelled) return;
+              resetWebLLMEngine();
+              setEngine(null);
+              setEngineError(err.message);
+            },
+          )
+            .then((e) => !cancelled && setEngine(e))
+            .catch((err) => {
+              // Sebelumnya kegagalan di sini cuma console.error — UI tetap menampilkan
+              // progress bar selamanya tanpa penjelasan (mis. WebGPU ada tapi VRAM
+              // device tidak cukup untuk model). Sesuai keputusan produk: tidak ada
+              // fallback ke API berbayar, jadi kalau WebLLM gagal dimuat, tampilkan
+              // error yang jelas saja — bukan diam-diam menggantung.
+              console.error("Gagal memuat model WebLLM:", err);
+              if (!cancelled) {
+                setEngineError(
+                  "Model AI gagal dimuat di perangkat ini (biasanya karena RAM/VRAM tidak cukup). Coba tutup aplikasi lain lalu muat ulang, atau pakai perangkat lain.",
+                );
+              }
+            });
+        },
+      );
     }
 
     return () => {
@@ -138,14 +170,12 @@ export function ChatWindow({
     agentType?: string,
   ) {
     if (!conversationId) return;
-    const { error } = await supabase
-      .from("agent_messages")
-      .insert({
-        conversation_id: conversationId,
-        role,
-        content,
-        agent_type: agentType,
-      });
+    const { error } = await supabase.from("agent_messages").insert({
+      conversation_id: conversationId,
+      role,
+      content,
+      agent_type: agentType,
+    });
 
     if (error) {
       // Kemungkinan besar karena offline — jangan biarkan pesan hilang begitu saja,

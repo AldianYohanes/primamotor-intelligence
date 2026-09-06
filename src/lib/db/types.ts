@@ -110,6 +110,9 @@ export interface Database {
           selling_price: number
           preferred_supplier_id: string | null
           is_active: boolean
+          // Migration 0028 — null = garansi tidak dilacak utk produk ini
+          // (default, tidak otomatis aktif ke data lama).
+          warranty_days: number | null
           created_at: string
           updated_at: string
         }
@@ -252,6 +255,172 @@ export interface Database {
         }
         Insert: Partial<Database['public']['Tables']['receipt_import_items']['Row']> & { import_id: string }
         Update: Partial<Database['public']['Tables']['receipt_import_items']['Row']>
+        Relationships: []
+      }
+      sales: {
+        Row: {
+          id: string
+          business_id: string
+          location_id: string
+          staff_id: string | null
+          customer_id: string | null
+          customer_name: string | null
+          customer_phone: string | null
+          subtotal: number
+          discount_amount: number
+          tax_amount: number
+          total_amount: number
+          payment_method: 'cash' | 'transfer' | 'qris' | 'card' | 'split' | 'piutang'
+          amount_paid: number
+          change_amount: number
+          status: 'completed' | 'voided'
+          voided_by: string | null
+          voided_at: string | null
+          void_reason: string | null
+          idempotency_key: string | null
+          sale_number: string | null
+          notes: string | null
+          created_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['sales']['Row']> & {
+          business_id: string
+          location_id: string
+          payment_method: Database['public']['Tables']['sales']['Row']['payment_method']
+        }
+        Update: Partial<Database['public']['Tables']['sales']['Row']>
+        Relationships: []
+      }
+      sale_counters: {
+        // Tidak ada RLS di tabel ini dan TIDAK PERNAH diakses langsung dari
+        // Route Handler manapun — satu-satunya akses lewat next_sale_number()
+        // yang dipanggil dari dalam record_sale (migration 0026).
+        Row: {
+          business_id: string
+          year: number
+          counter: number
+        }
+        Insert: { business_id: string; year: number; counter?: number }
+        Update: Partial<Database['public']['Tables']['sale_counters']['Row']>
+        Relationships: []
+      }
+      warranty_claims: {
+        Row: {
+          id: string
+          sale_item_id: string
+          business_id: string
+          staff_id: string | null
+          reason: string
+          resolution: 'replaced' | 'refunded' | 'repaired'
+          notes: string | null
+          created_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['warranty_claims']['Row']> & {
+          sale_item_id: string
+          business_id: string
+          reason: string
+          resolution: Database['public']['Tables']['warranty_claims']['Row']['resolution']
+        }
+        Update: Partial<Database['public']['Tables']['warranty_claims']['Row']>
+        Relationships: []
+      }
+      shifts: {
+        Row: {
+          id: string
+          business_id: string
+          location_id: string
+          staff_id: string
+          opening_cash: number
+          closing_cash: number | null
+          expected_cash: number | null
+          cash_variance: number | null
+          status: 'open' | 'closed'
+          notes: string | null
+          opened_at: string
+          closed_at: string | null
+        }
+        Insert: Partial<Database['public']['Tables']['shifts']['Row']> & {
+          business_id: string
+          location_id: string
+          staff_id: string
+        }
+        Update: Partial<Database['public']['Tables']['shifts']['Row']>
+        Relationships: []
+      }
+      customers: {
+        Row: {
+          id: string
+          business_id: string
+          name: string
+          phone: string | null
+          credit_limit: number
+          balance: number
+          notes: string | null
+          created_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['customers']['Row']> & { business_id: string; name: string }
+        Update: Partial<Database['public']['Tables']['customers']['Row']>
+        Relationships: []
+      }
+      sale_payments: {
+        Row: {
+          id: string
+          sale_id: string
+          business_id: string
+          payment_method: 'cash' | 'transfer' | 'qris' | 'card'
+          amount: number
+          created_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['sale_payments']['Row']> & {
+          sale_id: string
+          business_id: string
+          payment_method: Database['public']['Tables']['sale_payments']['Row']['payment_method']
+          amount: number
+        }
+        Update: Partial<Database['public']['Tables']['sale_payments']['Row']>
+        Relationships: []
+      }
+      customer_payments: {
+        Row: {
+          id: string
+          customer_id: string
+          business_id: string
+          staff_id: string | null
+          amount: number
+          payment_method: 'cash' | 'transfer' | 'qris' | 'card'
+          notes: string | null
+          created_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['customer_payments']['Row']> & {
+          customer_id: string
+          business_id: string
+          amount: number
+          payment_method: Database['public']['Tables']['customer_payments']['Row']['payment_method']
+        }
+        Update: Partial<Database['public']['Tables']['customer_payments']['Row']>
+        Relationships: []
+      }
+      sale_items: {
+        Row: {
+          id: string
+          sale_id: string
+          business_id: string
+          product_id: string
+          quantity: number
+          unit_price: number
+          discount_amount: number
+          subtotal: number
+          stock_transaction_id: string | null
+          created_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['sale_items']['Row']> & {
+          sale_id: string
+          business_id: string
+          product_id: string
+          quantity: number
+          unit_price: number
+          subtotal: number
+        }
+        Update: Partial<Database['public']['Tables']['sale_items']['Row']>
         Relationships: []
       }
       agent_conversations: {
@@ -459,6 +628,76 @@ export interface Database {
       confirm_transfer_stock: {
         Args: { p_audit_log_id: string; p_staff_id: string }
         Returns: { ok: boolean; error?: string; status?: string }
+      }
+      record_sale: {
+        Args: {
+          p_business_id: string
+          p_location_id: string
+          p_staff_id: string
+          p_items: Json // { product_id: string; quantity: number; discount_amount?: number }[]
+          p_payment_method: Database['public']['Tables']['sales']['Row']['payment_method']
+          // p_payments wajib diisi kecuali p_payment_method='piutang'. Kembalian
+          // (change_amount di Returns) HANYA dihitung kalau array ini berisi
+          // TEPAT SATU entry bermetode 'cash' — lihat catatan scope di migration 0027.
+          p_payments?: { method: 'cash' | 'transfer' | 'qris' | 'card'; amount: number }[] | null
+          p_customer_id?: string | null // wajib kalau p_payment_method='piutang'
+          p_discount_amount?: number
+          p_tax_amount?: number
+          p_customer_name?: string | null
+          p_customer_phone?: string | null
+          p_notes?: string | null
+          p_idempotency_key?: string | null
+        }
+        // ok:true -> sale_id/sale_number/subtotal/total_amount/change_amount terisi.
+        // ok:false -> error salah satu dari 'empty_cart' | 'invalid_quantity' |
+        // 'product_not_found_or_inactive' | 'insufficient_stock' | 'no_payment' |
+        // 'insufficient_payment' | 'overpayment_not_allowed_for_split' |
+        // 'overpayment_not_allowed_for_non_cash' |
+        // 'customer_required' | 'customer_not_found' | 'credit_limit_exceeded'
+        // (yang terakhir menyertakan available_credit), plus product_id kalau relevan.
+        Returns: {
+          ok: boolean
+          sale_id?: string
+          sale_number?: string
+          subtotal?: number
+          total_amount?: number
+          change_amount?: number
+          error?: string
+          product_id?: string
+          available_credit?: number
+          idempotent_replay?: boolean
+        }
+      }
+      void_sale: {
+        Args: { p_sale_id: string; p_staff_id: string; p_staff_role: string; p_reason?: string | null }
+        // error tambahan 'void_window_expired' -> lewat 24 jam & role bukan 'owner'
+        Returns: { ok: boolean; error?: string }
+      }
+      record_customer_payment: {
+        Args: {
+          p_business_id: string
+          p_customer_id: string
+          p_staff_id: string
+          p_amount: number
+          p_payment_method: Database['public']['Tables']['sale_payments']['Row']['payment_method']
+          p_notes?: string | null
+        }
+        Returns: { ok: boolean; error?: string; new_balance?: number }
+      }
+      claim_warranty_return: {
+        Args: {
+          p_business_id: string
+          p_sale_item_id: string
+          p_staff_id: string
+          p_reason: string
+          p_resolution: Database['public']['Tables']['warranty_claims']['Row']['resolution']
+        }
+        // error: 'item_not_found' | 'already_claimed' | 'sale_voided' | 'no_warranty' | 'warranty_expired'
+        Returns: { ok: boolean; error?: string }
+      }
+      next_sale_number: {
+        Args: { p_business_id: string }
+        Returns: string
       }
       approve_business_signup: { Args: { p_business_id: string }; Returns: void }
       reject_business_signup: { Args: { p_business_id: string; p_reason?: string | null }; Returns: void }

@@ -3,13 +3,15 @@ Tugasmu menganalisis tren penjualan & level stok seluruh produk aktif sebuah ten
 produk mana yang perlu direkomendasikan untuk di-restock.
 
 Untuk tiap produk aktif:
-1. Ambil getSalesTrend 3 bulan terakhir.
-2. Bandingkan rata-rata keluar/bulan dengan stok tersedia saat ini (available_quantity) dan
-   products.min_threshold.
-3. Kalau stok diperkirakan habis dalam <1 bulan berdasarkan rata-rata tren, ATAU available_quantity
-   sudah di bawah min_threshold, buat createReorderSuggestion dengan:
-   - suggested_quantity: perkiraan kebutuhan 1-2 bulan ke depan dikurangi stok saat ini (minimal 1)
-   - reason: ringkasan singkat kenapa (mis. "rata-rata keluar 8/bulan, stok tersisa 3")
+1. Hitung total transaksi keluar pada jendela rolling 90 hari dan bagi dengan 90
+   untuk memperoleh rata-rata permintaan harian.
+2. Hitung ROP = ceil(rata-rata harian × lead_time_days + safety_stock).
+3. Gunakan nilai terbesar antara ROP dan products.min_threshold sebagai ambang efektif.
+4. Kalau available_quantity kurang dari atau sama dengan ambang efektif, buat
+   createReorderSuggestion dengan:
+   - target stok: nilai terbesar antara ambang efektif dan kebutuhan 45 hari
+   - suggested_quantity: target stok dikurangi stok tersedia (minimal 1)
+   - reason: ringkasan angka rata-rata harian, ROP, ambang efektif, dan stok tersedia
    - suggested_supplier_id: pakai products.preferred_supplier_id jika ada
 
 Ini HANYA menghasilkan notifikasi/saran ke staf (reorder_suggestions), bukan aksi tulis stok —
