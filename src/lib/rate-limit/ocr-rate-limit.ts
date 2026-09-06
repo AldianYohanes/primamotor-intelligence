@@ -1,20 +1,22 @@
-import 'server-only'
-import type { createClient } from '@/lib/supabase/server'
+import "server-only";
+import type { createClient } from "@/src/lib/supabase/server";
 
 // Default 20 upload bon per jam per toko — cukup longgar untuk pemakaian wajar
 // (toko kecil, bukan retail besar-besar), tapi mencegah biaya Gemini API
 // membengkak kalau ada bug retry-loop di client atau penyalahgunaan.
 // Override lewat env kalau kebutuhan tenant tertentu beda, tanpa deploy ulang.
-const DEFAULT_MAX_REQUESTS = Number(process.env.OCR_RATE_LIMIT_MAX ?? 20)
-const DEFAULT_WINDOW_MINUTES = Number(process.env.OCR_RATE_LIMIT_WINDOW_MINUTES ?? 60)
+const DEFAULT_MAX_REQUESTS = Number(process.env.OCR_RATE_LIMIT_MAX ?? 20);
+const DEFAULT_WINDOW_MINUTES = Number(
+  process.env.OCR_RATE_LIMIT_WINDOW_MINUTES ?? 60,
+);
 
 export interface OcrRateLimitResult {
-  allowed: boolean
-  currentCount: number
-  limitCount: number
-  windowStart: string
+  allowed: boolean;
+  currentCount: number;
+  limitCount: number;
+  windowStart: string;
   /** Perkiraan kapan window berikutnya mulai, untuk header Retry-After. */
-  retryAfterSeconds: number
+  retryAfterSeconds: number;
 }
 
 /**
@@ -28,29 +30,32 @@ export interface OcrRateLimitResult {
 export async function checkOcrRateLimit(
   supabase: Awaited<ReturnType<typeof createClient>>,
   businessId: string,
-  options?: { maxRequests?: number; windowMinutes?: number }
+  options?: { maxRequests?: number; windowMinutes?: number },
 ): Promise<OcrRateLimitResult> {
-  const maxRequests = options?.maxRequests ?? DEFAULT_MAX_REQUESTS
-  const windowMinutes = options?.windowMinutes ?? DEFAULT_WINDOW_MINUTES
+  const maxRequests = options?.maxRequests ?? DEFAULT_MAX_REQUESTS;
+  const windowMinutes = options?.windowMinutes ?? DEFAULT_WINDOW_MINUTES;
 
   const { data, error } = await supabase
-    .rpc('increment_ocr_rate_limit', {
+    .rpc("increment_ocr_rate_limit", {
       p_business_id: businessId,
       p_window_minutes: windowMinutes,
       p_max_requests: maxRequests,
     })
-    .single()
+    .single();
 
   if (error || !data) {
     // Gagal cek rate limit (mis. RPC belum ter-deploy) — fail CLOSED untuk endpoint
     // berbayar seperti ini, bukan fail open. Lebih baik staf retry sebentar lagi
     // daripada bug infra jadi celah biaya OCR tak terbatas.
-    throw new Error('Gagal memeriksa rate limit OCR, coba lagi sesaat lagi')
+    throw new Error("Gagal memeriksa rate limit OCR, coba lagi sesaat lagi");
   }
 
-  const windowStartMs = new Date(data.window_start).getTime()
-  const windowEndMs = windowStartMs + windowMinutes * 60_000
-  const retryAfterSeconds = Math.max(1, Math.ceil((windowEndMs - Date.now()) / 1000))
+  const windowStartMs = new Date(data.window_start).getTime();
+  const windowEndMs = windowStartMs + windowMinutes * 60_000;
+  const retryAfterSeconds = Math.max(
+    1,
+    Math.ceil((windowEndMs - Date.now()) / 1000),
+  );
 
   return {
     allowed: data.allowed,
@@ -58,5 +63,5 @@ export async function checkOcrRateLimit(
     limitCount: data.limit_count,
     windowStart: data.window_start,
     retryAfterSeconds,
-  }
+  };
 }

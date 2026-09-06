@@ -19,7 +19,7 @@ export const Footer = () => {
           </Stack>
 
           <Image
-            src="logos/prima-motor.png"
+            src="/logos/prima-motor.png"
             w={24}
             h={24}
             alt="Logo Prima Motor Volvo"
