@@ -12,6 +12,8 @@ export interface IAppModules {
   Icon: React.ElementType;
   iconColor?: string;
   accentColor?: string;
+  /** Rute internal. Kalau kosong, kartu ditampilkan sebagai info saja (tidak bisa diklik). */
+  href?: string;
 }
 export const AppModules: IAppModules[] = [
   {
@@ -21,6 +23,7 @@ export const AppModules: IAppModules[] = [
     Icon: IconMessageChatbot,
     iconColor: "blue",
     accentColor: "blue",
+    href: "/chat",
   },
   {
     key: "dashboard",
@@ -29,6 +32,7 @@ export const AppModules: IAppModules[] = [
     Icon: IconDashboard,
     iconColor: "orange",
     accentColor: "#cd6146",
+    href: "/admin",
   },
   {
     key: "database",
@@ -37,5 +41,7 @@ export const AppModules: IAppModules[] = [
     Icon: IconBrandSupabase,
     iconColor: "#3ecf8e",
     accentColor: "#3ecf8e",
+    // Sengaja tanpa href: URL project Supabase spesifik per environment dan
+    // tidak boleh di-hardcode di sini. Kartu ini informasi saja.
   },
 ];
