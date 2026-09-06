@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/src/lib/supabase/server";
 import { PosSalesModule } from "@/src/modules/pos-sales/Component";
 
 export default async function PosSalesPage() {
@@ -24,7 +24,13 @@ export default async function PosSalesPage() {
   const canVoid = staffRow?.role === "owner" || staffRow?.role === "admin";
 
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-slate-400">Memuat riwayat penjualan…</div>}>
+    <Suspense
+      fallback={
+        <div className="p-6 text-sm text-slate-400">
+          Memuat riwayat penjualan…
+        </div>
+      }
+    >
       <PosSalesModule canVoid={canVoid} />
     </Suspense>
   );

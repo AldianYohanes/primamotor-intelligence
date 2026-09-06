@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/src/lib/supabase/server";
+import { createAdminClient } from "@/src/lib/supabase/admin";
 import { computeShiftReportTotals } from "@/src/lib/pos/shift-report";
 import { logger } from "@/src/lib/logging/logger";
 
@@ -46,7 +46,10 @@ const closeShiftSchema = z.object({
  * Boleh ditutup oleh staf pemilik shift SENDIRI, atau admin/owner (mis. shift
  * supervisor menutupkan shift kasir yang lupa/sudah pulang).
  */
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const ctx = await requireStaff();
   if ("error" in ctx) return ctx.error;
   const { supabase, staffRow } = ctx;
@@ -62,19 +65,31 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { data: shift } = await supabase
     .from("shifts")
-    .select("id, business_id, location_id, staff_id, opening_cash, status, opened_at")
+    .select(
+      "id, business_id, location_id, staff_id, opening_cash, status, opened_at",
+    )
     .eq("id", id)
     .eq("business_id", staffRow.business_id)
     .maybeSingle();
 
-  if (!shift) return NextResponse.json({ error: "Shift tidak ditemukan" }, { status: 404 });
+  if (!shift)
+    return NextResponse.json(
+      { error: "Shift tidak ditemukan" },
+      { status: 404 },
+    );
 
   const isManager = staffRow.role === "owner" || staffRow.role === "admin";
   if (!isManager && shift.staff_id !== staffRow.id) {
-    return NextResponse.json({ error: "Kamu hanya bisa menutup shift milikmu sendiri" }, { status: 403 });
+    return NextResponse.json(
+      { error: "Kamu hanya bisa menutup shift milikmu sendiri" },
+      { status: 403 },
+    );
   }
   if (shift.status === "closed") {
-    return NextResponse.json({ error: "Shift ini sudah ditutup sebelumnya" }, { status: 409 });
+    return NextResponse.json(
+      { error: "Shift ini sudah ditutup sebelumnya" },
+      { status: 409 },
+    );
   }
 
   const closedAt = new Date().toISOString();
@@ -111,7 +126,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     })
     .eq("id", id)
     .eq("status", "open")
-    .select("id, location_id, staff_id, opening_cash, closing_cash, expected_cash, cash_variance, status, opened_at, closed_at, notes")
+    .select(
+      "id, location_id, staff_id, opening_cash, closing_cash, expected_cash, cash_variance, status, opened_at, closed_at, notes",
+    )
     .single();
 
   if (error) {
@@ -119,7 +136,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // condition di atas (shift baru saja ditutup request lain), bukan error
     // infra. Pesan ramah, tidak perlu di-log sebagai error.
     if (error.code === "PGRST116") {
-      return NextResponse.json({ error: "Shift ini baru saja ditutup (kemungkinan dari perangkat/klik lain)" }, { status: 409 });
+      return NextResponse.json(
+        {
+          error:
+            "Shift ini baru saja ditutup (kemungkinan dari perangkat/klik lain)",
+        },
+        { status: 409 },
+      );
     }
     logger.error("Gagal menutup shift POS", {
       route: "admin/pos/shifts/[id]/close",

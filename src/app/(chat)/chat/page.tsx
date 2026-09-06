@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/src/lib/supabase/server";
 import { ChatWindow } from "@/src/components/chat/ChatWindow";
 
 export default async function ChatPage() {

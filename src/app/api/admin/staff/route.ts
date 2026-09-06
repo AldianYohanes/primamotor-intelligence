@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/src/lib/supabase/server";
+import { createAdminClient } from "@/src/lib/supabase/admin";
 import { toSyntheticEmail, isValidPin } from "@/src/lib/auth/synthetic-email";
 import { parsePagination, buildPaginatedResponse } from "@/src/lib/pagination";
 import { logger } from "@/src/lib/logging/logger";
@@ -146,21 +146,27 @@ export async function POST(req: NextRequest) {
     const { error: rollbackError } = await admin.auth.admin.deleteUser(
       authUser.user.id,
     );
-    logger.error("Gagal insert staff row setelah auth user dibuat — rollback dijalankan", {
-      route: "admin/staff",
-      business_id: staffRow.business_id,
-      created_by_staff_id: staffRow.id,
-      auth_user_id: authUser.user.id,
-      rollback_succeeded: !rollbackError,
-      error: staffError,
-    });
-    if (rollbackError) {
-      logger.error("Rollback deleteUser JUGA gagal — ada orphan auth user, perlu dibersihkan manual", {
+    logger.error(
+      "Gagal insert staff row setelah auth user dibuat — rollback dijalankan",
+      {
         route: "admin/staff",
         business_id: staffRow.business_id,
+        created_by_staff_id: staffRow.id,
         auth_user_id: authUser.user.id,
-        error: rollbackError,
-      });
+        rollback_succeeded: !rollbackError,
+        error: staffError,
+      },
+    );
+    if (rollbackError) {
+      logger.error(
+        "Rollback deleteUser JUGA gagal — ada orphan auth user, perlu dibersihkan manual",
+        {
+          route: "admin/staff",
+          business_id: staffRow.business_id,
+          auth_user_id: authUser.user.id,
+          error: rollbackError,
+        },
+      );
     }
     return NextResponse.json({ error: staffError.message }, { status: 422 });
   }

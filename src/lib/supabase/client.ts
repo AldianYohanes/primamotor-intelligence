@@ -1,14 +1,10 @@
 import { createBrowserClient } from "@supabase/ssr";
-import type { Database } from "./database.types";
+import type { Database } from "@/src/lib/db/types";
 
 /**
- * Client Component usage only (hooks, event handlers, 'use client' files).
- * Do NOT import this into Server Components or Route Handlers — use
- * lib/supabase/server.ts there instead, since cookie handling differs
- * between browser and server contexts.
- *
- * Safe to call multiple times per component tree — @supabase/ssr manages
- * the singleton internally.
+ * Client browser (anon key). Tunduk penuh pada RLS — dipakai di client component
+ * untuk baca data yang memang boleh diakses langsung sesuai kebijakan tenant staf
+ * yang sedang login (mis. baca stok, riwayat percakapan miliknya).
  */
 export function createClient() {
   return createBrowserClient<Database>(

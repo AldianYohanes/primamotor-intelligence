@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/src/lib/supabase/server";
+import { createAdminClient } from "@/src/lib/supabase/admin";
 import { transferStockSchema } from "@/src/lib/agents/tool-schemas";
 import { logger } from "@/src/lib/logging/logger";
 
@@ -81,11 +81,14 @@ export async function POST(req: NextRequest) {
     { p_business_id: body.business_id },
   );
   if (expireError) {
-    logger.warn("expire_stale_pending_reservations gagal (best-effort cleanup)", {
-      route: "agent/tools/transfer-stock",
-      business_id: body.business_id,
-      error: expireError,
-    });
+    logger.warn(
+      "expire_stale_pending_reservations gagal (best-effort cleanup)",
+      {
+        route: "agent/tools/transfer-stock",
+        business_id: body.business_id,
+        error: expireError,
+      },
+    );
   }
 
   const { error: reserveError } = await admin.rpc("reserve_stock", {
@@ -94,14 +97,17 @@ export async function POST(req: NextRequest) {
     p_quantity: body.quantity,
   });
   if (reserveError) {
-    logger.warn("reserve_stock gagal saat transferStock (ditampilkan sebagai 'stok tidak mencukupi')", {
-      route: "agent/tools/transfer-stock",
-      business_id: body.business_id,
-      product_id: body.product_id,
-      from_location_id: body.from_location_id,
-      quantity: body.quantity,
-      error: reserveError,
-    });
+    logger.warn(
+      "reserve_stock gagal saat transferStock (ditampilkan sebagai 'stok tidak mencukupi')",
+      {
+        route: "agent/tools/transfer-stock",
+        business_id: body.business_id,
+        product_id: body.product_id,
+        from_location_id: body.from_location_id,
+        quantity: body.quantity,
+        error: reserveError,
+      },
+    );
     return NextResponse.json(
       {
         error: `Stok tersedia di ${fromLoc.name} tidak mencukupi untuk transfer ini`,

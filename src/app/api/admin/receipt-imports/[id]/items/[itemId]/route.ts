@@ -1,45 +1,60 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { z } from 'zod'
-import { createClient } from '@/lib/supabase/server'
-import { logger } from '@/src/lib/logging/logger'
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { createClient } from "@/src/lib/supabase/server";
+import { logger } from "@/src/lib/logging/logger";
 
 const itemUpdateSchema = z.object({
   matched_product_id: z.string().uuid().nullable().optional(),
   suggested_quantity: z.number().int().positive().optional(),
-  status: z.enum(['unmatched', 'matched', 'confirmed', 'rejected']).optional(),
-})
+  status: z.enum(["unmatched", "matched", "confirmed", "rejected"]).optional(),
+});
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ itemId: string }> }) {
-  const { itemId } = await params
-  const supabase = await createClient()
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ itemId: string }> },
+) {
+  const { itemId } = await params;
+  const supabase = await createClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  } = await supabase.auth.getUser();
+  if (!user)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: staffRow } = await supabase.from('staff').select('id').eq('auth_user_id', user.id).single()
-  if (!staffRow) return NextResponse.json({ error: 'Akun staf tidak ditemukan' }, { status: 403 })
+  const { data: staffRow } = await supabase
+    .from("staff")
+    .select("id")
+    .eq("auth_user_id", user.id)
+    .single();
+  if (!staffRow)
+    return NextResponse.json(
+      { error: "Akun staf tidak ditemukan" },
+      { status: 403 },
+    );
 
-  const parsed = itemUpdateSchema.safeParse(await req.json())
+  const parsed = itemUpdateSchema.safeParse(await req.json());
   if (!parsed.success) {
-    return NextResponse.json({ error: 'Input tidak valid', details: parsed.error.flatten() }, { status: 400 })
+    return NextResponse.json(
+      { error: "Input tidak valid", details: parsed.error.flatten() },
+      { status: 400 },
+    );
   }
 
   const { data, error } = await supabase
-    .from('receipt_import_items')
+    .from("receipt_import_items")
     .update({ ...parsed.data, reviewed_by: staffRow.id })
-    .eq('id', itemId)
+    .eq("id", itemId)
     .select()
-    .single()
+    .single();
 
   if (error) {
-    logger.error('Gagal update receipt import item', {
-      route: 'admin/receipt-imports/[id]/items/[itemId]',
+    logger.error("Gagal update receipt import item", {
+      route: "admin/receipt-imports/[id]/items/[itemId]",
       item_id: itemId,
       reviewed_by_staff_id: staffRow.id,
       error,
-    })
-    return NextResponse.json({ error: error.message }, { status: 422 })
+    });
+    return NextResponse.json({ error: error.message }, { status: 422 });
   }
-  return NextResponse.json({ item: data })
+  return NextResponse.json({ item: data });
 }

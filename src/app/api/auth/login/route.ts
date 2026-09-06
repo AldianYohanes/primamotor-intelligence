@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/src/lib/supabase/admin";
+import { createClient } from "@/src/lib/supabase/server";
 import {
   toSyntheticEmail,
   isValidPin,
@@ -112,13 +112,16 @@ export async function POST(req: NextRequest) {
       // wajar, tidak perlu di-log sebagai error) — tapi kalau update counter
       // lockout-nya sendiri gagal, itu masalah nyata: enforcement 5x/15 menit
       // (§8) jadi tidak jalan untuk percobaan ini.
-      logger.error("Gagal update failed_login_attempts/lockout setelah PIN salah", {
-        route: "auth/login",
-        staff_id: staffRow.id,
-        business_slug,
-        attempts,
-        error: lockoutUpdateError,
-      });
+      logger.error(
+        "Gagal update failed_login_attempts/lockout setelah PIN salah",
+        {
+          route: "auth/login",
+          staff_id: staffRow.id,
+          business_slug,
+          attempts,
+          error: lockoutUpdateError,
+        },
+      );
     }
 
     return NextResponse.json(

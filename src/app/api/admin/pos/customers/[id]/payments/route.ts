@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/src/lib/supabase/server";
+import { createAdminClient } from "@/src/lib/supabase/admin";
 import { logger } from "@/src/lib/logging/logger";
 
 async function requireStaff() {
@@ -40,7 +40,10 @@ const paymentSchema = z.object({
  * bisa mencatatnya langsung, beda dari menambah/mengubah credit_limit
  * (POST /customers, itu keputusan finansial admin/owner).
  */
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const ctx = await requireStaff();
   if ("error" in ctx) return ctx.error;
   const { supabase, staffRow } = ctx;
@@ -61,18 +64,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .eq("business_id", staffRow.business_id)
     .maybeSingle();
   if (!customer) {
-    return NextResponse.json({ error: "Pelanggan tidak ditemukan" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Pelanggan tidak ditemukan" },
+      { status: 404 },
+    );
   }
 
   const admin = createAdminClient();
-  const { data: result, error: rpcError } = await admin.rpc("record_customer_payment", {
-    p_business_id: staffRow.business_id,
-    p_customer_id: id,
-    p_staff_id: staffRow.id,
-    p_amount: parsed.data.amount,
-    p_payment_method: parsed.data.payment_method,
-    p_notes: parsed.data.notes ?? null,
-  });
+  const { data: result, error: rpcError } = await admin.rpc(
+    "record_customer_payment",
+    {
+      p_business_id: staffRow.business_id,
+      p_customer_id: id,
+      p_staff_id: staffRow.id,
+      p_amount: parsed.data.amount,
+      p_payment_method: parsed.data.payment_method,
+      p_notes: parsed.data.notes ?? null,
+    },
+  );
 
   if (rpcError) {
     logger.error("RPC record_customer_payment gagal", {

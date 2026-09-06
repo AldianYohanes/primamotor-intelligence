@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, Bell, PackageSearch } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/src/lib/supabase/server";
 import { TenantApprovalList } from "@/src/components/admin/TenantApprovalList";
 
 const NOTIF_PAGE_SIZE = 10;
@@ -49,7 +49,9 @@ export default async function AdminDashboardPage({
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-slate-900">Dashboard</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-slate-900">
+          Dashboard
+        </h1>
         <p className="text-sm text-slate-500">
           Ringkasan kondisi toko hari ini
         </p>
@@ -167,22 +169,32 @@ function StatCard({
   href,
   tone,
 }: {
-  icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
+  icon: React.ComponentType<{
+    size?: number;
+    strokeWidth?: number;
+    className?: string;
+  }>;
   label: string;
   value: number;
   href?: string;
   tone: "amber" | "blue";
 }) {
   const iconTone =
-    tone === "amber" ? "bg-amber-50 text-amber-600" : "bg-brand-50 text-brand-600";
+    tone === "amber"
+      ? "bg-amber-50 text-amber-600"
+      : "bg-brand-50 text-brand-600";
 
   const content = (
     <div className="card flex items-center gap-4 p-5">
-      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${iconTone}`}>
+      <div
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${iconTone}`}
+      >
         <Icon size={19} strokeWidth={2} />
       </div>
       <div>
-        <p className="text-2xl font-semibold tracking-tight text-slate-900">{value}</p>
+        <p className="text-2xl font-semibold tracking-tight text-slate-900">
+          {value}
+        </p>
         <p className="text-xs text-slate-500">{label}</p>
       </div>
     </div>

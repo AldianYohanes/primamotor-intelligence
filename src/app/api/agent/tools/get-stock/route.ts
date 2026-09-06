@@ -1,12 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { z } from 'zod'
-import { createClient } from '@/lib/supabase/server'
-import { logger } from '@/src/lib/logging/logger'
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { createClient } from "@/src/lib/supabase/server";
+import { logger } from "@/src/lib/logging/logger";
 
 const querySchema = z.object({
   query: z.string().min(1),
   limit: z.coerce.number().int().min(1).max(20).default(5),
-})
+});
 
 /**
  * Read-only, tidak butuh HITL. Dipanggil Query Agent & Transaction Agent (untuk
@@ -17,50 +17,70 @@ const querySchema = z.object({
  * dari query string sama sekali (mencegah staf toko A mengintip stok toko B).
  */
 export async function GET(req: NextRequest) {
-  const supabase = await createClient()
+  const supabase = await createClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  } = await supabase.auth.getUser();
+  if (!user)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: staffRow } = await supabase.from('staff').select('business_id').eq('auth_user_id', user.id).single()
-  if (!staffRow) return NextResponse.json({ error: 'Akun staf tidak ditemukan' }, { status: 403 })
+  const { data: staffRow } = await supabase
+    .from("staff")
+    .select("business_id")
+    .eq("auth_user_id", user.id)
+    .single();
+  if (!staffRow)
+    return NextResponse.json(
+      { error: "Akun staf tidak ditemukan" },
+      { status: 403 },
+    );
 
-  const parsed = querySchema.safeParse(Object.fromEntries(req.nextUrl.searchParams))
+  const parsed = querySchema.safeParse(
+    Object.fromEntries(req.nextUrl.searchParams),
+  );
   if (!parsed.success) {
-    return NextResponse.json({ error: 'Input tidak valid', details: parsed.error.flatten() }, { status: 400 })
+    return NextResponse.json(
+      { error: "Input tidak valid", details: parsed.error.flatten() },
+      { status: 400 },
+    );
   }
 
-  const { data: matches, error: searchError } = await supabase.rpc('search_products', {
-    p_business_id: staffRow.business_id,
-    p_query: parsed.data.query,
-    p_limit: parsed.data.limit,
-  })
+  const { data: matches, error: searchError } = await supabase.rpc(
+    "search_products",
+    {
+      p_business_id: staffRow.business_id,
+      p_query: parsed.data.query,
+      p_limit: parsed.data.limit,
+    },
+  );
 
   if (searchError) {
-    logger.error('RPC search_products gagal (tool getStock)', {
-      route: 'agent/tools/get-stock',
+    logger.error("RPC search_products gagal (tool getStock)", {
+      route: "agent/tools/get-stock",
       business_id: staffRow.business_id,
       query: parsed.data.query,
       error: searchError,
-    })
-    return NextResponse.json({ error: searchError.message }, { status: 500 })
+    });
+    return NextResponse.json({ error: searchError.message }, { status: 500 });
   }
-  if (!matches || matches.length === 0) return NextResponse.json({ results: [] })
+  if (!matches || matches.length === 0)
+    return NextResponse.json({ results: [] });
 
-  const productIds = matches.map((m) => m.product_id)
+  const productIds = matches.map((m) => m.product_id);
   const { data: stockRows, error: stockError } = await supabase
-    .from('stock')
-    .select('product_id, location_id, quantity, reserved_quantity, available_quantity, locations(name, type)')
-    .in('product_id', productIds)
+    .from("stock")
+    .select(
+      "product_id, location_id, quantity, reserved_quantity, available_quantity, locations(name, type)",
+    )
+    .in("product_id", productIds);
 
   if (stockError) {
-    logger.error('Query stock gagal (tool getStock)', {
-      route: 'agent/tools/get-stock',
+    logger.error("Query stock gagal (tool getStock)", {
+      route: "agent/tools/get-stock",
       business_id: staffRow.business_id,
       error: stockError,
-    })
-    return NextResponse.json({ error: stockError.message }, { status: 500 })
+    });
+    return NextResponse.json({ error: stockError.message }, { status: 500 });
   }
 
   const results = matches.map((product) => ({
@@ -69,15 +89,13 @@ export async function GET(req: NextRequest) {
       .filter((s) => s.product_id === product.product_id)
       .map((s) => ({
         location_id: s.location_id,
-        // @ts-expect-error -- bentuk join Supabase, aman secara runtime
         location_name: s.locations?.name,
-        // @ts-expect-error
         location_type: s.locations?.type,
         quantity: s.quantity,
         reserved_quantity: s.reserved_quantity,
         available_quantity: s.available_quantity,
       })),
-  }))
+  }));
 
-  return NextResponse.json({ results })
+  return NextResponse.json({ results });
 }

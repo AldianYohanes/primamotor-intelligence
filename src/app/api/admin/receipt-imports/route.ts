@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/src/lib/supabase/server";
+import { createAdminClient } from "@/src/lib/supabase/admin";
 import { extractReceiptWithGemini } from "@/src/lib/ocr/gemini";
 import { parsePagination, buildPaginatedResponse } from "@/src/lib/pagination";
 import { checkOcrRateLimit } from "@/src/lib/rate-limit/ocr-rate-limit";

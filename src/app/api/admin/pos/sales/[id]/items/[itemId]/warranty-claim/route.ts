@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/src/lib/supabase/server";
+import { createAdminClient } from "@/src/lib/supabase/admin";
 import { logger } from "@/src/lib/logging/logger";
 
 async function requireStaff() {
@@ -68,17 +68,23 @@ export async function POST(
     .eq("business_id", staffRow.business_id)
     .maybeSingle();
   if (!item) {
-    return NextResponse.json({ error: "Item nota tidak ditemukan" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Item nota tidak ditemukan" },
+      { status: 404 },
+    );
   }
 
   const admin = createAdminClient();
-  const { data: result, error: rpcError } = await admin.rpc("claim_warranty_return", {
-    p_business_id: staffRow.business_id,
-    p_sale_item_id: itemId,
-    p_staff_id: staffRow.id,
-    p_reason: parsed.data.reason,
-    p_resolution: parsed.data.resolution,
-  });
+  const { data: result, error: rpcError } = await admin.rpc(
+    "claim_warranty_return",
+    {
+      p_business_id: staffRow.business_id,
+      p_sale_item_id: itemId,
+      p_staff_id: staffRow.id,
+      p_reason: parsed.data.reason,
+      p_resolution: parsed.data.resolution,
+    },
+  );
 
   if (rpcError) {
     logger.error("RPC claim_warranty_return gagal", {

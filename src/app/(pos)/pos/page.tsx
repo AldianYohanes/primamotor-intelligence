@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/src/lib/supabase/server";
 import { PosTerminalModule } from "@/src/modules/pos-terminal/Component";
 
 export default async function PosPage() {

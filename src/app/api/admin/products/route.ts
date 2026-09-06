@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/src/lib/supabase/server";
 import { parsePagination, buildPaginatedResponse } from "@/src/lib/pagination";
 import { logger } from "@/src/lib/logging/logger";
 
@@ -11,8 +11,6 @@ const productSchema = z.object({
   unit: z.string().default("pcs"),
   description: z.string().optional(),
   min_threshold: z.number().int().min(0).default(0),
-  lead_time_days: z.number().int().min(0).default(0),
-  safety_stock: z.number().int().min(0).default(0),
   unit_cost: z.number().min(0).default(0),
   selling_price: z.number().min(0).default(0),
   preferred_supplier_id: z.string().uuid().optional(),
@@ -140,13 +138,11 @@ export async function POST(req: NextRequest) {
 
   if (aliases && aliases.length > 0 && product) {
     const { error: aliasError } = await supabase.from("product_aliases").insert(
-      aliases
-        .filter(Boolean)
-        .map((alias) => ({
-          product_id: product.id,
-          alias,
-          source: "admin_input",
-        })),
+      aliases.filter(Boolean).map((alias) => ({
+        product_id: product.id,
+        alias,
+        source: "admin_input",
+      })),
     );
     if (aliasError) {
       // Produk utamanya SUDAH berhasil dibuat — aliases itu data pelengkap

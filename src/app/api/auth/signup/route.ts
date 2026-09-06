@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/src/lib/supabase/admin";
 import { toSyntheticEmail, isValidPin } from "@/src/lib/auth/synthetic-email";
 import { slugify, isValidSlug } from "@/src/lib/validation/slug";
 import { logger } from "@/src/lib/logging/logger";
@@ -135,11 +135,14 @@ export async function POST(req: NextRequest) {
       },
     );
     if (rollbackError) {
-      logger.error("Rollback delete business JUGA gagal — ada business_id yatim", {
-        route: "auth/signup",
-        business_id: business.id,
-        error: rollbackError,
-      });
+      logger.error(
+        "Rollback delete business JUGA gagal — ada business_id yatim",
+        {
+          route: "auth/signup",
+          business_id: business.id,
+          error: rollbackError,
+        },
+      );
     }
     return NextResponse.json(
       { error: authError?.message ?? "Gagal membuat akun owner" },
@@ -176,13 +179,16 @@ export async function POST(req: NextRequest) {
       },
     );
     if (deleteUserError || deleteBusinessError) {
-      logger.error("Rollback signup TIDAK lengkap — ada data yatim, perlu dibersihkan manual", {
-        route: "auth/signup",
-        business_id: business.id,
-        auth_user_id: authUser.user.id,
-        delete_user_error: deleteUserError,
-        delete_business_error: deleteBusinessError,
-      });
+      logger.error(
+        "Rollback signup TIDAK lengkap — ada data yatim, perlu dibersihkan manual",
+        {
+          route: "auth/signup",
+          business_id: business.id,
+          auth_user_id: authUser.user.id,
+          delete_user_error: deleteUserError,
+          delete_business_error: deleteBusinessError,
+        },
+      );
     }
     return NextResponse.json(
       { error: "Gagal membuat akun staf owner" },

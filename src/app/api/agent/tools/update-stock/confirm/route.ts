@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/src/lib/supabase/admin";
 import { updateStockConfirmSchema } from "@/src/lib/agents/tool-schemas";
 import { reconfirmPin } from "@/src/lib/auth/confirm-pin";
 import { logger } from "@/src/lib/logging/logger";

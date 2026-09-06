@@ -1,59 +1,81 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { z } from 'zod'
-import { createClient } from '@/lib/supabase/server'
-import { logger } from '@/src/lib/logging/logger'
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { createClient } from "@/src/lib/supabase/server";
+import { logger } from "@/src/lib/logging/logger";
 
 async function requireStaff() {
-  const supabase = await createClient()
+  const supabase = await createClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) } as const
-  const { data: staffRow } = await supabase.from('staff').select('id, business_id, role').eq('auth_user_id', user.id).single()
-  if (!staffRow) return { error: NextResponse.json({ error: 'Akun staf tidak ditemukan' }, { status: 403 }) } as const
-  return { supabase, staffRow } as const
+  } = await supabase.auth.getUser();
+  if (!user)
+    return {
+      error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+    } as const;
+  const { data: staffRow } = await supabase
+    .from("staff")
+    .select("id, business_id, role")
+    .eq("auth_user_id", user.id)
+    .single();
+  if (!staffRow)
+    return {
+      error: NextResponse.json(
+        { error: "Akun staf tidak ditemukan" },
+        { status: 403 },
+      ),
+    } as const;
+  return { supabase, staffRow } as const;
 }
 
 const locationPatchSchema = z
   .object({
     name: z.string().min(1).optional(),
-    type: z.enum(['toko', 'gudang']).optional(),
+    type: z.enum(["toko", "gudang"]).optional(),
     address: z.string().optional(),
   })
-  .strict()
+  .strict();
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  const ctx = await requireStaff()
-  if ('error' in ctx) return ctx.error
-  const { supabase, staffRow } = ctx
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  const ctx = await requireStaff();
+  if ("error" in ctx) return ctx.error;
+  const { supabase, staffRow } = ctx;
 
-  const parsed = locationPatchSchema.safeParse(await req.json())
+  const parsed = locationPatchSchema.safeParse(await req.json());
   if (!parsed.success) {
-    return NextResponse.json({ error: 'Input tidak valid', details: parsed.error.flatten() }, { status: 400 })
+    return NextResponse.json(
+      { error: "Input tidak valid", details: parsed.error.flatten() },
+      { status: 400 },
+    );
   }
   if (Object.keys(parsed.data).length === 0) {
-    return NextResponse.json({ error: 'Tidak ada field untuk diperbarui' }, { status: 400 })
+    return NextResponse.json(
+      { error: "Tidak ada field untuk diperbarui" },
+      { status: 400 },
+    );
   }
 
   const { data, error } = await supabase
-    .from('locations')
+    .from("locations")
     .update(parsed.data)
-    .eq('id', id)
-    .eq('business_id', staffRow.business_id)
+    .eq("id", id)
+    .eq("business_id", staffRow.business_id)
     .select()
-    .single()
+    .single();
 
   if (error) {
-    logger.error('Gagal update lokasi', {
-      route: 'admin/locations/[id]',
+    logger.error("Gagal update lokasi", {
+      route: "admin/locations/[id]",
       business_id: staffRow.business_id,
       location_id: id,
       error,
-    })
-    return NextResponse.json({ error: error.message }, { status: 422 })
+    });
+    return NextResponse.json({ error: error.message }, { status: 422 });
   }
-  return NextResponse.json({ location: data })
+  return NextResponse.json({ location: data });
 }
 
 /**
@@ -65,28 +87,41 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
  * (kode 23503). Kita tangkap itu dan kasih pesan yang jelas, BUKAN paksa hapus
  * paksa (mis. via CASCADE) karena itu akan menghapus histori transaksi.
  */
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  const ctx = await requireStaff()
-  if ('error' in ctx) return ctx.error
-  const { supabase, staffRow } = ctx
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  const ctx = await requireStaff();
+  if ("error" in ctx) return ctx.error;
+  const { supabase, staffRow } = ctx;
 
-  const { error } = await supabase.from('locations').delete().eq('id', id).eq('business_id', staffRow.business_id)
+  const { error } = await supabase
+    .from("locations")
+    .delete()
+    .eq("id", id)
+    .eq("business_id", staffRow.business_id);
 
   if (error) {
-    if (error.code === '23503') {
+    if (error.code === "23503") {
       return NextResponse.json(
-        { error: 'Lokasi ini tidak bisa dihapus karena sudah punya histori transaksi stok. Ganti namanya jadi non-aktif kalau sudah tidak dipakai.' },
-        { status: 409 }
-      )
+        {
+          error:
+            "Lokasi ini tidak bisa dihapus karena sudah punya histori transaksi stok. Ganti namanya jadi non-aktif kalau sudah tidak dipakai.",
+        },
+        { status: 409 },
+      );
     }
-    logger.error('Gagal hapus lokasi (bukan constraint 23503 yang sudah diketahui)', {
-      route: 'admin/locations/[id]',
-      business_id: staffRow.business_id,
-      location_id: id,
-      error,
-    })
-    return NextResponse.json({ error: error.message }, { status: 422 })
+    logger.error(
+      "Gagal hapus lokasi (bukan constraint 23503 yang sudah diketahui)",
+      {
+        route: "admin/locations/[id]",
+        business_id: staffRow.business_id,
+        location_id: id,
+        error,
+      },
+    );
+    return NextResponse.json({ error: error.message }, { status: 422 });
   }
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true });
 }

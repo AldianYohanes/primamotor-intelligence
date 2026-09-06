@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/src/lib/supabase/admin";
 import { createReorderSuggestionSchema } from "@/src/lib/agents/tool-schemas";
 import type { Database } from "@/src/lib/db/types";
 import { logger } from "@/src/lib/logging/logger";

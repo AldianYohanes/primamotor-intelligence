@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/src/lib/supabase/server";
 import { logger } from "@/src/lib/logging/logger";
 
 async function requireStaff() {
@@ -26,7 +26,10 @@ async function requireStaff() {
   return { supabase, staffRow } as const;
 }
 
-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const ctx = await requireStaff();
   if ("error" in ctx) return ctx.error;
   const { supabase, staffRow } = ctx;
@@ -50,11 +53,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     });
     return NextResponse.json({ error: saleError.message }, { status: 500 });
   }
-  if (!sale) return NextResponse.json({ error: "Nota tidak ditemukan" }, { status: 404 });
+  if (!sale)
+    return NextResponse.json(
+      { error: "Nota tidak ditemukan" },
+      { status: 404 },
+    );
 
   const { data: items, error: itemsError } = await supabase
     .from("sale_items")
-    .select("id, product_id, quantity, unit_price, discount_amount, subtotal, products(name, part_number, unit, warranty_days)")
+    .select(
+      "id, product_id, quantity, unit_price, discount_amount, subtotal, products(name, part_number, unit, warranty_days)",
+    )
     .eq("sale_id", id)
     .order("created_at", { ascending: true });
 
@@ -70,7 +79,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const itemIds = (items ?? []).map((i) => i.id);
   const { data: claims, error: claimsError } = itemIds.length
-    ? await supabase.from("warranty_claims").select("sale_item_id, resolution, created_at").in("sale_item_id", itemIds)
+    ? await supabase
+        .from("warranty_claims")
+        .select("sale_item_id, resolution, created_at")
+        .in("sale_item_id", itemIds)
     : { data: [], error: null };
   if (claimsError) {
     logger.error("Gagal memuat klaim garansi nota POS", {
@@ -81,14 +93,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     });
     return NextResponse.json({ error: claimsError.message }, { status: 500 });
   }
-  const claimBySaleItem = new Map((claims ?? []).map((c) => [c.sale_item_id, c]));
+  const claimBySaleItem = new Map(
+    (claims ?? []).map((c) => [c.sale_item_id, c]),
+  );
 
   const itemsWithWarranty = (items ?? []).map((item) => {
     // @ts-expect-error -- bentuk join Supabase, products adalah objek tunggal (many-to-one)
     const warrantyDays: number | null = item.products?.warranty_days ?? null;
     const warrantyUntil =
       warrantyDays != null
-        ? new Date(new Date(sale.created_at).getTime() + warrantyDays * 24 * 60 * 60 * 1000).toISOString()
+        ? new Date(
+            new Date(sale.created_at).getTime() +
+              warrantyDays * 24 * 60 * 60 * 1000,
+          ).toISOString()
         : null;
     return {
       ...item,

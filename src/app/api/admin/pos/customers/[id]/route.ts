@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/src/lib/supabase/server";
 import { logger } from "@/src/lib/logging/logger";
 
 async function requireStaff() {
@@ -26,7 +26,10 @@ async function requireStaff() {
   return { supabase, staffRow } as const;
 }
 
-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const ctx = await requireStaff();
   if ("error" in ctx) return ctx.error;
   const { supabase, staffRow } = ctx;
@@ -48,7 +51,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     });
     return NextResponse.json({ error: customerError.message }, { status: 500 });
   }
-  if (!customer) return NextResponse.json({ error: "Pelanggan tidak ditemukan" }, { status: 404 });
+  if (!customer)
+    return NextResponse.json(
+      { error: "Pelanggan tidak ditemukan" },
+      { status: 404 },
+    );
 
   const [{ data: recentSales }, { data: payments }] = await Promise.all([
     supabase
@@ -66,5 +73,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       .limit(20),
   ]);
 
-  return NextResponse.json({ customer, recentSales: recentSales ?? [], payments: payments ?? [] });
+  return NextResponse.json({
+    customer,
+    recentSales: recentSales ?? [],
+    payments: payments ?? [],
+  });
 }

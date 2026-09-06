@@ -1,11 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import type { Database } from "./database.types";
+import type { Database } from "@/src/lib/db/types";
 
 /**
- * Server Component / Route Handler / Server Action usage only.
- * Must be called fresh inside each request scope (do NOT hoist into a
- * module-level singleton) because it reads cookies() per-request.
+ * Client server (Server Component / Route Handler) dengan identitas staf yang
+ * sedang login — RLS berlaku sesuai auth.uid() staf tersebut, BUKAN bypass.
+ * Pakai ini untuk semua Route Handler admin yang mengandalkan RLS sebagai
+ * lapisan otorisasi utama (lihat §8 dokumentasi backend).
  */
 export async function createClient() {
   const cookieStore = await cookies();
@@ -15,19 +16,15 @@ export async function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
+        getAll: () => cookieStore.getAll(),
+        setAll: (cookiesToSet) => {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
               cookieStore.set(name, value, options),
             );
           } catch {
-            // setAll called from a Server Component — safe to ignore
-            // because middleware.ts already refreshes the session on
-            // every request. Only Route Handlers/Server Actions can
-            // actually write cookies.
+            // set() dipanggil dari Server Component (bukan Route Handler/Action) — aman diabaikan
+            // karena middleware yang akan me-refresh session di request berikutnya.
           }
         },
       },

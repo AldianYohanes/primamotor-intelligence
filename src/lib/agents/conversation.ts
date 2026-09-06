@@ -1,4 +1,4 @@
-import type { createClient } from "@/lib/supabase/client";
+import type { createClient } from "@/src/lib/supabase/client";
 import type { ChatMessage } from "@/src/lib/agents/orchestrator";
 
 type SupabaseBrowserClient = ReturnType<typeof createClient>;

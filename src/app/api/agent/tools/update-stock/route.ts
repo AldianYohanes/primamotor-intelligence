@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/src/lib/supabase/server";
+import { createAdminClient } from "@/src/lib/supabase/admin";
 import { updateStockSchema } from "@/src/lib/agents/tool-schemas";
 import { logger } from "@/src/lib/logging/logger";
 
@@ -87,11 +87,14 @@ export async function POST(req: NextRequest) {
     // Best-effort cleanup — gagal di sini tidak menghentikan alur (reserve_stock
     // di bawah tetap dicoba), tapi kalau sering gagal, reservasi basi bisa
     // menumpuk dan salah menolak reserve_stock berikutnya. Worth di-log.
-    logger.warn("expire_stale_pending_reservations gagal (best-effort cleanup)", {
-      route: "agent/tools/update-stock",
-      business_id: body.business_id,
-      error: expireError,
-    });
+    logger.warn(
+      "expire_stale_pending_reservations gagal (best-effort cleanup)",
+      {
+        route: "agent/tools/update-stock",
+        business_id: body.business_id,
+        error: expireError,
+      },
+    );
   }
 
   if (body.direction === "keluar") {
@@ -110,14 +113,17 @@ export async function POST(req: NextRequest) {
       // sudah ada) — tapi error aslinya bisa jadi bukan itu (mis. RPC error lain).
       // Server-side tetap dicatat detailnya biar gak salah diagnosis kalau
       // ternyata reserve_stock memang sering gagal karena sebab lain.
-      logger.warn("reserve_stock gagal (ditampilkan sebagai 'stok tidak mencukupi')", {
-        route: "agent/tools/update-stock",
-        business_id: body.business_id,
-        product_id: body.product_id,
-        location_id: body.location_id,
-        quantity: body.quantity,
-        error: reserveError,
-      });
+      logger.warn(
+        "reserve_stock gagal (ditampilkan sebagai 'stok tidak mencukupi')",
+        {
+          route: "agent/tools/update-stock",
+          business_id: body.business_id,
+          product_id: body.product_id,
+          location_id: body.location_id,
+          quantity: body.quantity,
+          error: reserveError,
+        },
+      );
       return NextResponse.json(
         { error: "Stok tersedia tidak mencukupi untuk transaksi ini" },
         { status: 422 },

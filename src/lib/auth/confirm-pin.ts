@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/src/lib/supabase/admin";
 import {
   toSyntheticEmail,
   isValidPin,

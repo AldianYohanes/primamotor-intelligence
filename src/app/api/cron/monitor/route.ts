@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/src/lib/supabase/admin";
 import { sendPushNotification } from "@/src/lib/notifications/send-push";
 import { logger } from "@/src/lib/logging/logger";
 import {

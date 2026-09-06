@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/src/lib/supabase/server";
 import { computeShiftReportTotals } from "@/src/lib/pos/shift-report";
 import { logger } from "@/src/lib/logging/logger";
 
@@ -34,7 +34,10 @@ async function requireStaff() {
  * dipakai secara internal oleh POST .../close untuk menghasilkan "Z report"
  * final — angkanya konsisten karena satu fungsi perhitungan (computeShiftReportTotals).
  */
-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const ctx = await requireStaff();
   if ("error" in ctx) return ctx.error;
   const { supabase, staffRow } = ctx;
@@ -42,7 +45,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const { data: shift, error: shiftError } = await supabase
     .from("shifts")
-    .select("id, business_id, location_id, staff_id, opening_cash, closing_cash, expected_cash, cash_variance, status, opened_at, closed_at, locations(name), staff(full_name)")
+    .select(
+      "id, business_id, location_id, staff_id, opening_cash, closing_cash, expected_cash, cash_variance, status, opened_at, closed_at, locations(name), staff(full_name)",
+    )
     .eq("id", id)
     .eq("business_id", staffRow.business_id)
     .maybeSingle();
@@ -56,11 +61,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     });
     return NextResponse.json({ error: shiftError.message }, { status: 500 });
   }
-  if (!shift) return NextResponse.json({ error: "Shift tidak ditemukan" }, { status: 404 });
+  if (!shift)
+    return NextResponse.json(
+      { error: "Shift tidak ditemukan" },
+      { status: 404 },
+    );
 
   const isManager = staffRow.role === "owner" || staffRow.role === "admin";
   if (!isManager && shift.staff_id !== staffRow.id) {
-    return NextResponse.json({ error: "Kamu hanya bisa lihat laporan shift milikmu sendiri" }, { status: 403 });
+    return NextResponse.json(
+      { error: "Kamu hanya bisa lihat laporan shift milikmu sendiri" },
+      { status: 403 },
+    );
   }
 
   const totals = await computeShiftReportTotals(supabase, {

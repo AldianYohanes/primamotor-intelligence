@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { Button, Group, Stack, Text } from "@mantine/core";
-import { createClient } from "@/lib/supabase/server";
 import { ColorSchemeToggle } from "@/src/components/ColorSchemeToggle";
 import { Footer } from "@/src/components/Layout";
 import Home from "@/src/modules/(main)/Home/Home";
+import { createClient } from "../lib/supabase/server";
 
 export default async function HomePage() {
   const supabase = await createClient();

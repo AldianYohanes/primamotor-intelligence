@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/src/lib/supabase/server";
+import { createAdminClient } from "@/src/lib/supabase/admin";
 import { reconfirmPin } from "@/src/lib/auth/confirm-pin";
 import { logger } from "@/src/lib/logging/logger";
 
@@ -43,7 +43,10 @@ const voidSchema = z.object({
  * 2. PIN re-konfirmasi (reconfirmPin, §8) — sama seperti updateStock/transferStock,
  *    karena ini aksi yang mengubah uang & stok mundur, bukan sekadar toggle UI.
  */
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const ctx = await requireStaff();
   if ("error" in ctx) return ctx.error;
   const { staffRow } = ctx;
@@ -66,9 +69,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // @ts-expect-error -- bentuk join Supabase, businesses adalah objek tunggal (many-to-one)
   const businessSlug: string = staffRow.businesses.slug;
-  const pinResult = await reconfirmPin(businessSlug, staffRow.username, parsed.data.pin);
+  const pinResult = await reconfirmPin(
+    businessSlug,
+    staffRow.username,
+    parsed.data.pin,
+  );
   if (!pinResult.ok) {
-    return NextResponse.json({ error: pinResult.error }, { status: pinResult.status });
+    return NextResponse.json(
+      { error: pinResult.error },
+      { status: pinResult.status },
+    );
   }
 
   const admin = createAdminClient();

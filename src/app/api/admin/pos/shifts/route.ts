@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/src/lib/supabase/server";
+import { createAdminClient } from "@/src/lib/supabase/admin";
 import { logger } from "@/src/lib/logging/logger";
 
 async function requireStaff() {
@@ -53,7 +53,9 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from("shifts")
-    .select("id, location_id, staff_id, opening_cash, closing_cash, expected_cash, cash_variance, status, opened_at, closed_at, locations(name), staff(full_name)")
+    .select(
+      "id, location_id, staff_id, opening_cash, closing_cash, expected_cash, cash_variance, status, opened_at, closed_at, locations(name), staff(full_name)",
+    )
     .order("opened_at", { ascending: false })
     .limit(50);
 
@@ -105,7 +107,10 @@ export async function POST(req: NextRequest) {
     .eq("business_id", staffRow.business_id)
     .maybeSingle();
   if (!location) {
-    return NextResponse.json({ error: "Lokasi tidak ditemukan di tenant ini" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Lokasi tidak ditemukan di tenant ini" },
+      { status: 404 },
+    );
   }
 
   const admin = createAdminClient();
@@ -126,7 +131,10 @@ export async function POST(req: NextRequest) {
     // shifts_one_open_per_staff_location, bukan bug infra, jadi pesan ramah
     // alih-alih 500 generik. Selain itu tetap di-log sebagai error.
     if (error.code === "23505") {
-      return NextResponse.json({ error: "Kamu sudah punya shift terbuka di lokasi ini" }, { status: 409 });
+      return NextResponse.json(
+        { error: "Kamu sudah punya shift terbuka di lokasi ini" },
+        { status: 409 },
+      );
     }
     logger.error("Gagal membuka shift POS", {
       route: "admin/pos/shifts",

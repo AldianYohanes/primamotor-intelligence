@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/src/lib/supabase/server";
+import { createAdminClient } from "@/src/lib/supabase/admin";
 import { parsePagination, buildPaginatedResponse } from "@/src/lib/pagination";
 import { logger } from "@/src/lib/logging/logger";
 
@@ -47,7 +47,9 @@ export async function GET(req: NextRequest) {
   const dateTo = sp.get("date_to");
   const sortByRaw = sp.get("sortBy");
   const sortDir = sp.get("sortDir") === "asc" ? "asc" : "desc";
-  const sortBy: SortableColumn = SORTABLE_COLUMNS.includes(sortByRaw as SortableColumn)
+  const sortBy: SortableColumn = SORTABLE_COLUMNS.includes(
+    sortByRaw as SortableColumn,
+  )
     ? (sortByRaw as SortableColumn)
     : "created_at";
 
@@ -75,7 +77,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json(buildPaginatedResponse(data ?? [], count, page, pageSize));
+  return NextResponse.json(
+    buildPaginatedResponse(data ?? [], count, page, pageSize),
+  );
 }
 
 const cartItemSchema = z.object({
@@ -105,7 +109,14 @@ const checkoutSchema = z
   .object({
     location_id: z.string().uuid(),
     items: z.array(cartItemSchema).min(1, "Keranjang tidak boleh kosong"),
-    payment_method: z.enum(["cash", "transfer", "qris", "card", "split", "piutang"]),
+    payment_method: z.enum([
+      "cash",
+      "transfer",
+      "qris",
+      "card",
+      "split",
+      "piutang",
+    ]),
     payments: z.array(paymentLineSchema).optional(),
     customer_id: z.string().uuid().optional(),
     discount_amount: z.number().min(0).optional(),
@@ -120,18 +131,39 @@ const checkoutSchema = z
   .superRefine((body, ctx) => {
     if (body.payment_method === "piutang") {
       if (!body.customer_id) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Pelanggan wajib dipilih untuk piutang", path: ["customer_id"] });
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Pelanggan wajib dipilih untuk piutang",
+          path: ["customer_id"],
+        });
       }
     } else {
       if (!body.payments || body.payments.length === 0) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Metode pembayaran wajib diisi", path: ["payments"] });
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Metode pembayaran wajib diisi",
+          path: ["payments"],
+        });
       }
       const isSplit = (body.payments?.length ?? 0) > 1;
       if (isSplit && body.payment_method !== "split") {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "payment_method harus 'split' kalau ada >1 baris pembayaran", path: ["payment_method"] });
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "payment_method harus 'split' kalau ada >1 baris pembayaran",
+          path: ["payment_method"],
+        });
       }
-      if (!isSplit && body.payments?.length === 1 && body.payment_method !== body.payments[0].method) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "payment_method tidak sesuai dengan metode pembayaran yang dikirim", path: ["payment_method"] });
+      if (
+        !isSplit &&
+        body.payments?.length === 1 &&
+        body.payment_method !== body.payments[0].method
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "payment_method tidak sesuai dengan metode pembayaran yang dikirim",
+          path: ["payment_method"],
+        });
       }
     }
   });
@@ -172,7 +204,10 @@ export async function POST(req: NextRequest) {
       .eq("business_id", staffRow.business_id)
       .maybeSingle();
     if (!customer) {
-      return NextResponse.json({ error: "Pelanggan tidak ditemukan di tenant ini" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Pelanggan tidak ditemukan di tenant ini" },
+        { status: 404 },
+      );
     }
   }
 
@@ -183,7 +218,10 @@ export async function POST(req: NextRequest) {
     .eq("business_id", staffRow.business_id)
     .maybeSingle();
   if (!location) {
-    return NextResponse.json({ error: "Lokasi tidak ditemukan di tenant ini" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Lokasi tidak ditemukan di tenant ini" },
+      { status: 404 },
+    );
   }
 
   const productIds = [...new Set(body.items.map((i) => i.product_id))];
@@ -196,7 +234,10 @@ export async function POST(req: NextRequest) {
   const missing = productIds.filter((id) => !foundIds.has(id));
   if (missing.length > 0) {
     return NextResponse.json(
-      { error: "Beberapa produk di keranjang tidak ditemukan di tenant ini", product_ids: missing },
+      {
+        error: "Beberapa produk di keranjang tidak ditemukan di tenant ini",
+        product_ids: missing,
+      },
       { status: 404 },
     );
   }
@@ -251,19 +292,22 @@ export async function POST(req: NextRequest) {
                     : result?.error === "overpayment_not_allowed_for_non_cash"
                       ? "Jumlah bayar melebihi total — kembalian cuma berlaku untuk pembayaran tunai"
                       : result?.error === "customer_required"
-                      ? "Pelanggan wajib dipilih untuk pembayaran piutang"
-                      : result?.error === "customer_not_found"
-                        ? "Pelanggan tidak ditemukan"
-                        : result?.error === "credit_limit_exceeded"
-                          ? `Melebihi limit piutang pelanggan ini (sisa limit: ${result.available_credit ?? 0})`
-                          : (result?.error ?? "Gagal memproses penjualan");
+                        ? "Pelanggan wajib dipilih untuk pembayaran piutang"
+                        : result?.error === "customer_not_found"
+                          ? "Pelanggan tidak ditemukan"
+                          : result?.error === "credit_limit_exceeded"
+                            ? `Melebihi limit piutang pelanggan ini (sisa limit: ${result.available_credit ?? 0})`
+                            : (result?.error ?? "Gagal memproses penjualan");
     const status =
       result?.error === "insufficient_stock" ||
       result?.error === "insufficient_payment" ||
       result?.error === "credit_limit_exceeded"
         ? 422
         : 400;
-    return NextResponse.json({ error: message, product_id: result?.product_id }, { status });
+    return NextResponse.json(
+      { error: message, product_id: result?.product_id },
+      { status },
+    );
   }
 
   return NextResponse.json({

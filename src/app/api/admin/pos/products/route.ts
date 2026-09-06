@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/src/lib/supabase/server";
 import { logger } from "@/src/lib/logging/logger";
 
 async function requireStaff() {
@@ -50,7 +50,9 @@ export async function GET(req: NextRequest) {
   if ("error" in ctx) return ctx.error;
   const { supabase, staffRow } = ctx;
 
-  const parsed = querySchema.safeParse(Object.fromEntries(req.nextUrl.searchParams));
+  const parsed = querySchema.safeParse(
+    Object.fromEntries(req.nextUrl.searchParams),
+  );
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Input tidak valid", details: parsed.error.flatten() },
@@ -68,17 +70,23 @@ export async function GET(req: NextRequest) {
     .eq("business_id", staffRow.business_id)
     .maybeSingle();
   if (!location) {
-    return NextResponse.json({ error: "Lokasi tidak ditemukan" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Lokasi tidak ditemukan" },
+      { status: 404 },
+    );
   }
 
   let productIds: string[] | null = null;
 
   if (q) {
-    const { data: matches, error: searchError } = await supabase.rpc("search_products", {
-      p_business_id: staffRow.business_id,
-      p_query: q,
-      p_limit: limit,
-    });
+    const { data: matches, error: searchError } = await supabase.rpc(
+      "search_products",
+      {
+        p_business_id: staffRow.business_id,
+        p_query: q,
+        p_limit: limit,
+      },
+    );
     if (searchError) {
       logger.error("RPC search_products gagal (pos/products)", {
         route: "admin/pos/products",
@@ -111,7 +119,8 @@ export async function GET(req: NextRequest) {
     });
     return NextResponse.json({ error: productsError.message }, { status: 500 });
   }
-  if (!products || products.length === 0) return NextResponse.json({ results: [] });
+  if (!products || products.length === 0)
+    return NextResponse.json({ results: [] });
 
   const { data: stockRows, error: stockError } = await supabase
     .from("stock")
@@ -148,11 +157,14 @@ export async function GET(req: NextRequest) {
     // Non-fatal — kompatibilitas cuma informasi tambahan di UI, gagal ambil
     // ini tidak boleh menggagalkan seluruh pencarian produk. Tetap di-log
     // karena bisa jadi indikasi masalah query/skema.
-    logger.warn("Query product_model_compatibility gagal (pos/products), lanjut tanpa data kompatibilitas", {
-      route: "admin/pos/products",
-      business_id: staffRow.business_id,
-      error: compatError,
-    });
+    logger.warn(
+      "Query product_model_compatibility gagal (pos/products), lanjut tanpa data kompatibilitas",
+      {
+        route: "admin/pos/products",
+        business_id: staffRow.business_id,
+        error: compatError,
+      },
+    );
   }
 
   const compatByProduct = new Map<string, string[]>();
@@ -160,14 +172,19 @@ export async function GET(req: NextRequest) {
     // @ts-expect-error -- bentuk join Supabase, car_models adalah objek tunggal (many-to-one)
     const model = row.car_models;
     if (!model) continue;
-    const yearRange = model.year_start && model.year_end ? ` (${model.year_start}-${model.year_end})` : "";
+    const yearRange =
+      model.year_start && model.year_end
+        ? ` (${model.year_start}-${model.year_end})`
+        : "";
     const label = `${model.brand} ${model.name}${yearRange}`;
     const list = compatByProduct.get(row.product_id) ?? [];
     list.push(label);
     compatByProduct.set(row.product_id, list);
   }
 
-  const stockByProduct = new Map((stockRows ?? []).map((s) => [s.product_id, s.available_quantity]));
+  const stockByProduct = new Map(
+    (stockRows ?? []).map((s) => [s.product_id, s.available_quantity]),
+  );
 
   // Urutan hasil pencarian (relevansi dari search_products) tetap dijaga —
   // productIds sudah terurut relevansi, products dari .in() TIDAK menjamin
