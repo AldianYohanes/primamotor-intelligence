@@ -20,7 +20,13 @@ export const maxDuration = 300; // Vercel Cron: analisis semua tenant bisa memak
  */
 export async function GET(req: NextRequest) {
   const cronSecret = req.headers.get("authorization")?.replace("Bearer ", "");
-  if (process.env.CRON_SECRET && cronSecret !== process.env.CRON_SECRET) {
+  // PENTING: fail-CLOSED, bukan fail-open. Pola lama
+  // (`if (process.env.CRON_SECRET && cronSecret !== ...)`) berarti kalau
+  // CRON_SECRET tidak ter-set di environment (misconfigurasi deploy, env var
+  // kehapus, dsb), seluruh kondisi jadi falsy dan endpoint ini — yang pakai
+  // admin client BYPASS RLS lintas SEMUA tenant — jadi bisa diakses publik
+  // tanpa secret sama sekali. Sekarang: tidak ada CRON_SECRET = selalu tolak.
+  if (!process.env.CRON_SECRET || cronSecret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
