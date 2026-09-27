@@ -12,6 +12,7 @@ export default function SignupPage() {
     owner_full_name: '',
     pin: '',
   })
+  const [ocrConsent, setOcrConsent] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -22,13 +23,17 @@ export default function SignupPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (!ocrConsent) {
+      setError('Centang persetujuan penggunaan Gemini API untuk OCR bon terlebih dahulu.')
+      return
+    }
     setLoading(true)
     setError(null)
 
     const res = await fetch('/api/auth/signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ ...form, ocr_consent: ocrConsent }),
     })
     const data = await res.json()
 
@@ -98,6 +103,22 @@ export default function SignupPage() {
             </div>
           </div>
 
+          <label className="mt-4 flex items-start gap-2.5 rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5">
+            <input
+              type="checkbox"
+              checked={ocrConsent}
+              onChange={(e) => setOcrConsent(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-brand-600"
+              required
+            />
+            <span className="text-xs leading-relaxed text-slate-600">
+              Saya memahami dan menyetujui bahwa fitur pindai bon (OCR) mengirim foto bon —
+              yang berpotensi memuat harga beli dan data supplier — ke Gemini API (Google) sebagai
+              pihak ketiga untuk diproses. Fitur lain (asisten chat stok) tetap berjalan sepenuhnya
+              di perangkat tanpa data toko keluar ke cloud.
+            </span>
+          </label>
+
           {error && (
             <div className="mt-4 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
               <AlertCircle size={15} className="mt-0.5 shrink-0" />
@@ -105,7 +126,7 @@ export default function SignupPage() {
             </div>
           )}
 
-          <button type="submit" disabled={loading} className="btn btn-primary mt-5 w-full py-2.5">
+          <button type="submit" disabled={loading || !ocrConsent} className="btn btn-primary mt-5 w-full py-2.5">
             {loading ? 'Memproses…' : 'Daftar'}
           </button>
         </form>

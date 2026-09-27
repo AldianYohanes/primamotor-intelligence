@@ -26,6 +26,12 @@ const signupSchema = z.object({
     ),
   owner_full_name: z.string().min(2),
   pin: z.string().min(6),
+  // §15.3 — checkbox wajib dicentang, bukan opsional. z.literal(true) menolak
+  // false/undefined/string "true" dari body yang tidak well-formed sekalipun.
+  ocr_consent: z.literal(true, {
+    message:
+      "Persetujuan pengiriman foto bon ke Gemini API wajib dicentang untuk mendaftar",
+  }),
 });
 
 export async function POST(req: NextRequest) {
@@ -43,6 +49,9 @@ export async function POST(req: NextRequest) {
     owner_full_name,
     pin,
   } = parsed.data;
+  // ocr_consent sudah divalidasi z.literal(true) di atas — di sini cuma perlu
+  // timestamp-nya untuk disimpan.
+  const ocrConsentGivenAt = new Date().toISOString();
 
   if (!isValidPin(pin)) {
     return NextResponse.json(
@@ -93,6 +102,7 @@ export async function POST(req: NextRequest) {
       slug,
       address: business_address ?? null,
       status: "pending_verification",
+      ocr_consent_given_at: ocrConsentGivenAt,
     })
     .select()
     .single();
