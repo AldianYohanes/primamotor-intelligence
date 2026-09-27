@@ -8,7 +8,9 @@ import { SINGLE_AGENT_SYSTEM_PROMPT } from "@/src/lib/agents/prompts/single-agen
 import { AGENT_TOOL_DEFINITIONS } from "@/src/lib/agents/tool-schemas";
 import {
   MALFORMED_TOOL_CALL_FEEDBACK,
+  MISSING_TOOL_CALL_FEEDBACK,
   TOOL_STOP_SEQUENCES,
+  announcesToolCall,
   buildToolInstructions,
   formatToolResponse,
   parseModelReply,
@@ -21,7 +23,8 @@ import {
   buildLocationChoice,
   locationChoiceMessage,
   readDevicePosition,
-  requiresLocationChoice,
+  resolveLocationRef,
+  resolveUpdateLocation,
   type GeoPoint,
   type LocationChoice,
   type TenantLocation,
@@ -50,7 +53,11 @@ export interface AgentTurnResult {
   pendingConfirmation?: PendingConfirmation;
   /** updateStock ditahan sampai staf memilih lokasi (lihat location-choice.ts). */
   locationChoice?: LocationChoice;
-  toolTrace: { name: string; args: unknown; result: unknown }[];
+  /**
+   * args = keluaran asli model (dasar metrik akurasi parameter); executedArgs =
+   * argumen yang benar-benar dikirim bila kode memetakan lokasi.
+   */
+  toolTrace: { name: string; args: unknown; result: unknown; executedArgs?: unknown }[];
   latencyMs?: number;
   /** Keluaran mentah model per iterasi, untuk analisis evaluasi. */
   modelReplies?: string[];
@@ -288,6 +295,19 @@ async function fetchTenantLocations(): Promise<TenantLocation[] | null> {
   }
 }
 
+const PRODUCT_ID_NOT_FROM_GETSTOCK =
+  "product_id ini tidak berasal dari hasil getStock. Panggil getStock dulu dengan nama barang dari pesan staf, lalu pakai product_id dari hasilnya. Jangan mengarang product_id.";
+
+function productIdsFromTrace(toolTrace: AgentTurnResult["toolTrace"]): Set<string> {
+  const ids = new Set<string>();
+  for (const t of toolTrace) {
+    if (t.name !== "getStock") continue;
+    const results = (t.result as { results?: { product_id?: string }[] } | null)?.results;
+    for (const r of results ?? []) if (r.product_id) ids.add(r.product_id);
+  }
+  return ids;
+}
+
 function productNameFromTrace(
   toolTrace: AgentTurnResult["toolTrace"],
   productId: unknown,
@@ -420,6 +440,7 @@ async function runAgentTurnInner(
     { role: "user", content: userMessage },
   ];
 
+  let nudgedMissingCall = false;
   for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
     const { content, usage } = await streamChatCompletion(engine, messages, onToken);
     if (usage) {
@@ -437,6 +458,19 @@ async function runAgentTurnInner(
       messages.push({ role: "user", content: MALFORMED_TOOL_CALL_FEEDBACK });
       continue;
     }
+    // Sama seperti di atas untuk "Saya akan panggil alat…" tanpa blok tool call.
+    if (
+      reply.calls.length === 0 &&
+      !nudgedMissingCall &&
+      toolTrace.length === 0 &&
+      i < MAX_TOOL_ITERATIONS - 1 &&
+      announcesToolCall(reply.text || content)
+    ) {
+      nudgedMissingCall = true;
+      messages.push({ role: "assistant", content });
+      messages.push({ role: "user", content: MISSING_TOOL_CALL_FEEDBACK });
+      continue;
+    }
     if (reply.calls.length === 0) {
       return {
         agentType,
@@ -452,35 +486,57 @@ async function runAgentTurnInner(
 
     for (const call of reply.calls) {
       const args = call.arguments;
+      const allowed = allowedTools.has(call.name);
+      let executedArgs = args;
 
-      // Lokasi tidak disebut staf (atau model memakai lokasi lain): tahan
-      // transaksi, staf memilih lokasi dengan saran lokasi terdekat perangkat.
-      if (call.name === "updateStock" && allowedTools.has(call.name) && navigator.onLine) {
-        const locations = await fetchTenantLocations();
-        if (locations && requiresLocationChoice(args, userMessage, locations)) {
-          const choice = buildLocationChoice(args, userMessage, locations, await getDevicePosition());
-          toolTrace.push({
-            name: call.name,
-            args,
-            result: {
-              status: "location_choice_required",
-              suggested_location_id: choice.suggestedLocationId,
-              suggestion_reason: choice.suggestionReason,
-            },
-          });
-          return {
-            agentType,
-            assistantText: locationChoiceMessage(choice, productNameFromTrace(toolTrace, args.product_id)),
-            locationChoice: choice,
-            toolTrace,
-          };
+      if (allowed && (call.name === "updateStock" || call.name === "transferStock")) {
+        // Aturan "getStock dulu" ditegakkan kode: model kecil sering mengarang product_id.
+        if (!productIdsFromTrace(toolTrace).has(String(args.product_id))) {
+          const result = { error: PRODUCT_ID_NOT_FROM_GETSTOCK };
+          toolTrace.push({ name: call.name, args, result });
+          responses.push(formatToolResponse(call.name, result));
+          continue;
+        }
+
+        const locations = navigator.onLine ? await fetchTenantLocations() : null;
+        if (locations && call.name === "updateStock") {
+          const resolved = resolveUpdateLocation(args, userMessage, locations);
+          if (resolved === "choose") {
+            const choice = buildLocationChoice(args, userMessage, locations, await getDevicePosition());
+            toolTrace.push({
+              name: call.name,
+              args,
+              result: {
+                status: "location_choice_required",
+                suggested_location_id: choice.suggestedLocationId,
+                suggestion_reason: choice.suggestionReason,
+              },
+            });
+            return {
+              agentType,
+              assistantText: locationChoiceMessage(choice, productNameFromTrace(toolTrace, args.product_id)),
+              locationChoice: choice,
+              toolTrace,
+            };
+          }
+          if (resolved !== "passthrough") executedArgs = { ...args, location_id: resolved.locationId };
+        } else if (locations) {
+          const from = resolveLocationRef(args.from_location_id, locations);
+          const to = resolveLocationRef(args.to_location_id, locations);
+          if (from || to) {
+            executedArgs = {
+              ...args,
+              ...(from && { from_location_id: from.id }),
+              ...(to && { to_location_id: to.id }),
+            };
+          }
         }
       }
 
-      const result = allowedTools.has(call.name)
-        ? await executeTool(call.name, args, conversationId, businessId)
+      const result = allowed
+        ? await executeTool(call.name, executedArgs, conversationId, businessId)
         : { error: `Tool ${call.name} tidak tersedia untuk agent ini.` };
-      toolTrace.push({ name: call.name, args, result });
+      toolTrace.push({ name: call.name, args, result, ...(executedArgs !== args && { executedArgs }) });
 
       // updateStock/transferStock TIDAK melanjutkan loop — harus berhenti untuk
       // menunggu staf memasukkan PIN. Loop lanjut lagi setelah confirm terpisah.

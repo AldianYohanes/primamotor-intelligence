@@ -1,9 +1,10 @@
 /**
  * Penentuan lokasi transaksi updateStock secara deterministik (bukan oleh LLM).
  *
- * Kalau staf tidak menyebut lokasi, atau model memakai lokasi yang tidak
- * disebut staf, transaksi tidak diteruskan ke server. Staf diminta memilih
- * lokasi, dengan saran lokasi terdekat dari posisi perangkat.
+ * Lokasi yang disebut staf dipetakan kode ke UUID-nya (model kecil sering
+ * menulis "TOKO" atau mengosongkannya). Kalau staf tidak menyebut lokasi,
+ * transaksi tidak diteruskan ke server: staf diminta memilih, dengan saran
+ * lokasi terdekat dari posisi perangkat.
  */
 
 export interface GeoPoint {
@@ -114,20 +115,37 @@ export function mentionedLocations(message: string, locations: TenantLocation[])
 }
 
 /**
- * true = transaksi harus ditahan dan staf memilih lokasi. Lolos hanya bila
- * location_id dari model valid DAN memang lokasi yang disebut staf (atau tenant
- * cuma punya satu lokasi).
+ * Lokasi yang dimaksud nilai dari model: UUID lokasi tenant, atau nama/jenis
+ * lokasi yang model tulis alih-alih UUID ("TOKO", "gudang"). null bila tidak
+ * menunjuk tepat satu lokasi.
  */
-export function requiresLocationChoice(
+export function resolveLocationRef(value: unknown, locations: TenantLocation[]): TenantLocation | null {
+  if (typeof value !== "string" || value.trim() === "") return null;
+  const byId = locations.find((l) => l.id === value);
+  if (byId) return byId;
+  const matches = mentionedLocations(value, locations);
+  return matches.length === 1 ? matches[0] : null;
+}
+
+/**
+ * Lokasi final updateStock, atau "choose" bila staf harus memilih.
+ * Urutan: lokasi yang disebut staf (kata staf menang atas tebakan model) →
+ * pilihan model bila termasuk yang disebut staf → satu-satunya lokasi tenant.
+ * Staf tidak menyebut lokasi → selalu "choose", walau model menebak lokasi.
+ * Daftar lokasi kosong (gagal dimuat) → teruskan apa adanya, server memvalidasi.
+ */
+export function resolveUpdateLocation(
   args: Record<string, unknown>,
   userMessage: string,
   locations: TenantLocation[],
-): boolean {
-  if (locations.length === 0) return false;
-  const chosen = locations.find((l) => l.id === args.location_id);
-  if (!chosen) return true;
-  if (locations.length === 1) return false;
-  return !mentionedLocations(userMessage, locations).some((l) => l.id === chosen.id);
+): { locationId: string } | "choose" | "passthrough" {
+  if (locations.length === 0) return "passthrough";
+  const mentioned = mentionedLocations(userMessage, locations);
+  if (mentioned.length === 1) return { locationId: mentioned[0].id };
+  const fromModel = resolveLocationRef(args.location_id, locations);
+  if (fromModel && mentioned.some((l) => l.id === fromModel.id)) return { locationId: fromModel.id };
+  if (locations.length === 1) return { locationId: locations[0].id };
+  return "choose";
 }
 
 export function buildLocationChoice(

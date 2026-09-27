@@ -6,7 +6,8 @@ import {
   locationChoiceMessage,
   mentionedLocations,
   nearestLocation,
-  requiresLocationChoice,
+  resolveLocationRef,
+  resolveUpdateLocation,
   type TenantLocation,
 } from "@/src/lib/agents/location-choice";
 
@@ -51,30 +52,50 @@ describe("mentionedLocations", () => {
   });
 });
 
-describe("requiresLocationChoice", () => {
-  it("lolos bila lokasi valid dan disebut staf", () => {
-    expect(requiresLocationChoice({ location_id: "lg" }, "masuk ke gudng", locations)).toBe(false);
+describe("resolveLocationRef", () => {
+  it("menerima UUID lokasi tenant atau nama/jenis lokasi yang ditulis model", () => {
+    expect(resolveLocationRef("lg", locations)?.id).toBe("lg");
+    expect(resolveLocationRef("TOKO", locations)?.id).toBe("lt");
+    expect(resolveLocationRef("gudang", locations)?.id).toBe("lg");
   });
 
-  it("menahan bila staf tidak menyebut lokasi walau model memilih lokasi valid", () => {
-    expect(requiresLocationChoice({ location_id: "lt" }, "Masuk 5 filter udara", locations)).toBe(true);
+  it("null untuk nilai kosong, UUID asing, atau yang menunjuk lebih dari satu lokasi", () => {
+    expect(resolveLocationRef("", locations)).toBeNull();
+    expect(resolveLocationRef(undefined, locations)).toBeNull();
+    expect(resolveLocationRef("1234567890abcdef", locations)).toBeNull();
+    expect(resolveLocationRef("toko gudang", locations)).toBeNull();
+  });
+});
+
+describe("resolveUpdateLocation", () => {
+  it("mengisi lokasi yang disebut staf walau location_id model kosong, salah tulis, atau asing", () => {
+    expect(resolveUpdateLocation({ location_id: "" }, "masuk 10 filter ke gudang", locations)).toEqual({ locationId: "lg" });
+    expect(resolveUpdateLocation({ location_id: "TOKO" }, "keluar 2 dari toko", locations)).toEqual({ locationId: "lt" });
+    expect(resolveUpdateLocation({ location_id: "fake-uuid" }, "msk 6 ke gudng", locations)).toEqual({ locationId: "lg" });
   });
 
-  it("menahan bila model memakai lokasi berbeda dari yang disebut", () => {
-    expect(requiresLocationChoice({ location_id: "lt" }, "masuk ke gudang", locations)).toBe(true);
+  it("kata staf menang atas pilihan model yang berbeda", () => {
+    expect(resolveUpdateLocation({ location_id: "lt" }, "masuk ke gudang", locations)).toEqual({ locationId: "lg" });
   });
 
-  it("menahan bila location_id kosong atau bukan milik tenant", () => {
-    expect(requiresLocationChoice({}, "masuk ke gudang", locations)).toBe(true);
-    expect(requiresLocationChoice({ location_id: "asing" }, "masuk ke gudang", locations)).toBe(true);
+  it("minta staf memilih bila lokasi tidak disebut, walau model menebak lokasi valid", () => {
+    expect(resolveUpdateLocation({ location_id: "lt" }, "Masuk 5 filter udara", locations)).toBe("choose");
+    expect(resolveUpdateLocation({}, "Masuk 5 filter udara", locations)).toBe("choose");
   });
 
-  it("lolos bila tenant hanya punya satu lokasi dan id-nya valid", () => {
-    expect(requiresLocationChoice({ location_id: "lt" }, "masuk 5", [toko])).toBe(false);
+  it("memakai pilihan model bila staf menyebut beberapa lokasi dan pilihan itu salah satunya", () => {
+    expect(resolveUpdateLocation({ location_id: "toko" }, "dari gudang atau toko ya, toko aja", locations)).toEqual({
+      locationId: "lt",
+    });
+    expect(resolveUpdateLocation({}, "gudang atau toko?", locations)).toBe("choose");
   });
 
-  it("tidak menahan bila daftar lokasi tidak tersedia (server tetap memvalidasi)", () => {
-    expect(requiresLocationChoice({}, "masuk 5", [])).toBe(false);
+  it("memakai satu-satunya lokasi tenant", () => {
+    expect(resolveUpdateLocation({}, "masuk 5", [toko])).toEqual({ locationId: "lt" });
+  });
+
+  it("meneruskan apa adanya bila daftar lokasi tidak tersedia (server tetap memvalidasi)", () => {
+    expect(resolveUpdateLocation({}, "masuk 5", [])).toBe("passthrough");
   });
 });
 
