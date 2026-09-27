@@ -1,3 +1,5 @@
+import { withSerwist } from "@serwist/turbopack";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -20,6 +22,11 @@ const nextConfig = {
 
   headers: async () => [
     {
+      // Service worker harus selalu dicek ulang supaya versi baru terdeteksi.
+      source: "/serwist/:path*",
+      headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
+    },
+    {
       // WebLLM butuh cross-origin isolation utk WebGPU/WASM threads
       source: "/chat/:path*",
       headers: [
@@ -29,4 +36,4 @@ const nextConfig = {
     },
   ],
 };
-export default nextConfig;
+export default withSerwist(nextConfig);

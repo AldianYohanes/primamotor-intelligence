@@ -1,11 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Outfit, Forum } from "next/font/google";
-import "@mantine/core/styles.css";
-import "@mantine/notifications/styles.css";
 import "../styles/globals.css";
-import { ColorSchemeScript } from "@mantine/core";
-import ServiceWorkerRegistration from "../components/ServiceWorkerRegistration";
-import { Providers } from "../lib/mantine/providers";
+import { PwaProvider } from "../components/pwa/PwaProvider";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -27,10 +23,15 @@ const forum = Forum({
 });
 
 export const metadata: Metadata = {
+  applicationName: "Prima Motor",
   title: "Prima Motor Volvo — Manajemen Stok",
   description:
     "Aplikasi manajemen suku cadang Volvo dengan asisten AI berbasis percakapan",
   manifest: "/manifest.json",
+  icons: {
+    icon: [{ url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
+    apple: "/icons/apple-touch-icon.png",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -56,12 +57,8 @@ export default function RootLayout({
       className={`${inter.variable} ${outfit.variable} ${forum.variable}`}
       suppressHydrationWarning
     >
-      <head>
-        <ColorSchemeScript defaultColorScheme="light" />
-      </head>
       <body>
-        <Providers>{children}</Providers>
-        <ServiceWorkerRegistration />
+        <PwaProvider>{children}</PwaProvider>
       </body>
     </html>
   );

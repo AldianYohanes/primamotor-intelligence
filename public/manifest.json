@@ -1,15 +1,43 @@
 {
+  "id": "/",
   "name": "Prima Motor Volvo — Manajemen Stok",
   "short_name": "Prima Motor",
   "description": "Manajemen suku cadang Volvo dengan asisten AI percakapan",
-  "start_url": "/chat",
+  "lang": "id",
+  "dir": "ltr",
+  "start_url": "/menu",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#f8fafc",
-  "theme_color": "#1d4ed8",
+  "display_override": ["standalone", "minimal-ui"],
+  "background_color": "#f7f8fa",
+  "theme_color": "#2563eb",
   "orientation": "portrait",
+  "categories": ["business", "productivity"],
+  "prefer_related_applications": false,
   "icons": [
-    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "/icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Asisten Stok",
+      "short_name": "Chat",
+      "description": "Tanya stok atau catat barang lewat chat",
+      "url": "/chat",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Kasir (POS)",
+      "short_name": "Kasir",
+      "url": "/pos",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "url": "/admin",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
   ]
 }
