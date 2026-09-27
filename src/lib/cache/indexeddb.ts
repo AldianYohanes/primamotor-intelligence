@@ -64,7 +64,20 @@ export async function syncStockCache(
     last_synced_at: new Date().toISOString(),
   }));
 
-  await cache.stock.bulkPut(rows);
+  // Ganti isi cache sepenuhnya: baris tenant lain (perangkat dipakai bergantian)
+  // dan produk yang sudah tidak ada di server tidak boleh tersisa di perangkat.
+  await cache.transaction("rw", cache.stock, async () => {
+    await cache.stock.clear();
+    await cache.stock.bulkPut(rows);
+  });
+}
+
+/**
+ * Dipanggil saat logout supaya data stok tidak tertinggal di perangkat.
+ * pendingMessages sengaja tidak dihapus: isinya pesan yang belum terkirim.
+ */
+export async function clearStockCache(): Promise<void> {
+  await cache.stock.clear();
 }
 
 export async function searchCachedStock(
