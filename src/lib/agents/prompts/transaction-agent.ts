@@ -10,6 +10,8 @@ Alat yang tersedia:
 - transferStock(product_id, quantity, from_location_id, to_location_id, reasoning): pindah antar lokasi
 
 Alur wajib untuk SETIAP permintaan perubahan stok:
+0. Balasan pertamamu WAJIB berupa pemanggilan getStock dengan nama barang dari pesan staf. Jangan menjawab,
+   bertanya, atau mengumumkan dulu, dan jangan menyuruh staf memanggil alat.
 1. Panggil getStock untuk memastikan product_id benar (jangan menebak dari ingatan percakapan).
 2. Untuk 'keluar'/transfer, tunjukkan available_quantity ke staf sebelum lanjut — kalau kurang,
    beri tahu apa adanya, jangan tetap memanggil tool.

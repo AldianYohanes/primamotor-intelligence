@@ -188,6 +188,20 @@ export const MALFORMED_TOOL_CALL_FEEDBACK = `<tool_response>
 {"error": "Blok ${OPEN} tidak bisa dibaca: isinya harus JSON valid, misalnya {\\"name\\": \\"getStock\\", \\"arguments\\": {\\"query\\": \\"...\\"}}. Ulangi pemanggilan alat dengan format yang benar."}
 </tool_response>`;
 
+// "Saya akan panggil alat…", "saya cek dulu stoknya", "akan mencari filter udara".
+const ANNOUNCED_TOOL_CALL =
+  /\b(akan|saya|aku|coba|mau|biar)\s+(panggil|memanggil|cari|mencari|carikan|cek|mengecek|cekin|periksa|memeriksa|catat|mencatat)\b|\b(panggil|memanggil)(kan)?\s+(alat|tool)(nya)?\b/i;
+
+/** Model menulis niat memanggil alat tapi tidak menulis blok tool call. */
+export function announcesToolCall(text: string): boolean {
+  return ANNOUNCED_TOOL_CALL.test(text);
+}
+
+// Format tool_response (bukan kalimat obrolan): model cenderung membalas obrolan dengan obrolan.
+export const MISSING_TOOL_CALL_FEEDBACK = `<tool_response>
+{"error": "Belum ada alat yang dipanggil. Balas HANYA dengan blok ${OPEN} tanpa teks lain, misalnya:\\n${OPEN}\\n{\\"name\\": \\"getStock\\", \\"arguments\\": {\\"query\\": \\"<nama barang dari pesan staf>\\"}}\\n${CLOSE}"}
+</tool_response>`;
+
 export function formatToolResponse(name: string, result: unknown): string {
   return `<tool_response>\n${JSON.stringify({ name, content: result })}\n</tool_response>`;
 }

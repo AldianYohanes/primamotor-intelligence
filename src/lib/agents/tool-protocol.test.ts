@@ -1,10 +1,32 @@
 import { describe, it, expect } from "vitest";
 import {
+  announcesToolCall,
   buildToolInstructions,
   formatToolResponse,
   parseModelReply,
   visibleStreamText,
 } from "@/src/lib/agents/tool-protocol";
+
+describe("announcesToolCall", () => {
+  it.each<[string]>([
+    ["Baik, saya akan mencari berdasarkan istilahnya. Saya akan panggil alat untuk mencari filter udara."],
+    ["Oke, aku cek dulu stoknya ya."],
+    ["Sebentar, saya periksa dulu."],
+    ["Saya akan memanggil tool getStock."],
+    ["Ya, memanggil alatnya. Filter udara, ada yang tersedia untuk diupdate?"],
+  ])("mendeteksi niat tanpa pemanggilan: %s", (text: string) => {
+    expect(announcesToolCall(text)).toBe(true);
+  });
+
+  it.each<[string]>([
+    ["Maaf, saya hanya bisa membantu urusan stok & suku cadang toko ini."],
+    ["Stok Filter Oli Mahle ada 25 unit di Toko dan 60 unit di Gudang."],
+    ["Lampu yang mana, dan berapa unit? Dari toko atau gudang?"],
+    ["Toko buka jam 8 pagi."],
+  ])("tidak menganggap jawaban biasa sebagai niat: %s", (text: string) => {
+    expect(announcesToolCall(text)).toBe(false);
+  });
+});
 
 describe("parseModelReply", () => {
   it("membaca satu blok tool_call gaya Hermes/Qwen", () => {
