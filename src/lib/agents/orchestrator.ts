@@ -1,7 +1,7 @@
 "use client";
 
 import type { MLCEngineInterface } from "@mlc-ai/web-llm";
-import { ROUTER_SYSTEM_PROMPT } from "@/src/lib/agents/prompts/router";
+import { ROUTER_SYSTEM_PROMPT, parseRouterReply } from "@/src/lib/agents/prompts/router";
 import { QUERY_AGENT_SYSTEM_PROMPT } from "@/src/lib/agents/prompts/query-agent";
 import { TRANSACTION_AGENT_SYSTEM_PROMPT } from "@/src/lib/agents/prompts/transaction-agent";
 import { SINGLE_AGENT_SYSTEM_PROMPT } from "@/src/lib/agents/prompts/single-agent";
@@ -84,7 +84,8 @@ export function inferAgentTypeFromTrace(
   return toolTrace.length > 0 ? "query" : "off_topic";
 }
 
-const MAX_TOOL_ITERATIONS = 4;
+// getStock → (dorongan) → mutasi, plus satu retry, harus muat.
+const MAX_TOOL_ITERATIONS = 5;
 
 const AGENT_TOOLS_BY_TYPE: Record<"query" | "transaction" | "off_topic", string[]> = {
   query: ["getStock", "getSalesTrend"],
@@ -295,8 +296,20 @@ async function fetchTenantLocations(): Promise<TenantLocation[] | null> {
   }
 }
 
+// Ditujukan ke model: model kecil cenderung meneruskan pesan error apa adanya ke staf.
 const PRODUCT_ID_NOT_FROM_GETSTOCK =
-  "product_id ini tidak berasal dari hasil getStock. Panggil getStock dulu dengan nama barang dari pesan staf, lalu pakai product_id dari hasilnya. Jangan mengarang product_id.";
+  "Panggilan ditolak sistem: product_id bukan dari hasil getStock. Pesan ini untukmu, bukan untuk staf. Balasan berikutnya WAJIB blok <tool_call> getStock dengan nama barang dari pesan staf, lalu ulangi pencatatan memakai product_id dari hasilnya.";
+
+// Model 3B jarang menyambung ke langkah kedua setelah menerima hasil alat.
+const MUTATION_NEXT_STEP =
+  "Pesan untukmu, bukan untuk staf: kalau staf meminta mencatat barang masuk/keluar/pindah, balasan berikutnya WAJIB blok <tool_call> updateStock atau transferStock memakai product_id dari hasil ini (kosongkan location_id kalau staf tidak menyebut lokasi). Jangan meminta PIN lewat teks — sistem memintanya sendiri setelah alat dipanggil. Kalau staf hanya bertanya stok, jawab biasa.";
+
+function withMutationHint(name: string, result: unknown, allowedTools: Set<string>): unknown {
+  const canMutate = allowedTools.has("updateStock") || allowedTools.has("transferStock");
+  const results = (result as { results?: unknown[] } | null)?.results;
+  if (name !== "getStock" || !canMutate || !Array.isArray(results) || results.length === 0) return result;
+  return { ...(result as object), next_step: MUTATION_NEXT_STEP };
+}
 
 function productIdsFromTrace(toolTrace: AgentTurnResult["toolTrace"]): Set<string> {
   const ids = new Set<string>();
@@ -360,6 +373,7 @@ async function routeMessage(
   userMessage: string,
 ): Promise<{
   agentType: "query" | "transaction" | "off_topic";
+  text: string;
   usage: NonStreamUsage | null;
 }> {
   const completion = await engine.chat.completions.create({
@@ -371,9 +385,7 @@ async function routeMessage(
   });
   const text = completion.choices[0]?.message?.content ?? "";
   const usage = (completion as unknown as { usage?: NonStreamUsage }).usage ?? null;
-  if (text.includes("TRANSACTION_AGENT")) return { agentType: "transaction", usage };
-  if (text.includes("QUERY_AGENT")) return { agentType: "query", usage };
-  return { agentType: "off_topic", usage };
+  return { agentType: parseRouterReply(text), text, usage };
 }
 
 /**
@@ -403,6 +415,7 @@ async function runAgentTurnInner(
   if (mode === "multi_agent") {
     const routed = await routeMessage(engine, userMessage);
     agentType = routed.agentType;
+    modelReplies.push(`[router] ${routed.text}`);
     if (routed.usage) {
       usageAcc.hasUsage = true;
       usageAcc.promptTokens += routed.usage.prompt_tokens ?? 0;
@@ -441,6 +454,7 @@ async function runAgentTurnInner(
   ];
 
   let nudgedMissingCall = false;
+  const productRejection = { error: PRODUCT_ID_NOT_FROM_GETSTOCK };
   for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
     const { content, usage } = await streamChatCompletion(engine, messages, onToken);
     if (usage) {
@@ -458,13 +472,14 @@ async function runAgentTurnInner(
       messages.push({ role: "user", content: MALFORMED_TOOL_CALL_FEEDBACK });
       continue;
     }
-    // Sama seperti di atas untuk "Saya akan panggil alat…" tanpa blok tool call.
+    // Sama seperti di atas untuk "Saya akan panggil alat…" tanpa blok tool call,
+    // atau jawaban teks tepat setelah panggilannya ditolak penjaga produk.
+    const lastRejected = toolTrace.at(-1)?.result === productRejection;
     if (
       reply.calls.length === 0 &&
       !nudgedMissingCall &&
-      toolTrace.length === 0 &&
       i < MAX_TOOL_ITERATIONS - 1 &&
-      announcesToolCall(reply.text || content)
+      ((toolTrace.length === 0 && announcesToolCall(reply.text || content)) || lastRejected)
     ) {
       nudgedMissingCall = true;
       messages.push({ role: "assistant", content });
@@ -492,9 +507,8 @@ async function runAgentTurnInner(
       if (allowed && (call.name === "updateStock" || call.name === "transferStock")) {
         // Aturan "getStock dulu" ditegakkan kode: model kecil sering mengarang product_id.
         if (!productIdsFromTrace(toolTrace).has(String(args.product_id))) {
-          const result = { error: PRODUCT_ID_NOT_FROM_GETSTOCK };
-          toolTrace.push({ name: call.name, args, result });
-          responses.push(formatToolResponse(call.name, result));
+          toolTrace.push({ name: call.name, args, result: productRejection });
+          responses.push(formatToolResponse(call.name, productRejection));
           continue;
         }
 
@@ -559,7 +573,7 @@ async function runAgentTurnInner(
         };
       }
 
-      responses.push(formatToolResponse(call.name, result));
+      responses.push(formatToolResponse(call.name, withMutationHint(call.name, result, allowedTools)));
     }
 
     // Dikirim sebagai pesan user, bukan role 'tool': template chat model non-Hermes
