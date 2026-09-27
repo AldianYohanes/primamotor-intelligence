@@ -2,17 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  ArrowLeft,
   MonitorX,
   AlertTriangle,
   Send,
   Plus,
   WifiOff,
 } from "lucide-react";
-import Link from "next/link";
-import type { MLCEngineInterface, InitProgressReport } from "@mlc-ai/web-llm";
 import { createClient } from "@/src/lib/supabase/client";
-import { isWebGPUAvailable } from "@/src/lib/agents/webgpu-support";
+import { useModelStore } from "@/src/lib/stores/model-store";
+import { ModelSetupPanel } from "@/src/components/model/ModelSetupPanel";
+import { AppHeader } from "@/src/components/nav/AppHeader";
+import type { AppModule } from "@/src/lib/auth/rbac";
 import {
   runAgentTurn,
   type ChatMessage,
@@ -34,11 +34,15 @@ import { MessageBubble } from "./MessageBubble";
 import { PinConfirmDialog } from "./PinConfirmDialog";
 
 interface Props {
+  /** Tenant aktif (bagi super admin bisa tenant lain). */
   businessId: string;
+  tenantName: string;
+  /** Slug tenant tempat akun terdaftar, dipakai untuk re-konfirmasi PIN. */
   businessSlug: string;
   staffId: string;
   username: string;
   fullName: string;
+  modules: AppModule[];
 }
 
 export function ChatWindow({
@@ -47,26 +51,29 @@ export function ChatWindow({
   staffId,
   username,
   fullName,
+  tenantName,
+  modules,
 }: Props) {
   const supabase = createClient();
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [input, setInput] = useState("");
-  const [engine, setEngine] = useState<MLCEngineInterface | null>(null);
-  const [loadProgress, setLoadProgress] = useState<InitProgressReport | null>(
-    null,
-  );
-  const [engineError, setEngineError] = useState<string | null>(null);
+  // Engine dikelola store global supaya unduhan model tetap jalan saat staf
+  // pindah halaman (lihat model-store.ts).
+  const modelStatus = useModelStore((s) => s.status);
+  const engine = useModelStore((s) => s.engine);
+  const engineError = useModelStore((s) => s.error);
+  const prepareModel = useModelStore((s) => s.prepare);
+  const retryModel = useModelStore((s) => s.retry);
   const [isThinking, setIsThinking] = useState(false);
   const [draftText, setDraftText] = useState("");
   const [pendingConfirmation, setPendingConfirmation] =
     useState<PendingConfirmation | null>(null);
-  const [webgpuOk] = useState(isWebGPUAvailable());
   const isOnline = useOnlineStatus();
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Inisialisasi: ambil/buat percakapan aktif + muat riwayatnya, load engine, sync cache offline
+  // Inisialisasi: ambil/buat percakapan aktif + muat riwayatnya, cek model, sync cache offline
   useEffect(() => {
     let cancelled = false;
 
@@ -92,51 +99,9 @@ export function ChatWindow({
 
     syncStockCache(supabase, businessId);
 
-    if (webgpuOk) {
-      // Dynamic import, bukan static import di atas — `webllm-engine.ts`
-      // meng-import seluruh library `@mlc-ai/web-llm` (besar) di top-level.
-      // Kalau di-import statis, kode itu ikut ke chunk awal /chat dan harus
-      // di-parse browser sebelum UI (daftar pesan, kotak input) sempat
-      // render. Dengan import() di sini, downloadnya baru mulai setelah
-      // komponen mount dan lolos cek `webgpuOk` — shell chat tetap tampil
-      // cepat, baik di device yang WebGPU-nya nggak didukung sekalipun.
-      import("@/src/lib/agents/webllm-engine").then(
-        ({ getWebLLMEngine, resetWebLLMEngine }) => {
-          if (cancelled) return;
-          getWebLLMEngine(
-            (report) => !cancelled && setLoadProgress(report),
-            // Error yang terjadi SETELAH engine berhasil dimuat (mis. GPU device
-            // menolak buffer saat lagi inference) sebelumnya cuma nyangkut di
-            // console sebagai "uncaptured error" browser — tidak ada cara bagi
-            // UI untuk tahu dan bereaksi. Sekarang ditangkap di sini supaya
-            // percakapan tidak diam-diam macet: tampilkan error yang jelas dan
-            // reset engine supaya kalau user reload, tidak mencoba pakai device
-            // yang sama yang sudah rusak.
-            (err) => {
-              console.error("WebLLM device error:", err);
-              if (cancelled) return;
-              resetWebLLMEngine();
-              setEngine(null);
-              setEngineError(err.message);
-            },
-          )
-            .then((e) => !cancelled && setEngine(e))
-            .catch((err) => {
-              // Sebelumnya kegagalan di sini cuma console.error — UI tetap menampilkan
-              // progress bar selamanya tanpa penjelasan (mis. WebGPU ada tapi VRAM
-              // device tidak cukup untuk model). Sesuai keputusan produk: tidak ada
-              // fallback ke API berbayar, jadi kalau WebLLM gagal dimuat, tampilkan
-              // error yang jelas saja — bukan diam-diam menggantung.
-              console.error("Gagal memuat model WebLLM:", err);
-              if (!cancelled) {
-                setEngineError(
-                  "Model AI gagal dimuat di perangkat ini (biasanya karena RAM/VRAM tidak cukup). Coba tutup aplikasi lain lalu muat ulang, atau pakai perangkat lain.",
-                );
-              }
-            });
-        },
-      );
-    }
+    // Hanya memeriksa apakah model sudah tersimpan. Kalau belum, unduhan
+    // (bisa beberapa GB) baru mulai setelah staf menekan tombol di panel.
+    prepareModel();
 
     return () => {
       cancelled = true;
@@ -266,7 +231,7 @@ export function ChatWindow({
     }
   }
 
-  if (!webgpuOk) {
+  if (modelStatus === "unsupported") {
     return (
       <div className="flex h-dvh items-center justify-center bg-[#f7f8fa] p-6 text-center">
         <div className="card max-w-sm space-y-2.5 p-6">
@@ -292,7 +257,7 @@ export function ChatWindow({
     );
   }
 
-  if (engineError) {
+  if (modelStatus === "error" && engineError) {
     return (
       <div className="flex h-dvh items-center justify-center bg-[#f7f8fa] p-6 text-center">
         <div className="card max-w-sm space-y-2.5 p-6">
@@ -303,67 +268,39 @@ export function ChatWindow({
             Asisten AI gagal dimuat
           </p>
           <p className="text-sm text-slate-600">{engineError}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="btn btn-primary mt-1"
-          >
-            Muat Ulang
-          </button>
+          <div className="mt-1 flex justify-center gap-2">
+            <button onClick={retryModel} className="btn btn-primary">
+              Coba Lagi
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              className="btn btn-secondary"
+            >
+              Muat Ulang Halaman
+            </button>
+          </div>
         </div>
-      </div>
-    );
-  }
-
-  if (!engine) {
-    const pct = loadProgress?.progress
-      ? Math.round(loadProgress.progress * 100)
-      : 0;
-    return (
-      <div className="flex h-dvh flex-col items-center justify-center gap-3 bg-[#f7f8fa] p-6 text-center">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">
-          PV
-        </div>
-        <div className="h-1.5 w-64 overflow-hidden rounded-full bg-slate-200">
-          <div
-            className="h-full rounded-full bg-brand-600 transition-all"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-        <p className="text-sm text-slate-600">
-          {loadProgress?.text ?? "Menyiapkan asisten AI…"}
-        </p>
-        <p className="text-xs text-slate-400">
-          Cuma perlu diunduh sekali, tersimpan di perangkat ini.
-        </p>
       </div>
     );
   }
 
   return (
     <div className="flex h-dvh flex-col bg-[#f7f8fa]">
-      <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
-        <div className="flex items-center gap-2.5">
-          <Link
-            href="/admin"
-            className="hidden rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 sm:flex"
-            aria-label="Kembali ke dashboard"
+      <AppHeader
+        title="Asisten Stok"
+        subtitle={`${fullName} · ${tenantName}`}
+        actions={
+          <button
+            onClick={handleNewConversation}
+            disabled={isThinking || !engine}
+            className="btn btn-secondary rounded-full !text-xs !py-1.5 !px-3"
+            title="Percakapan baru"
           >
-            <ArrowLeft size={17} />
-          </Link>
-          <div>
-            <p className="text-sm font-semibold text-slate-900">Asisten Stok</p>
-            <p className="text-xs text-slate-500">Halo, {fullName}</p>
-          </div>
-        </div>
-        <button
-          onClick={handleNewConversation}
-          disabled={isThinking}
-          className="btn btn-secondary rounded-full !text-xs !py-1.5 !px-3"
-        >
-          <Plus size={13} />
-          Percakapan Baru
-        </button>
-      </header>
+            <Plus size={13} />
+            <span className="hidden sm:inline">Percakapan Baru</span>
+          </button>
+        }
+      />
 
       <EnableNotificationsBanner />
 
@@ -385,7 +322,7 @@ export function ChatWindow({
             Memuat riwayat percakapan…
           </p>
         )}
-        {!loadingHistory && messages.length === 0 && (
+        {engine && !loadingHistory && messages.length === 0 && (
           <div className="mx-auto mt-10 max-w-xs text-center">
             <div className="mx-auto mb-3 flex h-9 w-9 items-center justify-center rounded-full bg-brand-50 text-brand-600">
               <Send size={15} />
@@ -399,6 +336,11 @@ export function ChatWindow({
         {messages.map((m, i) => (
           <MessageBubble key={i} message={m} />
         ))}
+        {!engine && (
+          <div className="py-4">
+            <ModelSetupPanel shortcuts={modules.filter((m) => m.key !== "chat" && m.key !== "tenants")} />
+          </div>
+        )}
         {isThinking && (
           <>
             {draftText ? (
@@ -425,12 +367,13 @@ export function ChatWindow({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
-            placeholder="Ketik pesan…"
+            placeholder={engine ? "Ketik pesan…" : "Asisten AI belum siap…"}
+            disabled={!engine}
             className="field-input flex-1 rounded-full"
           />
           <button
             onClick={handleSend}
-            disabled={isThinking}
+            disabled={isThinking || !engine}
             className="btn btn-primary rounded-full px-5"
           >
             <Send size={14} />

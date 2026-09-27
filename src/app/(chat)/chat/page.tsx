@@ -1,32 +1,20 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/src/lib/supabase/server";
+import { requirePage } from "@/src/lib/auth/staff-context";
+import { modulesFor } from "@/src/lib/auth/rbac";
 import { ChatWindow } from "@/src/components/chat/ChatWindow";
 
 export default async function ChatPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: staffRow } = await supabase
-    .from("staff")
-    .select("id, full_name, username, business_id, businesses(slug)")
-    .eq("auth_user_id", user.id)
-    .single();
-
-  if (!staffRow) redirect("/login");
-
-  // @ts-expect-error -- bentuk join Supabase, businesses adalah objek tunggal (many-to-one)
-  const businessSlug: string = staffRow.businesses.slug;
+  const ctx = await requirePage("chat.use");
 
   return (
     <ChatWindow
-      businessId={staffRow.business_id}
-      businessSlug={businessSlug}
-      staffId={staffRow.id}
-      username={staffRow.username}
-      fullName={staffRow.full_name}
+      businessId={ctx.tenant.id}
+      tenantName={ctx.tenant.name}
+      // PIN konfirmasi diverifikasi terhadap akun di tenant tempat staf terdaftar.
+      businessSlug={ctx.ownBusiness.slug}
+      staffId={ctx.staff.id}
+      username={ctx.staff.username}
+      fullName={ctx.staff.fullName}
+      modules={modulesFor(ctx.staff.role)}
     />
   );
 }

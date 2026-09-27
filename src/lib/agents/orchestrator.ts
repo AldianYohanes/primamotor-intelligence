@@ -4,9 +4,18 @@ import type { MLCEngineInterface } from "@mlc-ai/web-llm";
 import { ROUTER_SYSTEM_PROMPT } from "@/src/lib/agents/prompts/router";
 import { QUERY_AGENT_SYSTEM_PROMPT } from "@/src/lib/agents/prompts/query-agent";
 import { TRANSACTION_AGENT_SYSTEM_PROMPT } from "@/src/lib/agents/prompts/transaction-agent";
+import { SINGLE_AGENT_SYSTEM_PROMPT } from "@/src/lib/agents/prompts/single-agent";
 import { AGENT_TOOL_DEFINITIONS } from "@/src/lib/agents/tool-schemas";
+import {
+  MALFORMED_TOOL_CALL_FEEDBACK,
+  TOOL_STOP_SEQUENCES,
+  buildToolInstructions,
+  formatToolResponse,
+  parseModelReply,
+  visibleStreamText,
+} from "@/src/lib/agents/tool-protocol";
 import { searchCachedStock } from "@/src/lib/cache/indexeddb";
-import { MODEL_ID } from "@/src/lib/agents/webllm-engine";
+import { getActiveModelId } from "@/src/lib/agents/webllm-engine";
 import type { AgentExecutionMetricPayload } from "@/src/lib/agents/metrics-schema";
 
 export type ChatRole = "user" | "assistant" | "system" | "tool";
@@ -29,14 +38,39 @@ export interface AgentTurnResult {
   assistantText: string;
   pendingConfirmation?: PendingConfirmation;
   toolTrace: { name: string; args: unknown; result: unknown }[];
+  latencyMs?: number;
+  /** Keluaran mentah model per iterasi, untuk analisis evaluasi. */
+  modelReplies?: string[];
+  usage?: { promptTokens: number; completionTokens: number } | null;
+}
+
+/**
+ * multi_agent = Router lalu agent spesialis (arsitektur utama).
+ * single_agent = baseline evaluasi: satu prompt gabungan, tanpa Router.
+ */
+export type AgentMode = "multi_agent" | "single_agent";
+
+/**
+ * Baseline tidak punya keluaran Router, jadi kelasnya disimpulkan dari tool
+ * yang dipanggil. Konsekuensinya: permintaan transaksi yang ditolak model
+ * sebelum memanggil tool mutasi (mis. stok kurang) terbaca sebagai "query".
+ */
+export function inferAgentTypeFromTrace(
+  toolTrace: AgentTurnResult["toolTrace"],
+): AgentTurnResult["agentType"] {
+  if (toolTrace.some((t) => t.name === "updateStock" || t.name === "transferStock")) {
+    return "transaction";
+  }
+  return toolTrace.length > 0 ? "query" : "off_topic";
 }
 
 const MAX_TOOL_ITERATIONS = 4;
 
-interface AccumulatedToolCall {
-  id: string;
-  function: { name: string; arguments: string };
-}
+const AGENT_TOOLS_BY_TYPE: Record<"query" | "transaction" | "off_topic", string[]> = {
+  query: ["getStock", "getSalesTrend"],
+  transaction: ["getStock", "updateStock", "transferStock"],
+  off_topic: [],
+};
 
 /**
  * Bentuk minimal chunk streaming yang benar-benar kita pakai (format delta ala
@@ -48,11 +82,6 @@ interface AccumulatedToolCall {
  */
 interface StreamChunkDelta {
   content?: string;
-  tool_calls?: {
-    index?: number;
-    id?: string;
-    function?: { name?: string; arguments?: string };
-  }[];
 }
 interface StreamChunkUsage {
   prompt_tokens?: number;
@@ -70,24 +99,16 @@ interface StreamChunk {
 }
 
 /**
- * Konsumsi stream chunk demi chunk (format delta ala OpenAI yang juga dipakai
- * WebLLM). Dua hal diakumulasi paralel: teks jawaban (dikirim ke UI real-time
- * lewat onToken) dan tool_calls (baru utuh setelah stream selesai, karena
- * name/arguments datang terpecah antar chunk berdasarkan index).
- *
- * Kalau runtime WebLLM yang dipakai ternyata tidak mendukung streaming
- * tool_calls dengan baik, fungsi ini tetap aman: tool_calls yang terbentuk
- * parsial/tidak valid JSON akan gagal di JSON.parse pemanggil dan loop akan
- * fallback memperlakukannya sebagai jawaban teks biasa.
+ * Konsumsi stream chunk demi chunk. Pemanggilan tool ditulis model sebagai teks
+ * (lihat tool-protocol.ts), jadi yang dikirim ke UI lewat onToken hanya bagian
+ * yang aman ditampilkan; blok tool call disaring.
  */
 async function streamChatCompletion(
   engine: MLCEngineInterface,
   messages: ChatMessage[],
-  tools: typeof AGENT_TOOL_DEFINITIONS,
   onToken?: (partialText: string) => void,
 ): Promise<{
   content: string;
-  toolCalls: AccumulatedToolCall[];
   usage: StreamChunkUsage | null;
 }> {
   // WebLLM mengharapkan union tipe pesan yang didiskriminasi ketat per role (mis.
@@ -99,44 +120,26 @@ async function streamChatCompletion(
   type CreateParams = Parameters<typeof engine.chat.completions.create>[0];
   const stream = (await engine.chat.completions.create({
     messages,
-    tools,
     temperature: 0.2,
+    stop: TOOL_STOP_SEQUENCES,
     stream: true,
     stream_options: { include_usage: true },
   } as unknown as CreateParams)) as AsyncIterable<StreamChunk>;
 
   let content = "";
-  const toolCallsByIndex = new Map<number, AccumulatedToolCall>();
   let usage: StreamChunkUsage | null = null;
 
   for await (const chunk of stream) {
     if (chunk.usage) usage = chunk.usage;
 
     const delta = chunk.choices[0]?.delta;
-    if (!delta) continue;
-
-    if (delta.content) {
+    if (delta?.content) {
       content += delta.content;
-      onToken?.(content);
-    }
-
-    if (delta.tool_calls) {
-      for (const tc of delta.tool_calls) {
-        const idx = tc.index ?? 0;
-        const existing = toolCallsByIndex.get(idx) ?? {
-          id: tc.id ?? `call_${idx}`,
-          function: { name: "", arguments: "" },
-        };
-        if (tc.function?.name) existing.function.name += tc.function.name;
-        if (tc.function?.arguments)
-          existing.function.arguments += tc.function.arguments;
-        if (tc.id) existing.id = tc.id;
-        toolCallsByIndex.set(idx, existing);
-      }
+      onToken?.(visibleStreamText(content));
     }
   }
 
-  return { content, toolCalls: Array.from(toolCallsByIndex.values()), usage };
+  return { content, usage };
 }
 
 /**
@@ -191,7 +194,21 @@ async function executeTool(
         // terakhir kali online, lihat syncStockCache). Hasilnya ditandai supaya
         // Query Agent bisa memberi tahu staf datanya mungkin tidak paling baru.
         const cached = await searchCachedStock(String(args.query), businessId);
+        if (cached.length === 0) {
+          return {
+            results: [],
+            source: "offline_cache",
+            status: "no_cached_match",
+            cache_note:
+              "Sedang offline dan part ini tidak ada di cache. Ini BUKAN berarti stok nol — sampaikan ke staf bahwa stok belum bisa dicek sampai online lagi.",
+          };
+        }
+        const lastSyncedAt = cached.reduce(
+          (oldest, c) => (c.last_synced_at < oldest ? c.last_synced_at : oldest),
+          cached[0].last_synced_at,
+        );
         return {
+          last_synced_at: lastSyncedAt,
           results: cached.map((c) => ({
             product_id: c.product_id,
             name: c.product_name,
@@ -287,87 +304,96 @@ async function runAgentTurnInner(
   conversationId: string,
   businessId: string,
   usageAcc: { promptTokens: number; completionTokens: number; hasUsage: boolean },
+  mode: AgentMode,
+  modelReplies: string[],
   onToken?: (partialText: string) => void,
 ): Promise<AgentTurnResult> {
-  const routed = await routeMessage(engine, userMessage);
-  const agentType = routed.agentType;
-  if (routed.usage) {
-    usageAcc.hasUsage = true;
-    usageAcc.promptTokens += routed.usage.prompt_tokens ?? 0;
-    usageAcc.completionTokens += routed.usage.completion_tokens ?? 0;
-  }
   const toolTrace: AgentTurnResult["toolTrace"] = [];
+  // Mode single_agent: nilai ini placeholder, diganti inferAgentTypeFromTrace di runAgentTurn.
+  let agentType: AgentTurnResult["agentType"] = "query";
+  let systemPrompt = SINGLE_AGENT_SYSTEM_PROMPT;
 
-  if (agentType === "off_topic") {
-    return {
-      agentType,
-      assistantText:
-        "Maaf, saya hanya bisa membantu urusan stok & suku cadang toko ini.",
-      toolTrace,
-    };
+  if (mode === "multi_agent") {
+    const routed = await routeMessage(engine, userMessage);
+    agentType = routed.agentType;
+    if (routed.usage) {
+      usageAcc.hasUsage = true;
+      usageAcc.promptTokens += routed.usage.prompt_tokens ?? 0;
+      usageAcc.completionTokens += routed.usage.completion_tokens ?? 0;
+    }
+
+    if (agentType === "off_topic") {
+      return {
+        agentType,
+        assistantText:
+          "Maaf, saya hanya bisa membantu urusan stok & suku cadang toko ini.",
+        toolTrace,
+      };
+    }
+
+    systemPrompt =
+      agentType === "query"
+        ? QUERY_AGENT_SYSTEM_PROMPT
+        : TRANSACTION_AGENT_SYSTEM_PROMPT;
   }
-
-  const systemPrompt =
-    agentType === "query"
-      ? QUERY_AGENT_SYSTEM_PROMPT
-      : TRANSACTION_AGENT_SYSTEM_PROMPT;
+  // Agent spesialis hanya menerima tool miliknya (rancangan-evaluasi.tex), baseline
+  // menerima semua. Daftar ini juga ditegakkan saat eksekusi di bawah.
+  const allowedTools = new Set(
+    mode === "single_agent"
+      ? AGENT_TOOL_DEFINITIONS.map((t) => t.function.name)
+      : AGENT_TOOLS_BY_TYPE[agentType],
+  );
+  const tools = AGENT_TOOL_DEFINITIONS.filter((t) => allowedTools.has(t.function.name));
   const messages: ChatMessage[] = [
-    { role: "system", content: systemPrompt },
+    {
+      role: "system",
+      content: `${systemPrompt}\n\n${buildToolInstructions(tools)}`,
+    },
     ...history,
     { role: "user", content: userMessage },
   ];
 
   for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-    // Setiap iterasi (termasuk setelah tool result masuk ke messages) di-stream ke
-    // UI lewat onToken — kalau iterasi ini ujung-ujungnya cuma tool_calls tanpa teks,
-    // draft yang sempat tampil di UI otomatis kosong lagi, itu wajar (model memang
-    // tidak menulis apa-apa sebelum memanggil tool).
-    const { content, toolCalls, usage } = await streamChatCompletion(
-      engine,
-      messages,
-      AGENT_TOOL_DEFINITIONS,
-      onToken,
-    );
+    const { content, usage } = await streamChatCompletion(engine, messages, onToken);
     if (usage) {
       usageAcc.hasUsage = true;
       usageAcc.promptTokens += usage.prompt_tokens ?? 0;
       usageAcc.completionTokens += usage.completion_tokens ?? 0;
     }
 
-    if (toolCalls.length === 0) {
-      return { agentType, assistantText: content, toolTrace };
+    modelReplies.push(content);
+    const reply = parseModelReply(content);
+    // Model kecil kadang menulis JSON tool call yang rusak; beri satu kesempatan
+    // memperbaiki selama masih ada sisa iterasi, alih-alih langsung menyerah.
+    if (reply.calls.length === 0 && reply.malformed && i < MAX_TOOL_ITERATIONS - 1) {
+      messages.push({ role: "assistant", content });
+      messages.push({ role: "user", content: MALFORMED_TOOL_CALL_FEEDBACK });
+      continue;
+    }
+    if (reply.calls.length === 0) {
+      return {
+        agentType,
+        assistantText:
+          reply.text ||
+          (reply.malformed ? "Maaf, saya kurang mengerti maksudnya. Bisa diulang?" : content),
+        toolTrace,
+      };
     }
 
     messages.push({ role: "assistant", content });
+    const responses: string[] = [];
 
-    for (const call of toolCalls) {
-      let args: Record<string, unknown>;
-      try {
-        args = JSON.parse(call.function.arguments || "{}");
-      } catch {
-        // Streaming tool_calls yang gagal di-parse diperlakukan sebagai jawaban teks biasa
-        // (lihat catatan di streamChatCompletion) — jangan crash, mundur ke isi content.
-        return {
-          agentType,
-          assistantText:
-            content || "Maaf, saya kurang mengerti maksudnya. Bisa diulang?",
-          toolTrace,
-        };
-      }
-
-      const result = await executeTool(
-        call.function.name,
-        args,
-        conversationId,
-        businessId,
-      );
-      toolTrace.push({ name: call.function.name, args, result });
+    for (const call of reply.calls) {
+      const args = call.arguments;
+      const result = allowedTools.has(call.name)
+        ? await executeTool(call.name, args, conversationId, businessId)
+        : { error: `Tool ${call.name} tidak tersedia untuk agent ini.` };
+      toolTrace.push({ name: call.name, args, result });
 
       // updateStock/transferStock TIDAK melanjutkan loop — harus berhenti untuk
       // menunggu staf memasukkan PIN. Loop lanjut lagi setelah confirm terpisah.
       if (
-        (call.function.name === "updateStock" ||
-          call.function.name === "transferStock") &&
+        (call.name === "updateStock" || call.name === "transferStock") &&
         result &&
         typeof result === "object" &&
         "audit_log_id" in result
@@ -378,20 +404,19 @@ async function runAgentTurnInner(
           assistantText: r.message,
           pendingConfirmation: {
             audit_log_id: r.audit_log_id,
-            tool_name: call.function.name,
+            tool_name: call.name,
             message: r.message,
           },
           toolTrace,
         };
       }
 
-      messages.push({
-        role: "tool",
-        tool_call_id: call.id,
-        name: call.function.name,
-        content: JSON.stringify(result),
-      });
+      responses.push(formatToolResponse(call.name, result));
     }
+
+    // Dikirim sebagai pesan user, bukan role 'tool': template chat model non-Hermes
+    // di WebLLM belum tentu mendukung role 'tool' tanpa parameter `tools`.
+    messages.push({ role: "user", content: responses.join("\n") });
   }
 
   return {
@@ -422,7 +447,9 @@ export async function runAgentTurn(
   conversationId: string,
   businessId: string,
   onToken?: (partialText: string) => void,
+  options: { mode?: AgentMode } = {},
 ): Promise<AgentTurnResult> {
+  const mode = options.mode ?? "multi_agent";
   const startedAt = performance.now();
   // Perkiraan panjang konteks di awal giliran (karakter, bukan token exact dari
   // tokenizer) — proxy kasar tapi cukup untuk melihat tren "percakapan makin
@@ -431,25 +458,44 @@ export async function runAgentTurn(
   const contextLengthAtCall =
     history.reduce((sum, m) => sum + m.content.length, 0) + userMessage.length;
   const usageAcc = { promptTokens: 0, completionTokens: 0, hasUsage: false };
+  const modelReplies: string[] = [];
 
   try {
-    const result = await runAgentTurnInner(
+    const inner = await runAgentTurnInner(
       engine,
       history,
       userMessage,
       conversationId,
       businessId,
       usageAcc,
+      mode,
+      modelReplies,
       onToken,
     );
+    const latencyMs = Math.round(performance.now() - startedAt);
+    const result: AgentTurnResult = {
+      ...inner,
+      modelReplies,
+      agentType:
+        mode === "single_agent"
+          ? inferAgentTypeFromTrace(inner.toolTrace)
+          : inner.agentType,
+      latencyMs,
+      usage: usageAcc.hasUsage
+        ? {
+            promptTokens: usageAcc.promptTokens,
+            completionTokens: usageAcc.completionTokens,
+          }
+        : null,
+    };
     reportAgentExecutionMetric({
       conversation_id: conversationId,
       agent_type: result.agentType,
-      model_name: MODEL_ID,
+      model_name: getActiveModelId(),
       prompt_tokens: usageAcc.hasUsage ? usageAcc.promptTokens : null,
       completion_tokens: usageAcc.hasUsage ? usageAcc.completionTokens : null,
       context_length_at_call: contextLengthAtCall,
-      latency_ms: Math.round(performance.now() - startedAt),
+      latency_ms: latencyMs,
       succeeded: true,
       error_message: null,
     });
@@ -461,7 +507,7 @@ export async function runAgentTurn(
     reportAgentExecutionMetric({
       conversation_id: conversationId,
       agent_type: "off_topic",
-      model_name: MODEL_ID,
+      model_name: getActiveModelId(),
       prompt_tokens: usageAcc.hasUsage ? usageAcc.promptTokens : null,
       completion_tokens: usageAcc.hasUsage ? usageAcc.completionTokens : null,
       context_length_at_call: contextLengthAtCall,
