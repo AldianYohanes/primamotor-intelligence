@@ -17,6 +17,8 @@ export interface Database {
           slug: string
           address: string | null
           status: 'pending_verification' | 'active' | 'suspended' | 'rejected'
+          // Migration 0032 — null = belum pernah consent eksplisit (§15.3).
+          ocr_consent_given_at: string | null
           created_at: string
         }
         Insert: Partial<Database['public']['Tables']['businesses']['Row']> & { name: string; slug: string }
@@ -106,6 +108,16 @@ export interface Database {
           unit: string
           description: string | null
           min_threshold: number | null
+          // Migration referensi: dipakai Monitoring Agent (app/api/cron/monitor/route.ts)
+          // untuk hitung reorder point (ROP = lead_time_days x avg_daily_outbound +
+          // safety_stock). Sebelumnya sudah dipakai lewat query mentah di monitor
+          // route TANPA pernah dideklarasikan di sini — artinya client bertipe
+          // Database ini sebenarnya tidak pernah benar-benar mengetik-cek query
+          // tersebut (celah yang sama seperti §15.2, cuma di level kolom, bukan
+          // tabel). null = ROP belum di-set staf, Monitoring Agent fallback ke
+          // heuristik default.
+          lead_time_days: number | null
+          safety_stock: number | null
           unit_cost: number
           selling_price: number
           preferred_supplier_id: string | null
@@ -554,6 +566,22 @@ export interface Database {
           title: string
         }
         Update: Partial<Database['public']['Tables']['notifications']['Row']>
+        Relationships: []
+      }
+      // Migration 0034 — jejak super admin masuk/keluar tenant.
+      tenant_access_log: {
+        Row: {
+          id: string
+          admin_staff_id: string
+          business_id: string | null
+          action: 'enter' | 'leave'
+          created_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['tenant_access_log']['Row']> & {
+          admin_staff_id: string
+          action: 'enter' | 'leave'
+        }
+        Update: Partial<Database['public']['Tables']['tenant_access_log']['Row']>
         Relationships: []
       }
     }
