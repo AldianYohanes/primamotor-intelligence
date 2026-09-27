@@ -17,8 +17,16 @@ import type { LocationViewModel } from "./mappers/mappers";
 
 const PAGE_SIZE = 20;
 
-const emptyForm = { name: "", type: "toko" as LocationType, address: "" };
+const emptyForm = { name: "", type: "toko" as LocationType, address: "", latitude: "", longitude: "" };
 type FormState = typeof emptyForm;
+
+/** "" = kosong; selain itu harus angka (koma desimal diterima). */
+function parseCoordinate(value: string): number | null | "invalid" {
+  const trimmed = value.trim().replace(",", ".");
+  if (trimmed === "") return null;
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n : "invalid";
+}
 
 /**
  * modules/locations/Component.tsx — CRUD lokasi (toko/gudang) per tenant.
@@ -37,6 +45,31 @@ export function LocationsModule() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<LocationViewModel | null>(null);
+  const [locating, setLocating] = useState(false);
+
+  function fillFromDevice() {
+    if (!navigator.geolocation) {
+      setFormError("Browser ini tidak mendukung lokasi perangkat. Isi koordinat manual.");
+      return;
+    }
+    setLocating(true);
+    setFormError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocating(false);
+        setForm((f) => ({
+          ...f,
+          latitude: pos.coords.latitude.toFixed(6),
+          longitude: pos.coords.longitude.toFixed(6),
+        }));
+      },
+      () => {
+        setLocating(false);
+        setFormError("Lokasi perangkat tidak bisa dibaca (izin ditolak atau sinyal GPS lemah). Isi koordinat manual.");
+      },
+      { enableHighAccuracy: true, timeout: 15000 },
+    );
+  }
 
   const params: LocationListParams = useMemo(
     () => ({ page, pageSize: PAGE_SIZE }),
@@ -60,6 +93,8 @@ export function LocationsModule() {
       name: loc.raw.name,
       type: loc.raw.type,
       address: loc.raw.address ?? "",
+      latitude: loc.raw.latitude?.toString() ?? "",
+      longitude: loc.raw.longitude?.toString() ?? "",
     });
     setFormError(null);
     setEditingId(loc.id);
@@ -76,11 +111,23 @@ export function LocationsModule() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
+    const latitude = parseCoordinate(form.latitude);
+    const longitude = parseCoordinate(form.longitude);
+    if (latitude === "invalid" || longitude === "invalid") {
+      setFormError("Koordinat harus berupa angka, mis. -6.2441 dan 106.8000.");
+      return;
+    }
+    if ((latitude === null) !== (longitude === null)) {
+      setFormError("Isi latitude dan longitude keduanya, atau kosongkan keduanya.");
+      return;
+    }
     try {
       const payload = {
         name: form.name,
         type: form.type,
         address: form.address || undefined,
+        latitude,
+        longitude,
       };
       if (formMode === "edit" && editingId) {
         await updateFields(editingId, payload);
@@ -183,6 +230,40 @@ export function LocationsModule() {
               onChange={(e) => setForm({ ...form, address: e.target.value })}
               className="field-input mt-1"
             />
+          </div>
+          <div>
+            <label className="field-label">Latitude</label>
+            <input
+              value={form.latitude}
+              onChange={(e) => setForm({ ...form, latitude: e.target.value })}
+              inputMode="decimal"
+              placeholder="-6.2441"
+              className="field-input mt-1"
+            />
+          </div>
+          <div>
+            <label className="field-label">Longitude</label>
+            <input
+              value={form.longitude}
+              onChange={(e) => setForm({ ...form, longitude: e.target.value })}
+              inputMode="decimal"
+              placeholder="106.8000"
+              className="field-input mt-1"
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
+            <button
+              type="button"
+              onClick={fillFromDevice}
+              disabled={locating}
+              className="btn btn-secondary"
+            >
+              {locating ? "Membaca lokasi…" : "Pakai lokasi perangkat ini"}
+            </button>
+            <p className="text-xs text-slate-500">
+              Opsional. Dipakai asisten chat untuk menyarankan lokasi terdekat saat staf tidak menyebut
+              lokasi transaksi. Tekan tombol ini saat berada di lokasi tersebut.
+            </p>
           </div>
           {formError && (
             <p className="text-sm text-red-600 sm:col-span-2">{formError}</p>

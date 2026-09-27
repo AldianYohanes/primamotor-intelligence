@@ -12,8 +12,15 @@ const locationPatchSchema = z
     name: z.string().min(1).optional(),
     type: z.enum(["toko", "gudang"]).optional(),
     address: z.string().optional(),
+    latitude: z.number().min(-90).max(90).nullable().optional(),
+    longitude: z.number().min(-180).max(180).nullable().optional(),
   })
-  .strict();
+  .strict()
+  // Koordinat selalu dikirim berpasangan (constraint locations_coordinates_pair).
+  .refine((d) => (d.latitude === undefined) === (d.longitude === undefined), {
+    message: "Latitude dan longitude harus dikirim berpasangan",
+    path: ["longitude"],
+  });
 
 export async function PATCH(
   req: NextRequest,

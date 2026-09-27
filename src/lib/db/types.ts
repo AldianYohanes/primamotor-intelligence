@@ -75,6 +75,9 @@ export interface Database {
           name: string
           type: 'toko' | 'gudang'
           address: string | null
+          // Migration 0035 — berpasangan: keduanya null atau keduanya terisi.
+          latitude: number | null
+          longitude: number | null
           created_at: string
         }
         Insert: Partial<Database['public']['Tables']['locations']['Row']> & {

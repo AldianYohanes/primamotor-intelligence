@@ -6,6 +6,8 @@ export interface LocationResponse {
   name: string
   type: LocationType
   address: string | null
+  latitude: number | null
+  longitude: number | null
   created_at: string
 }
 

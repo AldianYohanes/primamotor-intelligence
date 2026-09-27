@@ -8,11 +8,18 @@ import type { Permission } from "@/src/lib/auth/rbac";
 // Otorisasi terpusat (src/lib/auth/staff-context.ts); business_id = tenant aktif.
 const requireStaff = (permission: Permission = "portal.access") => requireStaffRow(permission);
 
-const locationSchema = z.object({
-  name: z.string().min(1, "Nama lokasi wajib diisi"),
-  type: z.enum(["toko", "gudang"]),
-  address: z.string().optional(),
-});
+const locationSchema = z
+  .object({
+    name: z.string().min(1, "Nama lokasi wajib diisi"),
+    type: z.enum(["toko", "gudang"]),
+    address: z.string().optional(),
+    latitude: z.number().min(-90).max(90).nullable().optional(),
+    longitude: z.number().min(-180).max(180).nullable().optional(),
+  })
+  .refine((d) => (d.latitude == null) === (d.longitude == null), {
+    message: "Latitude dan longitude harus diisi berpasangan",
+    path: ["longitude"],
+  });
 
 /**
  * Lokasi biasanya sedikit per toko (toko + 1-2 gudang) — tapi tetap pakai
