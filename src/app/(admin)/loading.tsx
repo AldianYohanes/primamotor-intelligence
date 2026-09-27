@@ -1,9 +1,11 @@
-import { Loader, Stack } from "@mantine/core";
-
 export default function AdminLoading() {
   return (
-    <Stack mih="100dvh" align="center" justify="center">
-      <Loader />
-    </Stack>
+    <div className="flex min-h-dvh items-center justify-center">
+      <div
+        className="h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-slate-900"
+        role="status"
+        aria-label="Memuat"
+      />
+    </div>
   );
 }

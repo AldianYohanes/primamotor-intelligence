@@ -1,5 +1,4 @@
-import { ActionIcon, Button, Stack, Title } from "@mantine/core";
-import { IconChevronRight } from "@tabler/icons-react";
+import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 
 interface Props {
@@ -14,33 +13,22 @@ export const Information = ({
   ctaHref = "/login",
 }: Props) => {
   return (
-    <Stack mt="5vh" align="center" justify="center" gap="xs">
-      <Title style={{ lineHeight: 1 }}>Prima Motor Volvo</Title>
-      <Title order={6} maw="80%">
+    <div className="mt-[5vh] flex flex-col items-center justify-center gap-2">
+      <h1 className="text-4xl font-bold leading-none text-slate-900">
+        Prima Motor Volvo
+      </h1>
+      <h6 className="max-w-[80%] text-sm font-medium text-slate-600">
         Sistem Manajemen Suku Cadang Otomotif Berbasis WebLLM
-      </Title>
+      </h6>
 
-      {/* Button dibungkus <Link>, bukan `component={Link}` — Information
-          adalah Server Component, jadi melempar referensi fungsi (Link)
-          sebagai prop ke Button (Client Component) bikin React gagal
-          serialize ("Functions cannot be passed directly to Client
-          Components..."). Button di-render sebagai <span> (bukan <button>
-          default) supaya valid disarangkan di dalam <a> dari Link. */}
-      <Link href={ctaHref} style={{ textDecoration: "none" }}>
-        <Button
-          component="span"
-          color="dark"
-          size="xs"
-          radius="xl"
-          rightSection={
-            <ActionIcon size="xs" color="white">
-              <IconChevronRight color="black" />
-            </ActionIcon>
-          }
-        >
+      <Link href={ctaHref} className="no-underline">
+        <span className="mt-2 inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-xs font-medium text-white">
           {ctaLabel}
-        </Button>
+          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-white">
+            <ChevronRight size={12} color="black" />
+          </span>
+        </span>
       </Link>
-    </Stack>
+    </div>
   );
 };

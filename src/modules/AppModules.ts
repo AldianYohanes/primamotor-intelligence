@@ -1,8 +1,4 @@
-import {
-  IconBrandSupabase,
-  IconDashboard,
-  IconMessageChatbot,
-} from "@tabler/icons-react";
+import { Database, LayoutDashboard, MessageSquare } from "lucide-react";
 import React from "react";
 
 export interface IAppModules {
@@ -20,7 +16,7 @@ export const AppModules: IAppModules[] = [
     key: "chatbot",
     label: "Chatbot",
     description: "Tanya Stokgent terkait stok gudang/toko Anda",
-    Icon: IconMessageChatbot,
+    Icon: MessageSquare,
     iconColor: "blue",
     accentColor: "blue",
     href: "/chat",
@@ -29,7 +25,7 @@ export const AppModules: IAppModules[] = [
     key: "dashboard",
     label: "Dashboard",
     description: "Buka Dashboard untuk Melihat Sales Report",
-    Icon: IconDashboard,
+    Icon: LayoutDashboard,
     iconColor: "orange",
     accentColor: "#cd6146",
     href: "/admin",
@@ -38,7 +34,7 @@ export const AppModules: IAppModules[] = [
     key: "database",
     label: "Database",
     description: "Buka Supabase untuk melihat database lebih lengkap",
-    Icon: IconBrandSupabase,
+    Icon: Database,
     iconColor: "#3ecf8e",
     accentColor: "#3ecf8e",
     // Sengaja tanpa href: URL project Supabase spesifik per environment dan

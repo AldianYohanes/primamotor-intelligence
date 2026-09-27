@@ -1,4 +1,3 @@
-import { Container, Stack } from "@mantine/core";
 import { Information, Navigation } from "./subcomponents/";
 
 interface Props {
@@ -8,12 +7,12 @@ interface Props {
 
 const Home = ({ ctaLabel, ctaHref }: Props) => {
   return (
-    <Container size="md" ta="center">
-      <Stack gap="lg">
+    <div className="mx-auto max-w-3xl px-4 text-center">
+      <div className="flex flex-col gap-6">
         <Information ctaLabel={ctaLabel} ctaHref={ctaHref} />
         <Navigation />
-      </Stack>
-    </Container>
+      </div>
+    </div>
   );
 };
 

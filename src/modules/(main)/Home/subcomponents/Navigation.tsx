@@ -1,91 +1,61 @@
 import { AppModules } from "@/src/modules/AppModules";
 import { lighten } from "@/src/utils/colorUtils";
 import { getRandomInt } from "@/src/utils/mathUtils";
-import {
-  Box,
-  Card,
-  Group,
-  SimpleGrid,
-  Stack,
-  Text,
-  Title,
-} from "@mantine/core";
 import Link from "next/link";
 
 export const Navigation = () => {
-  // const {ref, hovered} = useHover();
   return (
-    <>
-      <SimpleGrid cols={{ base: 1, xs: 2, sm: 3, md: 4 }} spacing={8}>
-        {AppModules.map((mod) => {
-          const Icon = mod.Icon;
-          const card = (
-            <Card
-              shadow="xs"
-              style={{ cursor: mod.href ? "pointer" : "default" }}
-            >
-              <Box
-                style={{
-                  top: `${getRandomInt(0, 100)}%`,
-                  left: `${getRandomInt(0, 100)}%`,
-                  background: mod.accentColor,
-                  height: 250,
-                  width: 350,
-                  opacity: 0.1,
-                  borderRadius: "50%",
-                  position: "absolute",
-                  zIndex: 0,
-                }}
-              />
-              <Box
-                style={{
-                  bottom: `${getRandomInt(0, 100)}%`,
-                  right: `${getRandomInt(0, 100)}%`,
-                  background: mod.accentColor && lighten(mod.accentColor, 50),
-                  height: 250,
-                  width: 350,
-                  opacity: 0.2,
-                  borderRadius: "50%",
-                  position: "absolute",
-                  zIndex: 0,
-                }}
-              />
-              <Group wrap="nowrap" ta="left">
-                <Stack>
-                  <Icon color={mod.iconColor} />
-                </Stack>
-                <Stack gap={0}>
-                  <Title order={6} fw={700}>
-                    {mod.label}
-                  </Title>
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+      {AppModules.map((mod) => {
+        const Icon = mod.Icon;
+        const card = (
+          <div
+            className={`relative overflow-hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm ${
+              mod.href ? "cursor-pointer" : "cursor-default"
+            }`}
+          >
+            <div
+              className="pointer-events-none absolute h-[250px] w-[350px] rounded-full opacity-10"
+              style={{
+                top: `${getRandomInt(0, 100)}%`,
+                left: `${getRandomInt(0, 100)}%`,
+                background: mod.accentColor,
+              }}
+            />
+            <div
+              className="pointer-events-none absolute h-[250px] w-[350px] rounded-full opacity-20"
+              style={{
+                bottom: `${getRandomInt(0, 100)}%`,
+                right: `${getRandomInt(0, 100)}%`,
+                background: mod.accentColor && lighten(mod.accentColor, 50),
+              }}
+            />
+            <div className="relative z-10 flex flex-nowrap items-center gap-3 text-left">
+              <Icon color={mod.iconColor} size={20} />
+              <div className="flex flex-col gap-0">
+                <span className="text-sm font-bold text-slate-900">
+                  {mod.label}
+                </span>
+                <span className="text-xs font-light text-slate-600">
+                  {mod.description}
+                </span>
+              </div>
+            </div>
+          </div>
+        );
 
-                  <Text fz="xs" fw={300}>
-                    {mod.description}
-                  </Text>
-                </Stack>
-              </Group>
-            </Card>
-          );
-
-          // PENTING: jangan pakai `component={Link}` di sini. Home/Navigation
-          // adalah Server Component, dan Card/Button dari Mantine adalah
-          // Client Component — melempar referensi fungsi (komponen Link)
-          // sebagai PROP lewat batas server→client tidak bisa di-serialize
-          // React ("Functions cannot be passed directly to Client
-          // Components..."). Membungkus sebagai children (seperti di bawah)
-          // aman karena children punya jalur serialisasi RSC sendiri.
-          if (!mod.href) return <div key={mod.key}>{card}</div>;
-          return (
-            <Link
-              key={mod.key}
-              href={mod.href}
-              style={{ textDecoration: "none", color: "inherit" }}
-            >
-              {card}
-            </Link>
-          );
-        })}
-      </SimpleGrid>
-    </>
+        // PENTING: Home/Navigation adalah Server Component. Jangan pakai
+        // pola yang melempar referensi fungsi (mis. sebuah komponen) sebagai
+        // PROP lewat batas server→client — bisa gagal di-serialize React.
+        // Membungkus sebagai children (seperti di bawah) aman karena
+        // children punya jalur serialisasi RSC sendiri.
+        if (!mod.href) return <div key={mod.key}>{card}</div>;
+        return (
+          <Link key={mod.key} href={mod.href} className="no-underline text-inherit">
+            {card}
+          </Link>
+        );
+      })}
+    </div>
   );
 };

@@ -1,31 +1,27 @@
-import { Affix, Group, Image, Stack, Text } from "@mantine/core";
+import Image from "next/image";
 
 export const Footer = () => {
   return (
-    <Affix position={{ bottom: 0, left: 0, right: 0 }} zIndex={1} bg="dark">
-      <Stack
-        style={{ borderTop: "0.5px solid rgba(48, 47, 44, 0.25)" }}
-        h="7dvh"
-        justify="center"
-      >
-        <Group justify="space-between" px="xs">
-          <Stack gap={0} maw="40%">
-            <Text fz={10} style={{ lineHeight: 1 }} c="dark.1">
-              Prima Motor Volvo
-            </Text>
-            <Text fz={8} c="dark.1">
-              Lantai 3A, Blok M Square, Jakarta Selatan
-            </Text>
-          </Stack>
+    <div
+      className="fixed inset-x-0 bottom-0 z-10 flex h-[7dvh] items-center border-t border-slate-700/25 bg-slate-900 px-3"
+    >
+      <div className="flex w-full items-center justify-between">
+        <div className="flex max-w-[40%] flex-col gap-0">
+          <span className="text-[10px] leading-none text-slate-300">
+            Prima Motor Volvo
+          </span>
+          <span className="text-[8px] text-slate-300">
+            Lantai 3A, Blok M Square, Jakarta Selatan
+          </span>
+        </div>
 
-          <Image
-            src="/logos/prima-motor.png"
-            w={24}
-            h={24}
-            alt="Logo Prima Motor Volvo"
-          />
-        </Group>
-      </Stack>
-    </Affix>
+        <Image
+          src="/logos/prima-motor.png"
+          width={24}
+          height={24}
+          alt="Logo Prima Motor Volvo"
+        />
+      </div>
+    </div>
   );
 };
