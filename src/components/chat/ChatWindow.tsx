@@ -15,7 +15,9 @@ import { AppHeader } from "@/src/components/nav/AppHeader";
 import type { AppModule } from "@/src/lib/auth/rbac";
 import {
   runAgentTurn,
+  submitLocationChoice,
   type ChatMessage,
+  type LocationChoice,
   type PendingConfirmation,
 } from "@/src/lib/agents/orchestrator";
 import {
@@ -32,6 +34,7 @@ import {
 import { EnableNotificationsBanner } from "./EnableNotificationsBanner";
 import { MessageBubble } from "./MessageBubble";
 import { PinConfirmDialog } from "./PinConfirmDialog";
+import { LocationChoiceCard } from "./LocationChoiceCard";
 
 interface Props {
   /** Tenant aktif (bagi super admin bisa tenant lain). */
@@ -70,6 +73,8 @@ export function ChatWindow({
   const [draftText, setDraftText] = useState("");
   const [pendingConfirmation, setPendingConfirmation] =
     useState<PendingConfirmation | null>(null);
+  const [locationChoice, setLocationChoice] = useState<LocationChoice | null>(null);
+  const [submittingLocation, setSubmittingLocation] = useState(false);
   const isOnline = useOnlineStatus();
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -161,6 +166,8 @@ export function ChatWindow({
     if (!text || !engine || !conversationId || isThinking) return;
 
     setInput("");
+    // Pesan baru berarti staf tidak memakai pilihan lokasi yang tertahan.
+    setLocationChoice(null);
     const userMsg: ChatMessage = { role: "user", content: text };
     setMessages((prev) => [...prev, userMsg]);
     persistMessage("user", text);
@@ -186,6 +193,9 @@ export function ChatWindow({
       if (result.pendingConfirmation) {
         setPendingConfirmation(result.pendingConfirmation);
       }
+      if (result.locationChoice) {
+        setLocationChoice(result.locationChoice);
+      }
     } catch (err) {
       console.error(err);
       setMessages((prev) => [
@@ -199,6 +209,35 @@ export function ChatWindow({
       setIsThinking(false);
       setDraftText("");
     }
+  }
+
+  function appendAssistant(content: string) {
+    setMessages((prev) => [...prev, { role: "assistant", content }]);
+    persistMessage("assistant", content, "transaction");
+  }
+
+  async function handleLocationSelect(locationId: string) {
+    if (!locationChoice || !conversationId) return;
+    const choice = locationChoice;
+    const picked = choice.options.find((o) => o.id === locationId);
+    setSubmittingLocation(true);
+    try {
+      if (picked) {
+        setMessages((prev) => [...prev, { role: "user", content: `Di ${picked.name}` }]);
+        persistMessage("user", `Di ${picked.name}`);
+      }
+      const result = await submitLocationChoice(choice, locationId, conversationId, businessId);
+      setLocationChoice(null);
+      appendAssistant(result.message);
+      if (result.pendingConfirmation) setPendingConfirmation(result.pendingConfirmation);
+    } finally {
+      setSubmittingLocation(false);
+    }
+  }
+
+  function handleLocationCancel() {
+    setLocationChoice(null);
+    appendAssistant("Oke, tidak jadi dicatat.");
   }
 
   async function handleNewConversation() {
@@ -226,6 +265,7 @@ export function ChatWindow({
       setConversationId(newId);
       setMessages([]);
       setPendingConfirmation(null);
+      setLocationChoice(null);
     } catch (err) {
       console.error(err);
     }
@@ -336,6 +376,14 @@ export function ChatWindow({
         {messages.map((m, i) => (
           <MessageBubble key={i} message={m} />
         ))}
+        {locationChoice && !isThinking && (
+          <LocationChoiceCard
+            choice={locationChoice}
+            busy={submittingLocation}
+            onSelect={handleLocationSelect}
+            onCancel={handleLocationCancel}
+          />
+        )}
         {!engine && (
           <div className="py-4">
             <ModelSetupPanel shortcuts={modules.filter((m) => m.key !== "chat" && m.key !== "tenants")} />

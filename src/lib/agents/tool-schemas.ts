@@ -97,12 +97,17 @@ export const AGENT_TOOL_DEFINITIONS = [
         type: 'object',
         properties: {
           product_id: { type: 'string', description: 'UUID produk, didapat dari hasil getStock' },
-          location_id: { type: 'string', description: 'UUID lokasi (toko/gudang)' },
+          location_id: {
+            type: 'string',
+            description:
+              'UUID lokasi (toko/gudang) yang disebut staf. Kosongkan kalau staf tidak menyebut lokasi — sistem akan menanyakannya ke staf.',
+          },
           quantity: { type: 'number', description: 'Jumlah unit' },
           direction: { type: 'string', enum: ['masuk', 'keluar'] },
           reasoning: { type: 'string', description: 'Alasan/ringkasan permintaan staf, untuk audit log' },
         },
-        required: ['product_id', 'location_id', 'quantity', 'direction', 'reasoning'],
+        // location_id sengaja tidak wajib di sini; server (updateStockSchema) tetap mewajibkannya.
+        required: ['product_id', 'quantity', 'direction', 'reasoning'],
       },
     },
   },

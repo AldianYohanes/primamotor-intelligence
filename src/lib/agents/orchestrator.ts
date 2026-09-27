@@ -17,6 +17,17 @@ import {
 import { searchCachedStock } from "@/src/lib/cache/indexeddb";
 import { getActiveModelId } from "@/src/lib/agents/webllm-engine";
 import type { AgentExecutionMetricPayload } from "@/src/lib/agents/metrics-schema";
+import {
+  buildLocationChoice,
+  locationChoiceMessage,
+  readDevicePosition,
+  requiresLocationChoice,
+  type GeoPoint,
+  type LocationChoice,
+  type TenantLocation,
+} from "@/src/lib/agents/location-choice";
+
+export type { LocationChoice } from "@/src/lib/agents/location-choice";
 
 export type ChatRole = "user" | "assistant" | "system" | "tool";
 
@@ -37,6 +48,8 @@ export interface AgentTurnResult {
   agentType: "query" | "transaction" | "off_topic";
   assistantText: string;
   pendingConfirmation?: PendingConfirmation;
+  /** updateStock ditahan sampai staf memilih lokasi (lihat location-choice.ts). */
+  locationChoice?: LocationChoice;
   toolTrace: { name: string; args: unknown; result: unknown }[];
   latencyMs?: number;
   /** Keluaran mentah model per iterasi, untuk analisis evaluasi. */
@@ -264,6 +277,59 @@ async function executeTool(
   }
 }
 
+async function fetchTenantLocations(): Promise<TenantLocation[] | null> {
+  try {
+    const res = await fetch("/api/agent/tools/locations");
+    if (!res.ok) return null;
+    const body = (await res.json()) as { locations?: TenantLocation[] };
+    return body.locations ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function productNameFromTrace(
+  toolTrace: AgentTurnResult["toolTrace"],
+  productId: unknown,
+): string | null {
+  for (const t of toolTrace) {
+    if (t.name !== "getStock") continue;
+    const results = (t.result as { results?: { product_id?: string; name?: string }[] } | null)?.results;
+    const match = results?.find((r) => r.product_id === productId);
+    if (match?.name) return match.name;
+  }
+  return null;
+}
+
+/**
+ * Lanjutkan updateStock yang ditahan setelah staf memilih lokasi. Deterministik,
+ * tanpa LLM; hasilnya masuk alur konfirmasi PIN yang sama.
+ */
+export async function submitLocationChoice(
+  choice: LocationChoice,
+  locationId: string,
+  conversationId: string,
+  businessId: string,
+): Promise<{ pendingConfirmation?: PendingConfirmation; message: string }> {
+  const result = (await executeTool(
+    choice.toolName,
+    { ...choice.args, location_id: locationId },
+    conversationId,
+    businessId,
+  )) as { audit_log_id?: string; message?: string; error?: string } | null;
+  if (result?.audit_log_id && result.message) {
+    return {
+      pendingConfirmation: {
+        audit_log_id: result.audit_log_id,
+        tool_name: choice.toolName,
+        message: result.message,
+      },
+      message: result.message,
+    };
+  }
+  return { message: result?.error ?? "Gagal mencatat transaksi. Coba lagi ya." };
+}
+
 interface NonStreamUsage {
   prompt_tokens?: number;
   completion_tokens?: number;
@@ -306,6 +372,7 @@ async function runAgentTurnInner(
   usageAcc: { promptTokens: number; completionTokens: number; hasUsage: boolean },
   mode: AgentMode,
   modelReplies: string[],
+  getDevicePosition: () => Promise<GeoPoint | null>,
   onToken?: (partialText: string) => void,
 ): Promise<AgentTurnResult> {
   const toolTrace: AgentTurnResult["toolTrace"] = [];
@@ -385,6 +452,31 @@ async function runAgentTurnInner(
 
     for (const call of reply.calls) {
       const args = call.arguments;
+
+      // Lokasi tidak disebut staf (atau model memakai lokasi lain): tahan
+      // transaksi, staf memilih lokasi dengan saran lokasi terdekat perangkat.
+      if (call.name === "updateStock" && allowedTools.has(call.name) && navigator.onLine) {
+        const locations = await fetchTenantLocations();
+        if (locations && requiresLocationChoice(args, userMessage, locations)) {
+          const choice = buildLocationChoice(args, userMessage, locations, await getDevicePosition());
+          toolTrace.push({
+            name: call.name,
+            args,
+            result: {
+              status: "location_choice_required",
+              suggested_location_id: choice.suggestedLocationId,
+              suggestion_reason: choice.suggestionReason,
+            },
+          });
+          return {
+            agentType,
+            assistantText: locationChoiceMessage(choice, productNameFromTrace(toolTrace, args.product_id)),
+            locationChoice: choice,
+            toolTrace,
+          };
+        }
+      }
+
       const result = allowedTools.has(call.name)
         ? await executeTool(call.name, args, conversationId, businessId)
         : { error: `Tool ${call.name} tidak tersedia untuk agent ini.` };
@@ -447,7 +539,11 @@ export async function runAgentTurn(
   conversationId: string,
   businessId: string,
   onToken?: (partialText: string) => void,
-  options: { mode?: AgentMode } = {},
+  options: {
+    mode?: AgentMode;
+    /** Posisi perangkat untuk saran lokasi terdekat; /eval memakai posisi tetap. */
+    getDevicePosition?: () => Promise<GeoPoint | null>;
+  } = {},
 ): Promise<AgentTurnResult> {
   const mode = options.mode ?? "multi_agent";
   const startedAt = performance.now();
@@ -470,6 +566,7 @@ export async function runAgentTurn(
       usageAcc,
       mode,
       modelReplies,
+      options.getDevicePosition ?? readDevicePosition,
       onToken,
     );
     const latencyMs = Math.round(performance.now() - startedAt);
