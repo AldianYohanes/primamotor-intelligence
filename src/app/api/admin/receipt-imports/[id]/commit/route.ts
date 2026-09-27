@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/src/lib/supabase/server";
 import { createAdminClient } from "@/src/lib/supabase/admin";
 import { logger } from "@/src/lib/logging/logger";
+import { requireStaffRow } from "@/src/lib/auth/staff-context";
 
 /**
  * Tahap akhir §4.4: hanya item berstatus 'confirmed' yang di-commit jadi transaksi
@@ -13,29 +13,18 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { data: staffRow } = await supabase
-    .from("staff")
-    .select("id, business_id")
-    .eq("auth_user_id", user.id)
-    .single();
-  if (!staffRow)
-    return NextResponse.json(
-      { error: "Akun staf tidak ditemukan" },
-      { status: 403 },
-    );
+  const auth = await requireStaffRow("portal.access");
+  if ("error" in auth) return auth.error;
+  const { supabase, staffRow } = auth;
 
   const { data: importRow } = await supabase
     .from("receipt_imports")
     .select("id, business_id")
     .eq("id", id)
-    .single();
+    // Commit menulis stok lewat service_role; super admin membaca semua tenant
+    // lewat RLS, jadi batasi eksplisit ke tenant aktif.
+    .eq("business_id", staffRow.business_id)
+    .maybeSingle();
   if (!importRow)
     return NextResponse.json(
       { error: "Import tidak ditemukan" },

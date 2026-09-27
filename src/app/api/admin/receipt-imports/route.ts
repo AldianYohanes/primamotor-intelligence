@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/src/lib/supabase/server";
 import { createAdminClient } from "@/src/lib/supabase/admin";
 import { extractReceiptWithGemini } from "@/src/lib/ocr/gemini";
 import { parsePagination, buildPaginatedResponse } from "@/src/lib/pagination";
 import { checkOcrRateLimit } from "@/src/lib/rate-limit/ocr-rate-limit";
 import { logger } from "@/src/lib/logging/logger";
+import { requireStaffRow } from "@/src/lib/auth/staff-context";
+import type { Permission } from "@/src/lib/auth/rbac";
 
 /**
  * Alur: upload foto → simpan ke storage bucket 'receipts' → panggil Gemini →
@@ -12,24 +13,13 @@ import { logger } from "@/src/lib/logging/logger";
  * receipt_import_items berstatus 'matched'/'unmatched' untuk direview staf.
  * TIDAK ada baris yang langsung masuk stock_transactions di tahap ini (§4.4).
  */
-export async function POST(req: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+// Otorisasi terpusat (src/lib/auth/staff-context.ts); business_id = tenant aktif.
+const requireStaff = (permission: Permission = "portal.access") => requireStaffRow(permission);
 
-  const { data: staffRow } = await supabase
-    .from("staff")
-    .select("id, business_id")
-    .eq("auth_user_id", user.id)
-    .single();
-  if (!staffRow)
-    return NextResponse.json(
-      { error: "Akun staf tidak ditemukan" },
-      { status: 403 },
-    );
+export async function POST(req: NextRequest) {
+  const ctx = await requireStaff();
+  if ("error" in ctx) return ctx.error;
+  const { supabase, staffRow } = ctx;
 
   // Rate limit DULUAN, sebelum bikin baris receipt_imports atau upload apa pun —
   // OCR Gemini itu satu-satunya endpoint berbayar-per-panggilan di aplikasi ini
@@ -71,6 +61,29 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
 
+  // Validasi file SEBELUM bikin baris receipt_imports atau kena biaya Gemini —
+  // sebelumnya cuma dicek "ada atau tidak", `file.type` dipercaya mentah dan
+  // path storage di-hardcode `.jpg` walau isinya bukan JPEG. Sekarang: batasi
+  // ukuran (buang-buang storage & kuota Gemini kalau tidak dibatasi) dan
+  // whitelist MIME type (path upload di bawah juga sudah tidak hardcode .jpg).
+  const MAX_RECEIPT_FILE_BYTES = 10 * 1024 * 1024; // 10MB
+  const ALLOWED_RECEIPT_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
+  if (file.size > MAX_RECEIPT_FILE_BYTES) {
+    return NextResponse.json(
+      { error: "Ukuran file bon maksimal 10MB" },
+      { status: 400 },
+    );
+  }
+  if (!ALLOWED_RECEIPT_MIME_TYPES.includes(file.type)) {
+    return NextResponse.json(
+      {
+        error:
+          "Format file tidak didukung. Gunakan foto JPEG, PNG, atau WebP.",
+      },
+      { status: 400 },
+    );
+  }
+
   const { data: importRow, error: importError } = await supabase
     .from("receipt_imports")
     .insert({
@@ -96,7 +109,15 @@ export async function POST(req: NextRequest) {
 
   const arrayBuffer = await file.arrayBuffer();
   const base64 = Buffer.from(arrayBuffer).toString("base64");
-  const path = `${staffRow.business_id}/${importRow.id}.jpg`;
+  // Ekstensi mengikuti MIME type asli (sudah divalidasi di whitelist di atas),
+  // bukan hardcode .jpg walau file aslinya PNG/WebP.
+  const extensionByMimeType: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+  };
+  const fileExtension = extensionByMimeType[file.type] ?? "jpg";
+  const path = `${staffRow.business_id}/${importRow.id}.${fileExtension}`;
 
   const admin = createAdminClient();
   const { error: uploadError } = await admin.storage
@@ -182,18 +203,24 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  const supabase = await createClient();
+  const ctx = await requireStaff();
+  if ("error" in ctx) return ctx.error;
+  const { supabase, staffRow } = ctx;
+
   const { page, pageSize, from, to } = parsePagination(req);
 
   const { data, error, count } = await supabase
     .from("receipt_imports")
     .select("*", { count: "exact" })
+    // Filter eksplisit, bukan cuma andalkan RLS (§10) — defense-in-depth.
+    .eq("business_id", staffRow.business_id)
     .order("created_at", { ascending: false })
     .range(from, to);
 
   if (error) {
     logger.error("Gagal memuat daftar receipt imports", {
       route: "admin/receipt-imports",
+      business_id: staffRow.business_id,
       error,
     });
     return NextResponse.json({ error: error.message }, { status: 500 });
