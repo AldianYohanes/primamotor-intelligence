@@ -94,7 +94,7 @@ function ShiftReportDialog({ shiftId, onClose }: { shiftId: string; onClose: () 
       <div className="max-h-[85vh] w-full max-w-sm overflow-y-auto rounded-xl border border-slate-200 bg-white p-5 shadow-popover">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-base font-semibold text-slate-900">Laporan Shift</h2>
-          <button onClick={onClose} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+          <button onClick={onClose} aria-label="Tutup" className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
             <X size={16} />
           </button>
         </div>

@@ -1,6 +1,6 @@
 import { Suspense } from "react";
-import { redirect } from "next/navigation";
-import { createClient } from "@/src/lib/supabase/server";
+import { requirePage } from "@/src/lib/auth/staff-context";
+import { can } from "@/src/lib/auth/rbac";
 import { PosSalesModule } from "@/src/modules/pos-sales/Component";
 
 export default async function PosSalesPage() {
@@ -9,19 +9,8 @@ export default async function PosSalesPage() {
   // ditampilkan di dialog detail. Ini murni UX (tombol disembunyikan lebih awal
   // supaya staf non-admin tidak coba lalu kena 403); penegakan sesungguhnya
   // tetap di server (§12, POST .../void mengecek role ulang).
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: staffRow } = await supabase
-    .from("staff")
-    .select("role")
-    .eq("auth_user_id", user.id)
-    .single();
-
-  const canVoid = staffRow?.role === "owner" || staffRow?.role === "admin";
+  const { staff } = await requirePage("portal.access");
+  const canVoid = can(staff.role, "pos.manage");
 
   return (
     <Suspense

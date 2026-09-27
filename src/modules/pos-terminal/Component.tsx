@@ -14,7 +14,9 @@ import {
   PlayCircle,
   UserPlus,
   X,
+  Eraser,
 } from "lucide-react";
+import { ConfirmDialog } from "@/src/components/ui/ConfirmDialog";
 import { useGetLocationOptions } from "./hooks/use-get-location-options";
 import { useGetPosProducts } from "./hooks/use-get-pos-products";
 import { usePostCheckout } from "./hooks/use-post-checkout";
@@ -124,6 +126,33 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
   const { openShift: currentShift, refresh: refreshShift } = useGetOpenShift(locationId || null);
   const [showShiftPanel, setShowShiftPanel] = useState(false);
 
+  // Feedback teks saat Enter/scan barcode tidak menghasilkan tepat 1 match —
+  // tanpa ini kasir cuma lihat list produk muncul tanpa tahu kenapa item
+  // tidak langsung masuk keranjang.
+  const [searchHint, setSearchHint] = useState<string | null>(null);
+  const [showClearCartConfirm, setShowClearCartConfirm] = useState(false);
+
+  function focusSearch() {
+    // Timeout 0 supaya focus terjadi SETELAH React commit render berikutnya —
+    // langsung .focus() sinkron kadang kalah sama re-render (mis. tombol yang
+    // baru diklik masih pegang fokusnya sesaat).
+    setTimeout(() => searchInputRef.current?.focus(), 0);
+  }
+
+  // F9 = Bayar tanpa mouse — dicek terhadap disabled state yang sama seperti
+  // tombol Bayar (bukan bypass, cuma trigger klik yang sama).
+  useEffect(() => {
+    function onGlobalKeyDown(e: KeyboardEvent) {
+      if (e.key === "F9") {
+        e.preventDefault();
+        if (!isCheckingOut && cart.length > 0) handleCheckout();
+      }
+    }
+    window.addEventListener("keydown", onGlobalKeyDown);
+    return () => window.removeEventListener("keydown", onGlobalKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCheckingOut, cart.length, handleCheckout]);
+
   const subtotal = useMemo(() => cart.reduce((sum, l) => sum + l.unitPrice * l.quantity, 0), [cart]);
   const total = Math.max(subtotal - discountAmount, 0);
   const change = paymentMode === "cash" ? Math.max(amountPaid - total, 0) : 0;
@@ -162,6 +191,12 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
    * secara langsung (bypass debounce & bypass hook), bukan membaca `products`.
    */
   async function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Escape") {
+      setSearchInput("");
+      setDebouncedSearch("");
+      setSearchHint(null);
+      return;
+    }
     if (e.key !== "Enter" || !locationId) return;
     const rawValue = e.currentTarget.value.trim();
     if (!rawValue) return;
@@ -171,10 +206,15 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
         addToCart(mapPosProductResponseToViewModel(results[0]));
         setSearchInput("");
         setDebouncedSearch("");
+        setSearchHint(null);
+      } else if (results.length === 0) {
+        setSearchHint(`Tidak ada produk yang cocok dengan "${rawValue}".`);
+      } else {
+        // >1 hasil: biarkan hook pencarian normal yang menampilkan daftar
+        // (kasir ketik manual biasanya bukan barcode, ambigu memang wajar
+        // tidak auto-tambah) — tapi tetap kasih tahu kenapa tidak auto-add.
+        setSearchHint(`Ada ${results.length} produk cocok — pilih dari daftar di bawah.`);
       }
-      // >1 atau 0 hasil: biarkan hook pencarian normal yang menampilkan
-      // daftar (kasir ketik manual biasanya bukan barcode, ambigu memang
-      // wajar tidak auto-tambah).
     } catch {
       // Diam-diam gagal di sini tidak masalah — hook pencarian normal (yang
       // sudah jalan lewat debounce) tetap akan menampilkan hasil/error-nya
@@ -196,6 +236,22 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
     setCart((prev) => prev.filter((l) => l.productId !== productId));
   }
 
+  function clearCart() {
+    setCart([]);
+    setShowClearCartConfirm(false);
+    focusSearch();
+  }
+
+  /** Estimasi nominal cepat: uang pas, lalu pembulatan ke atas kelipatan
+   * Rp 50rb terdekat (2 opsi berikutnya) — pola umum kasir Indonesia. */
+  function getQuickCashAmounts(amount: number): number[] {
+    if (amount <= 0) return [];
+    const step = 50000;
+    const roundedUp = Math.ceil(amount / step) * step;
+    const first = roundedUp === amount ? roundedUp + step : roundedUp;
+    return [amount, first, first + step];
+  }
+
   function resetPaymentState() {
     setDiscountAmount(0);
     setAmountPaid(0);
@@ -211,6 +267,7 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
     resetPaymentState();
     setIdempotencyKey(generateIdempotencyKey());
     setSuccess(null);
+    focusSearch();
   }
 
   function holdCurrentCart() {
@@ -223,6 +280,7 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
     setCart([]);
     resetPaymentState();
     setIdempotencyKey(generateIdempotencyKey());
+    focusSearch();
   }
 
   function resumeHeldCart(held: HeldCart) {
@@ -385,13 +443,18 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
           <input
             ref={searchInputRef}
             value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
+            onChange={(e) => {
+              setSearchInput(e.target.value);
+              setSearchHint(null);
+            }}
             onKeyDown={handleSearchKeyDown}
-            placeholder="Cari nama produk, no. part, atau scan barcode…"
+            placeholder="Cari nama produk, no. part, atau scan barcode… (Esc untuk hapus)"
             className="field-input w-full pl-9"
             autoFocus
           />
         </div>
+
+        {searchHint && <p className="-mt-2 mb-3 text-xs text-slate-500">{searchHint}</p>}
 
         <div className="grid flex-1 grid-cols-2 gap-3 overflow-y-auto sm:grid-cols-3 xl:grid-cols-4">
           {isSearching && products.length === 0 && (
@@ -405,7 +468,11 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
           {products.map((p) => (
             <button
               key={p.id}
-              onClick={() => addToCart(p)}
+              onClick={() => {
+                addToCart(p);
+                setSearchHint(null);
+                focusSearch();
+              }}
               disabled={p.isOutOfStock}
               className="card flex flex-col items-start gap-1 p-3 text-left transition-colors hover:border-brand-300 hover:bg-brand-50/40 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-slate-200 disabled:hover:bg-white"
             >
@@ -432,12 +499,20 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
             <ShoppingCart size={16} /> Keranjang ({cart.length})
           </h2>
           {cart.length > 0 && (
-            <button
-              onClick={holdCurrentCart}
-              className="flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-700"
-            >
-              <PauseCircle size={14} /> Tahan
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowClearCartConfirm(true)}
+                className="flex items-center gap-1 text-xs font-medium text-red-500 hover:text-red-700"
+              >
+                <Eraser size={14} /> Kosongkan
+              </button>
+              <button
+                onClick={holdCurrentCart}
+                className="flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-700"
+              >
+                <PauseCircle size={14} /> Tahan
+              </button>
+            </div>
           )}
         </div>
 
@@ -458,7 +533,25 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
               >
                 <Minus size={13} />
               </button>
-              <span className="w-6 text-center text-sm font-medium text-slate-900">{line.quantity}</span>
+              <input
+                // key bikin input remount tiap quantity berubah dari LUAR
+                // (tombol +/-, atau clamp) — supaya defaultValue ke-refresh.
+                // Uncontrolled sengaja: kalau controlled & di-clamp tiap
+                // keystroke, ngosongin field buat ganti angka (mis. "5" →
+                // "24") akan sempat lewat quantity=0 dan baris ke-hapus
+                // padahal user belum selesai ngetik.
+                key={line.quantity}
+                type="number"
+                min={1}
+                max={line.availableQuantity}
+                defaultValue={line.quantity}
+                onBlur={(e) => updateQuantity(line.productId, Number(e.target.value) || 0)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                }}
+                className="w-12 rounded-md border border-slate-200 py-1 text-center text-sm font-medium text-slate-900 focus:border-brand-400 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                aria-label={`Kuantitas ${line.name}`}
+              />
               <button
                 onClick={() => updateQuantity(line.productId, line.quantity + 1)}
                 disabled={line.quantity >= line.availableQuantity}
@@ -524,6 +617,20 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
                 onChange={(e) => setAmountPaid(Number(e.target.value) || 0)}
                 className="field-input mt-1"
               />
+              {total > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {getQuickCashAmounts(total).map((amt) => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => setAmountPaid(amt)}
+                      className="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:border-brand-300 hover:bg-brand-50/40 hover:text-brand-700"
+                    >
+                      {formatRupiah(amt)}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -567,6 +674,7 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
                 ? `Catat Piutang ${formatRupiah(total)}`
                 : `Bayar ${formatRupiah(total)}`}
           </button>
+          <p className="text-center text-[11px] text-slate-400">Tekan F9 untuk bayar cepat</p>
         </div>
       </div>
 
@@ -576,6 +684,16 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
           currentShift={currentShift}
           onClose={() => setShowShiftPanel(false)}
           onChanged={refreshShift}
+        />
+      )}
+
+      {showClearCartConfirm && (
+        <ConfirmDialog
+          title="Kosongkan keranjang?"
+          message={`${cart.length} item di keranjang akan dihapus. Aksi ini tidak bisa dibatalkan.`}
+          confirmLabel="Ya, kosongkan"
+          onConfirm={clearCart}
+          onCancel={() => setShowClearCartConfirm(false)}
         />
       )}
     </div>
@@ -841,7 +959,7 @@ function ShiftPanel({
           <h2 className="text-base font-semibold text-slate-900">
             {closedResult ? "Shift Ditutup (Z Report)" : currentShift ? "Shift Aktif" : "Buka Shift"}
           </h2>
-          <button onClick={onClose} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+          <button onClick={onClose} aria-label="Tutup" className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
             <X size={16} />
           </button>
         </div>
