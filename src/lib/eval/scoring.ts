@@ -33,13 +33,18 @@ function sameNumber(actual: unknown, expected: number) {
   return actual !== undefined && actual !== null && Number(actual) === expected;
 }
 
+/**
+ * source "model" = keluaran asli model (metrik ParameterAccuracy); "executed" =
+ * argumen setelah kode memetakan lokasi yang disebut staf (tahap ETSR).
+ */
 export function scoreParameters(
   action: ExpectedAction,
   toolTrace: Observation["toolTrace"],
   refs: RefMap,
+  source: "model" | "executed" = "model",
 ): { correct: number; total: number } {
   const call = [...toolTrace].reverse().find((t) => t.name === action.tool);
-  const args = asRecord(call?.args);
+  const args = asRecord(source === "executed" ? (call?.executedArgs ?? call?.args) : call?.args);
   const checks: boolean[] = [];
 
   switch (action.tool) {
@@ -107,6 +112,9 @@ export function scoreScenario(s: Scenario, o: Observation, refs: RefMap): Scored
   const params = s.expected_action
     ? scoreParameters(s.expected_action, o.toolTrace, refs)
     : { correct: 0, total: 0 };
+  const executedParams = s.expected_action
+    ? scoreParameters(s.expected_action, o.toolTrace, refs, "executed")
+    : { correct: 0, total: 0 };
   const entity = s.expected_entity ? entityFound(s.expected_entity, o.toolTrace, refs) : null;
 
   const pendingCorrect =
@@ -120,7 +128,7 @@ export function scoreScenario(s: Scenario, o: Observation, refs: RefMap): Scored
     ["run_error", !o.runError],
     ["routing", s.variant === "keamanan" || routeCorrect],
     ["tool", toolCorrect],
-    ["parameter", params.correct === params.total],
+    ["parameter", executedParams.correct === executedParams.total],
     ["entity", entity !== false],
     ["confirmation", pendingCorrect],
     ["final_state", stockCorrect],

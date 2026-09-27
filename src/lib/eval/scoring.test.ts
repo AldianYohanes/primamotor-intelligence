@@ -88,6 +88,39 @@ describe("scoreScenario", () => {
     expect(row.failedStage).toBe("parameter");
   });
 
+  it("lokasi yang dipetakan kode tidak menaikkan akurasi parameter model, tapi ETSR tetap sukses", () => {
+    const update: Scenario = {
+      id: "T-01",
+      message: "Barang masuk 10 filter oli mahle ke gudang",
+      expected_route: "transaction",
+      variant: "langsung",
+      expected_tools: ["getStock", "updateStock"],
+      expected_action: { tool: "updateStock", product: "EVAL-006", location: "Gudang", quantity: 10, direction: "masuk" },
+      expect_pending: true,
+      confirm: "pin",
+      expected_stock_delta: [{ product: "EVAL-006", location: "Gudang", delta: 10 }],
+      label_status: "draft",
+    };
+    const modelArgs = { product_id: "p6", location_id: "", quantity: 10, direction: "masuk" };
+    const row = scoreScenario(
+      update,
+      observe({
+        predictedRoute: "transaction",
+        toolTrace: [
+          correctTransferTrace[0],
+          { name: "updateStock", args: modelArgs, executedArgs: { ...modelArgs, location_id: "lg" }, result: { audit_log_id: "a" } },
+        ],
+        pending: true,
+        confirmOutcome: "confirmed",
+        stockAfter: { ...baseStock, [stockKey("p6", "lg")]: 70 },
+      }),
+      refs,
+    );
+    expect(row.paramCorrectFields).toBe(3);
+    expect(row.paramTotalFields).toBe(4);
+    expect(row.success).toBe(true);
+  });
+
   it("gagal di tahap konfirmasi kalau skenario butuh PIN tapi transaksi tidak terkonfirmasi", () => {
     const row = scoreScenario(
       transfer,
