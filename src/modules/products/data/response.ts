@@ -12,6 +12,12 @@ export interface ProductResponse {
   unit: string
   description: string | null
   min_threshold: number | null
+  // Dipakai Monitoring Agent (lihat app/api/cron/monitor/route.ts) untuk
+  // hitung reorder point — sebelumnya kolom ini sudah ada di DB & dipakai
+  // mappers.ts, tapi belum dideklarasikan di sini (gap type-safety, lihat
+  // TODO §"Gap lain" — ProductResponse belum punya lead_time_days/safety_stock).
+  lead_time_days: number | null
+  safety_stock: number | null
   unit_cost: number
   selling_price: number
   preferred_supplier_id: string | null
@@ -21,6 +27,8 @@ export interface ProductResponse {
   created_at: string
   updated_at: string
   suppliers: { name: string } | null
+  // §15.4 — hasil join product_aliases(alias) di GET list.
+  product_aliases: { alias: string }[]
 }
 
 export interface PaginatedResponse<T> {

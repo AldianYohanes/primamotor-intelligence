@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/src/lib/supabase/server";
 import { parsePagination, buildPaginatedResponse } from "@/src/lib/pagination";
 import { logger } from "@/src/lib/logging/logger";
+import { requireStaffRow } from "@/src/lib/auth/staff-context";
+import type { Permission } from "@/src/lib/auth/rbac";
 
 const productSchema = z.object({
   part_number: z.string().optional(),
@@ -11,6 +12,11 @@ const productSchema = z.object({
   unit: z.string().default("pcs"),
   description: z.string().optional(),
   min_threshold: z.number().int().min(0).default(0),
+  // Dipakai Monitoring Agent (app/api/cron/monitor/route.ts) untuk hitung
+  // reorder point per produk — sebelumnya cuma bisa di-set lewat DB langsung,
+  // sekarang settable staf lewat form produk (lihat modules/products).
+  lead_time_days: z.number().int().min(0).max(365).optional(),
+  safety_stock: z.number().int().min(0).optional(),
   unit_cost: z.number().min(0).default(0),
   selling_price: z.number().min(0).default(0),
   preferred_supplier_id: z.string().uuid().optional(),
@@ -20,29 +26,8 @@ const productSchema = z.object({
   warranty_days: z.number().int().min(0).max(3650).optional(),
 });
 
-async function requireStaff() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user)
-    return {
-      error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
-    } as const;
-  const { data: staffRow } = await supabase
-    .from("staff")
-    .select("id, business_id, role")
-    .eq("auth_user_id", user.id)
-    .single();
-  if (!staffRow)
-    return {
-      error: NextResponse.json(
-        { error: "Akun staf tidak ditemukan" },
-        { status: 403 },
-      ),
-    } as const;
-  return { supabase, staffRow } as const;
-}
+// Otorisasi terpusat (src/lib/auth/staff-context.ts); business_id = tenant aktif.
+const requireStaff = (permission: Permission = "portal.access") => requireStaffRow(permission);
 
 // Whitelist kolom yang boleh disortir — mencegah nama kolom sembarangan diteruskan
 // mentah-mentah ke query builder Supabase (bukan cuma soal SQL injection, tapi juga
@@ -84,7 +69,10 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from("products")
-    .select("*, suppliers(name)", { count: "exact" })
+    // §15.4 — join product_aliases supaya form edit tahu alias yang sudah ada
+    // tanpa request terpisah per produk (list ini sudah di-paginate, jumlah
+    // baris per halaman kecil).
+    .select("*, suppliers(name), product_aliases(alias)", { count: "exact" })
     .order(sortBy, { ascending: sortDir === "asc" })
     .range(from, to);
 

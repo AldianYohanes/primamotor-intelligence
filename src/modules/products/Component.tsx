@@ -9,11 +9,8 @@ import { usePostProduct } from "./hooks/use-post-product";
 import { usePatchProduct } from "./hooks/use-patch-product";
 import { useGetSupplierOptions } from "./hooks/use-get-supplier-options";
 import { createProductColumns } from "./data/coldef";
-import type {
-  ProductListParams,
-  ProductStatusFilter,
-  ProductSortableColumn,
-} from "./data/params";
+import type { ProductListParams, ProductStatusFilter, ProductSortableColumn } from "./data/params";
+import type { ProductListResponse } from "./data/response";
 import type { ProductViewModel } from "./mappers/mappers";
 
 const PAGE_SIZE = 20;
@@ -24,6 +21,10 @@ const emptyForm = {
   category: "",
   unit: "pcs",
   min_threshold: 0,
+  // ROP (reorder point) params dipakai Monitoring Agent — string kosong =
+  // belum diisi (dikirim undefined saat submit), sama pola dengan warranty_days.
+  lead_time_days: "",
+  safety_stock: "",
   unit_cost: 0,
   selling_price: 0,
   preferred_supplier_id: "",
@@ -109,10 +110,15 @@ export function ProductsModule() {
       category: raw.category ?? "",
       unit: raw.unit,
       min_threshold: raw.min_threshold ?? 0,
+      lead_time_days:
+        raw.lead_time_days != null ? String(raw.lead_time_days) : "",
+      safety_stock: raw.safety_stock != null ? String(raw.safety_stock) : "",
       unit_cost: raw.unit_cost,
       selling_price: raw.selling_price,
       preferred_supplier_id: raw.preferred_supplier_id ?? "",
-      aliases: "", // PATCH tidak mendukung update aliases (lihat route [id]) — sengaja dikosongkan, bukan bug
+      // §15.4 — sekarang PATCH mendukung replace aliases, jadi form edit
+      // diisi dari alias yang sudah ada (bukan dikosongkan lagi).
+      aliases: product.aliases.join(", "),
       warranty_days: raw.warranty_days != null ? String(raw.warranty_days) : "",
     });
     setFormError(null);
@@ -131,6 +137,53 @@ export function ProductsModule() {
     setDeactivatingProduct(product);
   }
 
+  async function toggleActiveOptimistic(id: string, nextActive: boolean) {
+    // §15.4 — optimistic update: toggle Aktif/Nonaktif ini yang paling sering
+    // diklik berulang kali (tiap kali admin bersihkan katalog), jadi paling
+    // kerasa nunggu round-trip-nya kalau tidak optimistic. `updatingId` tetap
+    // dipertahankan sebagai indikator kecil "masih proses di background"
+    // (§11: loading state eksplisit), TAPI baris tabel sudah berubah status
+    // duluan tanpa nunggu network — bukan pengganti indikator, cuma tidak lagi
+    // memblokir tampilan.
+    setUpdatingId(id);
+    try {
+      await refresh(
+        async (current) => {
+          const { product: updated } = await setProductActive(id, nextActive);
+          if (!current) return current;
+          return {
+            ...current,
+            data: current.data.map((p) => (p.id === id ? updated : p)),
+          };
+        },
+        {
+          // Non-null assertion sengaja: fungsi ini cuma bisa terpanggil dari
+          // baris tabel yang sudah RENDER (artinya `products`/cache SWR-nya
+          // sudah pasti terisi) — kalau `current` betulan undefined di sini,
+          // itu justru kondisi yang seharusnya mustahil, bukan kasus normal
+          // yang perlu ditangani diam-diam.
+          optimisticData: (current: ProductListResponse | undefined) => ({
+            ...current!,
+            data: current!.data.map((p) =>
+              p.id === id ? { ...p, is_active: nextActive } : p,
+            ),
+          }),
+          // Hasil network call di atas SUDAH jadi data final yang di-`return`
+          // ke cache — revalidate ulang cuma buang-buang satu request lagi
+          // tanpa manfaat tambahan.
+          revalidate: false,
+          rollbackOnError: true,
+        },
+      );
+    } catch (err) {
+      // rollbackOnError sudah otomatis balikin cache ke kondisi semula —
+      // di sini cuma perlu kasih tahu, bukan manual revert apapun.
+      console.error(err);
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
   async function handleToggleActive(product: ProductViewModel) {
     // Menonaktifkan itu destruktif (produk hilang dari daftar aktif & tidak
     // bisa dipilih staf lewat chat/transaksi) — minta konfirmasi eksplisit.
@@ -139,27 +192,14 @@ export function ProductsModule() {
       requestDeactivate(product);
       return;
     }
-    setUpdatingId(product.id);
-    try {
-      await setProductActive(product.id, true);
-      await refresh();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setUpdatingId(null);
-    }
+    await toggleActiveOptimistic(product.id, true);
   }
 
   async function confirmDeactivate() {
     if (!deactivatingProduct) return;
-    setUpdatingId(deactivatingProduct.id);
-    try {
-      await setProductActive(deactivatingProduct.id, false);
-      await refresh();
-      setDeactivatingProduct(null);
-    } finally {
-      setUpdatingId(null);
-    }
+    const id = deactivatingProduct.id;
+    setDeactivatingProduct(null); // tutup dialog dulu — jangan nunggu network buat UI ini responsif
+    await toggleActiveOptimistic(id, false);
   }
 
   const columns = useMemo(
@@ -184,14 +224,30 @@ export function ProductsModule() {
           category: form.category || undefined,
           unit: form.unit,
           min_threshold: form.min_threshold,
+          lead_time_days:
+            form.lead_time_days === "" ? undefined : Number(form.lead_time_days),
+          safety_stock:
+            form.safety_stock === "" ? undefined : Number(form.safety_stock),
           unit_cost: form.unit_cost,
           selling_price: form.selling_price,
           preferred_supplier_id: form.preferred_supplier_id || undefined,
           warranty_days: form.warranty_days === "" ? undefined : Number(form.warranty_days),
+          // §15.4 — selalu dikirim (bukan `|| undefined`) supaya mengosongkan
+          // field ini di form lalu submit benar-benar menghapus semua alias,
+          // bukan diam-diam diabaikan (array kosong ≠ undefined di PATCH).
+          aliases: form.aliases
+            .split(",")
+            .map((a) => a.trim())
+            .filter(Boolean),
         });
       } else {
         await createProduct({
           ...form,
+          min_threshold: form.min_threshold,
+          lead_time_days:
+            form.lead_time_days === "" ? undefined : Number(form.lead_time_days),
+          safety_stock:
+            form.safety_stock === "" ? undefined : Number(form.safety_stock),
           preferred_supplier_id: form.preferred_supplier_id || undefined,
           warranty_days: form.warranty_days === "" ? undefined : Number(form.warranty_days),
           aliases: form.aliases
@@ -258,6 +314,20 @@ export function ProductsModule() {
             onChange={(v) => setForm({ ...form, min_threshold: Number(v) })}
           />
           <Input
+            label="Lead Time (hari, opsional)"
+            type="number"
+            value={form.lead_time_days}
+            onChange={(v) => setForm({ ...form, lead_time_days: v })}
+            placeholder="Dipakai Monitoring Agent utk hitung reorder point"
+          />
+          <Input
+            label="Safety Stock (opsional)"
+            type="number"
+            value={form.safety_stock}
+            onChange={(v) => setForm({ ...form, safety_stock: v })}
+            placeholder="Dipakai Monitoring Agent utk hitung reorder point"
+          />
+          <Input
             label="Harga Beli"
             type="number"
             value={String(form.unit_cost)}
@@ -294,14 +364,12 @@ export function ProductsModule() {
               ))}
             </select>
           </div>
-          {formMode === "create" && (
-            <Input
-              label="Alias (pisah koma)"
-              value={form.aliases}
-              onChange={(v) => setForm({ ...form, aliases: v })}
-              placeholder="karbu, karburator"
-            />
-          )}
+          <Input
+            label="Alias (pisah koma)"
+            value={form.aliases}
+            onChange={(v) => setForm({ ...form, aliases: v })}
+            placeholder="karbu, karburator"
+          />
           {formError && (
             <p className="text-sm text-red-600 sm:col-span-2">{formError}</p>
           )}

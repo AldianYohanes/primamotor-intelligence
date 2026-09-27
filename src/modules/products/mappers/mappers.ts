@@ -24,6 +24,7 @@ export interface ProductViewModel {
   isActive: boolean
   statusLabel: string
   createdAtFormatted: string
+  aliases: string[]
   raw: ProductResponse // dibawa serta untuk kebutuhan edit form (butuh field asli, belum diformat)
 }
 
@@ -35,8 +36,8 @@ export function mapProductResponseToViewModel(product: ProductResponse): Product
     category: product.category ?? '-',
     unit: product.unit,
     minThreshold: product.min_threshold ?? 0,
-    leadTimeDays: product.lead_time_days,
-    safetyStock: product.safety_stock,
+    leadTimeDays: product.lead_time_days ?? 0,
+    safetyStock: product.safety_stock ?? 0,
     unitCost: product.unit_cost,
     unitCostFormatted: formatRupiah(product.unit_cost),
     sellingPrice: product.selling_price,
@@ -45,6 +46,7 @@ export function mapProductResponseToViewModel(product: ProductResponse): Product
     isActive: product.is_active,
     statusLabel: product.is_active ? 'Aktif' : 'Nonaktif',
     createdAtFormatted: formatDateID(product.created_at),
+    aliases: (product.product_aliases ?? []).map((a) => a.alias),
     raw: product,
   }
 }
