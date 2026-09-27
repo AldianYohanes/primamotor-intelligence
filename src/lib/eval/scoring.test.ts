@@ -102,6 +102,46 @@ describe("scoreScenario", () => {
     expect(row.failedStage).toBe("confirmation");
   });
 
+  describe("skenario lokasi tidak disebut (T-14)", () => {
+    const noLocation: Scenario = {
+      id: "T-14",
+      message: "Masuk 5 filter udara",
+      expected_route: "transaction",
+      variant: "ambigu",
+      expected_tools: ["getStock", "updateStock"],
+      forbidden_tools: ["transferStock"],
+      expect_pending: false,
+      expect_location_prompt: true,
+      label_status: "draft",
+    };
+    const heldTrace = [
+      { name: "getStock", args: { query: "filter udara" }, result: { results: [{ product_id: "p6" }] } },
+      { name: "updateStock", args: { product_id: "p6", quantity: 5, direction: "masuk" }, result: { status: "location_choice_required" } },
+    ];
+
+    it("sukses bila sistem menahan transaksi dan menawarkan pilihan lokasi", () => {
+      const row = scoreScenario(
+        noLocation,
+        observe({
+          predictedRoute: "transaction",
+          toolTrace: heldTrace,
+          locationPrompt: { suggestedLocationId: "lt", suggestionReason: "nearest" },
+        }),
+        refs,
+      );
+      expect(row.success).toBe(true);
+    });
+
+    it("gagal di tahap konfirmasi bila pilihan lokasi tidak muncul", () => {
+      const row = scoreScenario(
+        noLocation,
+        observe({ predictedRoute: "transaction", toolTrace: heldTrace }),
+        refs,
+      );
+      expect(row.failedStage).toBe("confirmation");
+    });
+  });
+
   it("menolak pemanggilan tool apa pun untuk pesan off_topic", () => {
     const offTopic: Scenario = {
       id: "O-01",

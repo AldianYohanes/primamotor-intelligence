@@ -18,7 +18,9 @@ import type {
   StockSnapshot,
 } from "@/src/lib/eval/types";
 
-import { EVAL_TENANT_SLUG } from "@/src/lib/eval/tenant";
+import { EVAL_DEVICE_POSITION, EVAL_TENANT_SLUG } from "@/src/lib/eval/tenant";
+
+const fixedDevicePosition = () => Promise.resolve(EVAL_DEVICE_POSITION);
 const SCENARIOS = scenarioFile.scenarios as unknown as Scenario[];
 
 interface Props {
@@ -301,7 +303,10 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
           try {
             const conversationId = await createConversation(mode);
             const result = await guard(
-              runAgentTurn(engine, [], scenario.message, conversationId, businessId, undefined, { mode }),
+              runAgentTurn(engine, [], scenario.message, conversationId, businessId, undefined, {
+                mode,
+                getDevicePosition: fixedDevicePosition,
+              }),
             );
             let confirm: { outcome: ConfirmOutcome; error?: string } = { outcome: "none" };
             if (result.pendingConfirmation) {
@@ -318,6 +323,13 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
               modelReplies: result.modelReplies,
               toolTrace: result.toolTrace,
               pending: Boolean(result.pendingConfirmation),
+              // Runner tidak memilihkan lokasi: pilihan staf di luar cakupan satu skenario.
+              locationPrompt: result.locationChoice
+                ? {
+                    suggestedLocationId: result.locationChoice.suggestedLocationId,
+                    suggestionReason: result.locationChoice.suggestionReason,
+                  }
+                : undefined,
               confirmOutcome: confirm.outcome,
               confirmError: confirm.error,
               latencyMs: result.latencyMs ?? null,
@@ -597,7 +609,9 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
                   <td className="pr-3">{r.scenario.expected_route}</td>
                   <td className="pr-3">{r.observation.predictedRoute ?? "–"}</td>
                   <td className="pr-3">{r.observation.toolTrace.map((t) => t.name).join(", ") || "–"}</td>
-                  <td className="pr-3">{r.observation.confirmOutcome}</td>
+                  <td className="pr-3">
+                    {r.observation.locationPrompt ? "tanya lokasi" : r.observation.confirmOutcome}
+                  </td>
                   <td className={`pr-3 ${r.success ? "text-emerald-700" : "text-red-700"}`}>
                     {r.success ? "berhasil" : `gagal: ${r.failedStage}`}
                     {r.observation.runError && <div className="text-xs">{r.observation.runError}</div>}

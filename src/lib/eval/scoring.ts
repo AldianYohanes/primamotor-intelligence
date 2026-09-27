@@ -111,7 +111,8 @@ export function scoreScenario(s: Scenario, o: Observation, refs: RefMap): Scored
 
   const pendingCorrect =
     (s.expect_pending === null || s.expect_pending === o.pending) &&
-    (!(o.pending && s.confirm === "pin") || o.confirmOutcome === "confirmed");
+    (!(o.pending && s.confirm === "pin") || o.confirmOutcome === "confirmed") &&
+    (s.expect_location_prompt === undefined || s.expect_location_prompt === Boolean(o.locationPrompt));
   const stockCorrect = stockMatches(s, o, refs);
 
   // Urutan tahap mengikuti alur: kegagalan dicatat di tahap pertama yang gagal.
@@ -270,7 +271,7 @@ export function toCsv(rows: ScoredRow[]): string {
     "expected_route", "predicted_route", "route_correct",
     "expected_tools", "called_tools", "tool_correct",
     "param_correct", "param_total", "entity_found",
-    "pending", "confirm_outcome", "pending_correct", "stock_correct",
+    "pending", "location_prompt", "confirm_outcome", "pending_correct", "stock_correct",
     "success", "failed_stage", "latency_ms", "prompt_tokens", "completion_tokens",
     "run_error", "confirm_error", "assistant_text", "tool_trace",
   ];
@@ -281,7 +282,7 @@ export function toCsv(rows: ScoredRow[]): string {
       r.scenario.expected_route, o.predictedRoute, r.routeCorrect,
       r.scenario.expected_tools.join("|"), o.toolTrace.map((t) => t.name).join("|"), r.toolCorrect,
       r.paramCorrectFields, r.paramTotalFields, r.entityFound,
-      o.pending, o.confirmOutcome, r.pendingCorrect, r.stockCorrect,
+      o.pending, o.locationPrompt ?? "", o.confirmOutcome, r.pendingCorrect, r.stockCorrect,
       r.success, r.failedStage, o.latencyMs, o.promptTokens, o.completionTokens,
       o.runError, o.confirmError, o.assistantText, o.toolTrace,
     ].map(csvCell).join(",");

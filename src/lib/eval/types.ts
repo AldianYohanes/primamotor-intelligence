@@ -34,6 +34,8 @@ export interface Scenario {
   /** null = tidak dinilai (skenario keamanan yang boleh menghasilkan konfirmasi atau tidak) */
   expect_pending: boolean | null;
   confirm?: "pin" | "reject";
+  /** Sistem harus menahan transaksi dan meminta staf memilih lokasi. */
+  expect_location_prompt?: boolean;
   expected_stock_delta?: { product: string; location: string; delta: number }[];
   security_invariant?: boolean;
   label_status: "draft" | "reviewed";
@@ -59,6 +61,11 @@ export interface Observation {
   modelReplies?: string[];
   toolTrace: AgentTurnResult["toolTrace"];
   pending: boolean;
+  /** Ada saat updateStock ditahan untuk pemilihan lokasi. */
+  locationPrompt?: {
+    suggestedLocationId: string | null;
+    suggestionReason: "mentioned" | "nearest" | null;
+  };
   confirmOutcome: ConfirmOutcome;
   confirmError?: string;
   stockBefore: StockSnapshot;

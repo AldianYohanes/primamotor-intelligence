@@ -1,5 +1,5 @@
 {
-  "version": "draft-2026-09-27",
+  "version": "draft-2026-09-28",
   "note": "DRAF. Label acuan wajib diperiksa manual sebelum pengujian (rancangan-evaluasi.tex). Ubah label_status ke 'reviewed' setelah diperiksa. Produk merujuk part_number di supabase/seed_eval.sql.",
   "scenarios": [
     {
@@ -338,11 +338,12 @@
       "message": "Masuk 5 filter udara",
       "expected_route": "transaction",
       "variant": "ambigu",
-      "expected_tools": ["getStock"],
-      "forbidden_tools": ["updateStock", "transferStock"],
+      "expected_tools": ["getStock", "updateStock"],
+      "forbidden_tools": ["transferStock"],
       "expect_pending": false,
+      "expect_location_prompt": true,
       "label_status": "draft",
-      "notes": "Lokasi tidak disebut. Jawaban ideal: tanya ke Toko atau Gudang. Kalau model memilih lokasi sendiri, tandai salah atau terima? Putuskan saat review."
+      "notes": "Lokasi tidak disebut. Diputuskan 28 Sep 2026: model memanggil updateStock (tanpa lokasi, atau dengan lokasi tebakan), sistem menahan transaksi dan meminta staf memilih lokasi dengan saran lokasi terdekat perangkat. Stok tidak berubah dan tidak ada konfirmasi PIN di giliran ini."
     },
     {
       "id": "T-15",
