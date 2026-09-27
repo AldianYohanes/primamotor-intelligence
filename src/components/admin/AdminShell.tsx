@@ -14,15 +14,15 @@ import {
   BarChart3,
   History,
   Car,
-  Menu,
   X,
-  MessageSquare,
   Receipt,
-  ShoppingCart,
   Wallet,
   Clock,
+  Building2,
+  AlertTriangle,
 } from "lucide-react";
-import { LogoutButton } from "./LogoutButton";
+import { can, type Role } from "@/src/lib/auth/rbac";
+import { AdminHeader } from "./AdminHeader";
 
 const NAV = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
@@ -40,15 +40,22 @@ const NAV = [
   { href: "/admin/car-models", label: "Model Mobil", icon: Car },
 ] as const;
 
+const TENANTS_PATH = "/admin/tenants";
+
 interface Props {
-  businessName?: string | null;
+  role: Role;
   staffName?: string | null;
+  tenantName: string;
+  /** Super admin sedang bekerja di tenant yang bukan miliknya. */
+  isForeignTenant: boolean;
   children: React.ReactNode;
 }
 
-export function AdminShell({ businessName, staffName, children }: Props) {
+export function AdminShell({ role, staffName, tenantName, isForeignTenant, children }: Props) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const canSwitchTenant = can(role, "tenant.switch");
+  const businessName = tenantName;
 
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname === href || pathname.startsWith(href + "/");
@@ -61,6 +68,7 @@ export function AdminShell({ businessName, staffName, children }: Props) {
           businessName={businessName}
           staffName={staffName}
           isActive={isActive}
+          canSwitchTenant={canSwitchTenant}
         />
       </aside>
 
@@ -85,6 +93,7 @@ export function AdminShell({ businessName, staffName, children }: Props) {
               businessName={businessName}
               staffName={staffName}
               isActive={isActive}
+              canSwitchTenant={canSwitchTenant}
               onNavigate={() => setMobileOpen(false)}
             />
           </aside>
@@ -92,38 +101,31 @@ export function AdminShell({ businessName, staffName, children }: Props) {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Topbar — mobile only */}
-        <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 sm:hidden">
-          <button
-            onClick={() => setMobileOpen(true)}
-            className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100"
-            aria-label="Buka menu"
-          >
-            <Menu size={20} />
-          </button>
-          <span className="text-sm font-semibold text-slate-900">
-            {businessName ?? "Prima Motor Volvo"}
-          </span>
-          <div className="flex items-center gap-1">
-            <Link
-              href="/pos"
-              className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100"
-              aria-label="Buka kasir"
-            >
-              <ShoppingCart size={20} />
-            </Link>
-            <Link
-              href="/chat"
-              className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100"
-              aria-label="Buka asisten chat"
-            >
-              <MessageSquare size={20} />
+        <AdminHeader businessName={businessName} onOpenMenu={() => setMobileOpen(true)} />
+        {/* Bar atas desktop: tempat ModuleDock (fixed kanan atas) supaya tidak menimpa tombol aksi halaman. */}
+        <div className="pr-dock hidden h-[52px] shrink-0 items-center border-b border-slate-200 bg-white pl-8 sm:flex">
+          <p className="truncate text-sm text-slate-500">
+            Portal Admin · <span className="font-medium text-slate-900">{businessName}</span>
+          </p>
+        </div>
+
+        {isForeignTenant && (
+          <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 sm:px-8">
+            <AlertTriangle size={14} className="shrink-0" />
+            <span className="min-w-0 flex-1">
+              Anda sedang mengelola <b>{tenantName}</b> sebagai super admin. Setiap perubahan
+              tercatat atas nama Anda.
+            </span>
+            <Link href={TENANTS_PATH} className="shrink-0 font-medium underline">
+              Ganti tenant
             </Link>
           </div>
-        </header>
+        )}
 
         <main className="flex-1 overflow-y-auto p-4 sm:p-8">
-          <div className="mx-auto w-full max-w-6xl">{children}</div>
+          <div className="mx-auto w-full max-w-6xl">
+            {children}
+          </div>
         </main>
       </div>
     </div>
@@ -134,13 +136,18 @@ function SidebarContent({
   businessName,
   staffName,
   isActive,
+  canSwitchTenant,
   onNavigate,
 }: {
   businessName?: string | null;
   staffName?: string | null;
   isActive: (href: string, exact?: boolean) => boolean;
+  canSwitchTenant: boolean;
   onNavigate?: () => void;
 }) {
+  const nav = canSwitchTenant
+    ? [{ href: TENANTS_PATH, label: "Tenant", icon: Building2, exact: false }, ...NAV]
+    : NAV;
   return (
     <>
       <div className="flex items-center gap-2.5 border-b border-slate-100 px-4 py-4">
@@ -156,8 +163,8 @@ function SidebarContent({
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-2.5 py-3">
-        {NAV.map((item) => {
-          const active = isActive(item.href, item.exact);
+        {nav.map((item) => {
+          const active = isActive(item.href, "exact" in item ? item.exact : false);
           const Icon = item.icon;
           return (
             <Link
@@ -177,27 +184,6 @@ function SidebarContent({
         })}
       </nav>
 
-      <div className="space-y-1 border-t border-slate-100 px-2.5 py-3">
-        <Link
-          href="/pos"
-          onClick={onNavigate}
-          className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium text-brand-700 transition-colors hover:bg-brand-50"
-        >
-          <ShoppingCart size={16} strokeWidth={2} className="shrink-0" />
-          Buka Kasir
-        </Link>
-        <Link
-          href="/chat"
-          onClick={onNavigate}
-          className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
-        >
-          <MessageSquare size={16} strokeWidth={2} className="shrink-0" />
-          Asisten Chat
-        </Link>
-        <div className="px-2.5 pt-1">
-          <LogoutButton />
-        </div>
-      </div>
     </>
   );
 }

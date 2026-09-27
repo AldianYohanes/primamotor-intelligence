@@ -247,3 +247,71 @@ h6 {
     border-color: var(--color-brand-200);
   }
 }
+
+/**
+ * Animasi layar muat model: roda gigi berputar + bar tak tentu. Murni CSS
+ * transform (di-GPU-kan browser), jadi tetap ringan di HP selagi model diunduh.
+ */
+@keyframes gear-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes gear-spin-reverse {
+  to {
+    transform: rotate(-360deg);
+  }
+}
+@keyframes indeterminate-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@layer utilities {
+  .animate-gear {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: gear-spin 6s linear infinite;
+  }
+  .animate-gear-reverse {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: gear-spin-reverse 4s linear infinite;
+  }
+  .animate-gear-paused {
+    animation-play-state: paused;
+  }
+  .animate-indeterminate {
+    animation: indeterminate-slide 1.4s ease-in-out infinite;
+  }
+  .animate-fade-in-up {
+    animation: fade-in-up 0.3s ease-out both;
+  }
+  /* Sisakan ruang untuk ModuleDock (fixed kanan atas); --dock-w diisi dock. */
+  .pr-dock {
+    padding-right: calc(var(--dock-w, 0px) + 1rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-gear,
+  .animate-gear-reverse,
+  .animate-indeterminate,
+  .animate-fade-in-up {
+    animation: none;
+  }
+}

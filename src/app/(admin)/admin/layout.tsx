@@ -1,31 +1,27 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/src/lib/supabase/server";
+import { requirePage } from "@/src/lib/auth/staff-context";
 import { AdminShell } from "@/src/components/admin/AdminShell";
+import { AppDock } from "@/src/components/nav/AppDock";
 
 export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: staffRow } = await supabase
-    .from("staff")
-    .select("full_name, role, businesses(name)")
-    .eq("auth_user_id", user.id)
-    .single();
+  // Kasir (role staff) tidak punya akses Portal Admin (naskah bab 3) dan
+  // diarahkan ke menu.
+  const ctx = await requirePage("portal.access");
 
   return (
-    <AdminShell
-      // @ts-expect-error -- bentuk join Supabase
-      businessName={staffRow?.businesses?.name}
-      staffName={staffRow?.full_name}
-    >
-      {children}
-    </AdminShell>
+    <>
+      <AdminShell
+        role={ctx.staff.role}
+        staffName={ctx.staff.fullName}
+        tenantName={ctx.tenant.name}
+        isForeignTenant={ctx.isForeignTenant}
+      >
+        {children}
+      </AdminShell>
+      <AppDock />
+    </>
   );
 }
