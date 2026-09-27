@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/src/lib/supabase/server";
 import { createAdminClient } from "@/src/lib/supabase/admin";
 import { toSyntheticEmail, isValidPin } from "@/src/lib/auth/synthetic-email";
 import { parsePagination, buildPaginatedResponse } from "@/src/lib/pagination";
 import { logger } from "@/src/lib/logging/logger";
+import { requireStaffRow } from "@/src/lib/auth/staff-context";
+import type { Permission } from "@/src/lib/auth/rbac";
 
 const createStaffSchema = z.object({
   username: z
@@ -19,38 +20,8 @@ const createStaffSchema = z.object({
   pin: z.string().min(6),
 });
 
-async function requireFullAccessStaff() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user)
-    return {
-      error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
-    } as const;
-
-  const { data: staffRow } = await supabase
-    .from("staff")
-    .select("id, business_id, role, businesses(slug)")
-    .eq("auth_user_id", user.id)
-    .single();
-  if (!staffRow)
-    return {
-      error: NextResponse.json(
-        { error: "Akun staf tidak ditemukan" },
-        { status: 403 },
-      ),
-    } as const;
-  if (staffRow.role !== "owner" && staffRow.role !== "admin") {
-    return {
-      error: NextResponse.json(
-        { error: "Hanya owner/admin yang boleh mengelola staf" },
-        { status: 403 },
-      ),
-    } as const;
-  }
-  return { supabase, staffRow } as const;
-}
+// Otorisasi terpusat (src/lib/auth/staff-context.ts); business_id = tenant aktif.
+const requireFullAccessStaff = (permission: Permission = "staff.manage") => requireStaffRow(permission);
 
 export async function GET(req: NextRequest) {
   const ctx = await requireFullAccessStaff();
@@ -99,8 +70,7 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
 
-  // @ts-expect-error -- bentuk join Supabase (businesses adalah object tunggal di relasi many-to-one)
-  const businessSlug: string = staffRow.businesses.slug;
+  const businessSlug = staffRow.business_slug;
 
   const admin = createAdminClient();
   const email = toSyntheticEmail(businessSlug, username);

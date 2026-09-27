@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/src/lib/supabase/server";
+import { requireApi } from "@/src/lib/auth/staff-context";
 import { logger } from "@/src/lib/logging/logger";
 
 const subscribeSchema = z.object({
@@ -9,23 +9,11 @@ const subscribeSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { data: staffRow } = await supabase
-    .from("staff")
-    .select("id")
-    .eq("auth_user_id", user.id)
-    .single();
-  if (!staffRow)
-    return NextResponse.json(
-      { error: "Akun staf tidak ditemukan" },
-      { status: 403 },
-    );
+  // Langganan notifikasi melekat ke akun staf, bukan ke tenant aktif.
+  const auth = await requireApi(null, { requireTenant: false });
+  if (auth instanceof NextResponse) return auth;
+  const { supabase } = auth;
+  const staffRow = auth.staff;
 
   const parsed = subscribeSchema.safeParse(await req.json());
   if (!parsed.success) {
@@ -58,23 +46,11 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { data: staffRow } = await supabase
-    .from("staff")
-    .select("id")
-    .eq("auth_user_id", user.id)
-    .single();
-  if (!staffRow)
-    return NextResponse.json(
-      { error: "Akun staf tidak ditemukan" },
-      { status: 403 },
-    );
+  // Langganan notifikasi melekat ke akun staf, bukan ke tenant aktif.
+  const auth = await requireApi(null, { requireTenant: false });
+  if (auth instanceof NextResponse) return auth;
+  const { supabase } = auth;
+  const staffRow = auth.staff;
 
   const { endpoint } = await req.json();
   const { error } = await supabase

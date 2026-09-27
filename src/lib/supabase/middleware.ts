@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
-import type { Database } from "./database.types";
+import type { Database } from "@/src/lib/db/types";
 
 /**
  * Called from root middleware.ts on every request. Refreshes the auth
@@ -50,11 +50,30 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/auth") ||
     request.nextUrl.pathname.startsWith("/api/auth") ||
     request.nextUrl.pathname === "/manifest.json" ||
-    request.nextUrl.pathname === "/sw.js";
+    request.nextUrl.pathname === "/sw.js" ||
+    request.nextUrl.pathname.startsWith("/serwist/") ||
+    request.nextUrl.pathname === "/~offline";
 
   if (!user && !isPublicPath) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
+    // Kembali ke halaman asal setelah login (divalidasi safeRedirect di /login).
+    url.search = "";
+    url.searchParams.set("redirect", request.nextUrl.pathname + request.nextUrl.search);
+    return NextResponse.redirect(url);
+  }
+
+  // Sudah login tapi membuka halaman masuk/daftar: langsung ke menu. Kecuali
+  // ada ?error= dari requirePage (akun nonaktif dll.) yang perlu ditampilkan.
+  const pathname = request.nextUrl.pathname;
+  if (
+    user &&
+    (pathname === "/login" || pathname === "/signup") &&
+    !request.nextUrl.searchParams.has("error")
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/menu";
+    url.search = "";
     return NextResponse.redirect(url);
   }
 

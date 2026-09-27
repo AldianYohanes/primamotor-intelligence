@@ -1,7 +1,8 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { ArrowRight, Bell, PackageSearch } from "lucide-react";
-import { createClient } from "@/src/lib/supabase/server";
-import { TenantApprovalList } from "@/src/components/admin/TenantApprovalList";
+import { requirePage } from "@/src/lib/auth/staff-context";
+import { DashboardSummaryModule } from "@/src/modules/dashboard-summary/Component";
 
 const NOTIF_PAGE_SIZE = 10;
 
@@ -15,28 +16,23 @@ export default async function AdminDashboardPage({
   const from = (notifPage - 1) * NOTIF_PAGE_SIZE;
   const to = from + NOTIF_PAGE_SIZE - 1;
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const { data: staffRow } = await supabase
-    .from("staff")
-    .select("role")
-    .eq("auth_user_id", user!.id)
-    .single();
+  const { supabase, tenant } = await requirePage("portal.access");
 
   const [{ data: suggestions }, { data: notifications, count: notifCount }] =
     await Promise.all([
       supabase
         .from("reorder_suggestions")
         .select("*, products(name)")
+        // Filter tenant eksplisit: RLS mengizinkan super admin membaca semua
+        // tenant, jadi tanpa ini dashboard-nya mencampur data toko lain.
+        .eq("business_id", tenant.id)
         .eq("status", "pending")
         .order("created_at", { ascending: false })
         .limit(20),
       supabase
         .from("notifications")
         .select("*", { count: "exact" })
+        .eq("business_id", tenant.id)
         .order("created_at", { ascending: false })
         .range(from, to),
     ]);
@@ -57,6 +53,18 @@ export default async function AdminDashboardPage({
         </p>
       </div>
 
+      <Suspense
+        fallback={
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="card h-[76px] animate-pulse bg-slate-50" />
+            ))}
+          </div>
+        }
+      >
+        <DashboardSummaryModule />
+      </Suspense>
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <StatCard
           icon={PackageSearch}
@@ -72,8 +80,6 @@ export default async function AdminDashboardPage({
           tone="blue"
         />
       </div>
-
-      {staffRow?.role === "admin" && <TenantApprovalList />}
 
       <section>
         <div className="flex items-center justify-between">

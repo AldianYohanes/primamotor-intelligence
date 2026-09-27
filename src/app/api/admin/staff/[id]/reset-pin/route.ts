@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/src/lib/supabase/server";
+import { requireStaffRow } from "@/src/lib/auth/staff-context";
 import { createAdminClient } from "@/src/lib/supabase/admin";
 import { isValidPin } from "@/src/lib/auth/synthetic-email";
 import { logger } from "@/src/lib/logging/logger";
@@ -12,27 +12,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { data: requester } = await supabase
-    .from("staff")
-    .select("role")
-    .eq("auth_user_id", user.id)
-    .single();
-  if (
-    !requester ||
-    (requester.role !== "owner" && requester.role !== "admin")
-  ) {
-    return NextResponse.json(
-      { error: "Hanya owner/admin yang boleh mereset PIN" },
-      { status: 403 },
-    );
-  }
+  const auth = await requireStaffRow("staff.manage");
+  if ("error" in auth) return auth.error;
+  const { supabase, staffRow: requester } = auth;
 
   const parsed = resetSchema.safeParse(await req.json());
   if (!parsed.success || !isValidPin(parsed.data.new_pin)) {
@@ -42,17 +24,30 @@ export async function POST(
     );
   }
 
-  // Target staf harus di tenant yang sama — ditegakkan lewat RLS select di bawah (server client)
+  // Target staf harus di tenant yang sama — sebelumnya cuma ditegakkan lewat
+  // RLS select (sudah benar secara fungsional), sekarang ditambah scope
+  // eksplisit `.eq("business_id", ...)` untuk konsistensi dengan §10:
+  // defense-in-depth, jangan cuma andalkan RLS meski RLS-nya sudah benar.
   const { data: targetStaff } = await supabase
     .from("staff")
-    .select("id, auth_user_id")
+    .select("id, auth_user_id, role")
     .eq("id", id)
+    .eq("business_id", requester.business_id)
     .single();
   if (!targetStaff)
     return NextResponse.json(
       { error: "Staf tidak ditemukan" },
       { status: 404 },
     );
+  // PIN diganti lewat service_role, jadi trigger DB tidak ikut menjaga di sini.
+  // Tanpa cek ini owner di tenant tempat akun super admin terdaftar bisa
+  // mengganti PIN super admin lalu login sebagai super admin.
+  if (targetStaff.role === "admin" && requester.role !== "admin") {
+    return NextResponse.json(
+      { error: "PIN super admin hanya bisa diganti oleh super admin" },
+      { status: 403 },
+    );
+  }
 
   const admin = createAdminClient();
   const { error } = await admin.auth.admin.updateUserById(

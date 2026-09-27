@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/src/lib/supabase/server";
+import { requireApi } from "@/src/lib/auth/staff-context";
 import { logger } from "@/src/lib/logging/logger";
 
 export async function POST(
@@ -7,7 +7,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const supabase = await createClient();
+  // RPC tetap menegakkan is_super_admin() di DB; cek di sini memberi 401/403
+  // yang jelas sebelum menyentuh DB.
+  const auth = await requireApi("tenant.approve", { requireTenant: false });
+  if (auth instanceof NextResponse) return auth;
+  const { supabase } = auth;
 
   // RPC approve_business_signup() sendiri yang menegakkan is_super_admin() di sisi DB
   // (§0021_signup.sql) — bukan sekadar dicek di kode aplikasi.

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/src/lib/supabase/server";
 import { createAdminClient } from "@/src/lib/supabase/admin";
 import { updateStockSchema } from "@/src/lib/agents/tool-schemas";
 import { logger } from "@/src/lib/logging/logger";
+import { requireStaffRow } from "@/src/lib/auth/staff-context";
 
 /**
  * Tahap 1 dari pola HITL dua-tahap: catat niat agent ke agent_audit_log (status
@@ -13,23 +13,9 @@ import { logger } from "@/src/lib/logging/logger";
  * yang login (bukan dipercaya mentah dari client) — konsisten dengan get-stock.
  */
 export async function POST(req: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { data: staffRow } = await supabase
-    .from("staff")
-    .select("id, business_id")
-    .eq("auth_user_id", user.id)
-    .single();
-  if (!staffRow)
-    return NextResponse.json(
-      { error: "Akun staf tidak ditemukan" },
-      { status: 403 },
-    );
+  const auth = await requireStaffRow("chat.use");
+  if ("error" in auth) return auth.error;
+  const { supabase, staffRow } = auth;
 
   const parsed = updateStockSchema.safeParse(await req.json());
   if (!parsed.success) {

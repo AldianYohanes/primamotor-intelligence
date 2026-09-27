@@ -12,7 +12,9 @@ import { logger } from "@/src/lib/logging/logger";
  */
 export async function POST(req: NextRequest) {
   const cronSecret = req.headers.get("x-cron-secret");
-  if (process.env.CRON_SECRET && cronSecret !== process.env.CRON_SECRET) {
+  // Fail-CLOSED (lihat catatan sama di cron/monitor/route.ts) — tidak ada
+  // CRON_SECRET di environment = selalu tolak, bukan diam-diam terbuka.
+  if (!process.env.CRON_SECRET || cronSecret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

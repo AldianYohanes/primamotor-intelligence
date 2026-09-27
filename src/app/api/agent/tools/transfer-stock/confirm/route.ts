@@ -3,6 +3,7 @@ import { createAdminClient } from "@/src/lib/supabase/admin";
 import { transferStockConfirmSchema } from "@/src/lib/agents/tool-schemas";
 import { reconfirmPin } from "@/src/lib/auth/confirm-pin";
 import { logger } from "@/src/lib/logging/logger";
+import { requireApi } from "@/src/lib/auth/staff-context";
 
 export async function POST(req: NextRequest) {
   const parsed = transferStockConfirmSchema.safeParse(await req.json());
@@ -12,9 +13,20 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-  const { audit_log_id, staff_id, business_slug, username, pin } = parsed.data;
+  const { audit_log_id, pin } = parsed.data;
 
-  const pinResult = await reconfirmPin(business_slug, username, pin);
+  // Sebelumnya route ini tanpa sesi: PIN diverifikasi untuk (business_slug,
+  // username) dari body, sedangkan staff_id & audit_log_id juga dari body dan
+  // tidak dikaitkan. Siapa pun yang tahu PIN-nya sendiri di tenant mana pun bisa
+  // mengonfirmasi transaksi pending tenant lain dan mengatasnamakan staf lain.
+  // Sekarang identitas diambil dari sesi, PIN dicek untuk akun itu sendiri, dan
+  // audit log wajib milik tenant aktif.
+  const auth = await requireApi("chat.use");
+  if (auth instanceof NextResponse) return auth;
+  const staff_id = auth.staff.id;
+  const business_slug = auth.ownBusiness.slug;
+
+  const pinResult = await reconfirmPin(business_slug, auth.staff.username, pin);
   if (!pinResult.ok)
     return NextResponse.json(
       { error: pinResult.error },
@@ -22,6 +34,19 @@ export async function POST(req: NextRequest) {
     );
 
   const admin = createAdminClient();
+
+  const { data: auditLog } = await admin
+    .from("agent_audit_log")
+    .select("id")
+    .eq("id", audit_log_id)
+    .eq("business_id", auth.tenant.id)
+    .maybeSingle();
+  if (!auditLog) {
+    return NextResponse.json(
+      { error: "Transaksi tidak ditemukan di toko ini" },
+      { status: 404 },
+    );
+  }
 
   // Sama seperti update-stock/confirm: transfer_stock + release_reservation +
   // update status sekarang satu RPC atomik (confirm_transfer_stock,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/src/lib/supabase/server";
+import { requireApi } from "@/src/lib/auth/staff-context";
 import { parsePagination, buildPaginatedResponse } from "@/src/lib/pagination";
 import { logger } from "@/src/lib/logging/logger";
 
@@ -15,12 +15,10 @@ import { logger } from "@/src/lib/logging/logger";
  * terpisah, bukan sekadar cek role di Route Handler tenant biasa).
  */
 export async function GET(req: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Referensi lintas tenant: cukup staf aktif mana pun, tenant tidak relevan.
+  const auth = await requireApi(null, { requireTenant: false });
+  if (auth instanceof NextResponse) return auth;
+  const { supabase } = auth;
 
   const { page, pageSize, from, to } = parsePagination(req);
   const q = req.nextUrl.searchParams.get("q");

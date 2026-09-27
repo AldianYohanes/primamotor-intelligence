@@ -1,32 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/src/lib/supabase/server";
 import { createAdminClient } from "@/src/lib/supabase/admin";
 import { logger } from "@/src/lib/logging/logger";
+import { requireStaffRow } from "@/src/lib/auth/staff-context";
+import type { Permission } from "@/src/lib/auth/rbac";
 
-async function requireStaff() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user)
-    return {
-      error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
-    } as const;
-  const { data: staffRow } = await supabase
-    .from("staff")
-    .select("id, business_id, role")
-    .eq("auth_user_id", user.id)
-    .single();
-  if (!staffRow)
-    return {
-      error: NextResponse.json(
-        { error: "Akun staf tidak ditemukan" },
-        { status: 403 },
-      ),
-    } as const;
-  return { supabase, staffRow } as const;
-}
+// Otorisasi terpusat (src/lib/auth/staff-context.ts); business_id = tenant aktif.
+const requireStaff = (permission: Permission = "portal.access") => requireStaffRow(permission);
 
 const claimSchema = z.object({
   reason: z.string().trim().min(1, "Alasan klaim wajib diisi").max(300),

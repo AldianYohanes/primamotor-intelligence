@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/src/lib/supabase/server";
 import { createAdminClient } from "@/src/lib/supabase/admin";
 import { parsePagination, buildPaginatedResponse } from "@/src/lib/pagination";
 import { logger } from "@/src/lib/logging/logger";
+import { requireStaffRow } from "@/src/lib/auth/staff-context";
 
 const opnameSchema = z.object({
   product_id: z.string().uuid(),
@@ -13,13 +13,16 @@ const opnameSchema = z.object({
 });
 
 export async function GET(req: NextRequest) {
-  const supabase = await createClient();
+  const auth = await requireStaffRow("portal.access");
+  if ("error" in auth) return auth.error;
+  const { supabase, staffRow } = auth;
   const productId = req.nextUrl.searchParams.get("product_id");
   const { page, pageSize, from, to } = parsePagination(req);
 
   let query = supabase
     .from("stock_opname")
     .select("*, products(name), locations(name)", { count: "exact" })
+    .eq("business_id", staffRow.business_id)
     .order("created_at", { ascending: false })
     .range(from, to);
   if (productId) query = query.eq("product_id", productId);
@@ -43,23 +46,9 @@ export async function GET(req: NextRequest) {
  * (§4.3 desain database — stock_opname adalah CATATAN AUDIT, bukan sumber saldo).
  */
 export async function POST(req: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { data: staffRow } = await supabase
-    .from("staff")
-    .select("id, business_id")
-    .eq("auth_user_id", user.id)
-    .single();
-  if (!staffRow)
-    return NextResponse.json(
-      { error: "Akun staf tidak ditemukan" },
-      { status: 403 },
-    );
+  const auth = await requireStaffRow("portal.access");
+  if ("error" in auth) return auth.error;
+  const { supabase, staffRow } = auth;
 
   const parsed = opnameSchema.safeParse(await req.json());
   if (!parsed.success) {
@@ -70,9 +59,20 @@ export async function POST(req: NextRequest) {
   }
   const body = parsed.data;
 
+  // Penyesuaian stok ditulis lewat service_role, jadi produk & lokasi wajib
+  // dipastikan milik tenant ini dulu (bukan hanya mengandalkan RLS).
+  const [{ data: product }, { data: location }] = await Promise.all([
+    supabase.from("products").select("id").eq("id", body.product_id).eq("business_id", staffRow.business_id).maybeSingle(),
+    supabase.from("locations").select("id").eq("id", body.location_id).eq("business_id", staffRow.business_id).maybeSingle(),
+  ]);
+  if (!product || !location) {
+    return NextResponse.json({ error: "Produk atau lokasi tidak ditemukan di toko ini" }, { status: 404 });
+  }
+
   const { data: stockRow } = await supabase
     .from("stock")
     .select("quantity")
+    .eq("business_id", staffRow.business_id)
     .eq("product_id", body.product_id)
     .eq("location_id", body.location_id)
     .maybeSingle();

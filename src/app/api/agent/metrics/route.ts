@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/src/lib/supabase/server";
 import { createAdminClient } from "@/src/lib/supabase/admin";
 import { agentExecutionMetricSchema } from "@/src/lib/agents/metrics-schema";
 import { logger } from "@/src/lib/logging/logger";
+import { requireStaffRow } from "@/src/lib/auth/staff-context";
 
 /**
  * Menyimpan satu baris metrik performa per giliran chat (runAgentTurn) —
@@ -24,23 +24,9 @@ import { logger } from "@/src/lib/logging/logger";
  * seolah-olah dari toko B.
  */
 export async function POST(req: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { data: staffRow } = await supabase
-    .from("staff")
-    .select("business_id")
-    .eq("auth_user_id", user.id)
-    .single();
-  if (!staffRow)
-    return NextResponse.json(
-      { error: "Akun staf tidak ditemukan" },
-      { status: 403 },
-    );
+  const auth = await requireStaffRow("chat.use");
+  if ("error" in auth) return auth.error;
+  const { staffRow } = auth;
 
   const parsed = agentExecutionMetricSchema.safeParse(await req.json());
   if (!parsed.success) {

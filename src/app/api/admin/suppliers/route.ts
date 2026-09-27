@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/src/lib/supabase/server";
 import { parsePagination, buildPaginatedResponse } from "@/src/lib/pagination";
 import { logger } from "@/src/lib/logging/logger";
+import { requireStaffRow } from "@/src/lib/auth/staff-context";
+import type { Permission } from "@/src/lib/auth/rbac";
 
 const supplierSchema = z.object({
   name: z.string().min(1),
@@ -12,19 +13,28 @@ const supplierSchema = z.object({
   notes: z.string().optional(),
 });
 
+// Otorisasi terpusat (src/lib/auth/staff-context.ts); business_id = tenant aktif.
+const requireStaff = (permission: Permission = "portal.access") => requireStaffRow(permission);
+
 export async function GET(req: NextRequest) {
-  const supabase = await createClient();
+  const ctx = await requireStaff();
+  if ("error" in ctx) return ctx.error;
+  const { supabase, staffRow } = ctx;
+
   const { page, pageSize, from, to } = parsePagination(req);
 
   const { data, error, count } = await supabase
     .from("suppliers")
     .select("*", { count: "exact" })
+    // Filter eksplisit, bukan cuma andalkan RLS (§10/§15.1) — defense-in-depth.
+    .eq("business_id", staffRow.business_id)
     .order("name")
     .range(from, to);
 
   if (error) {
     logger.error("Gagal memuat daftar supplier", {
       route: "admin/suppliers",
+      business_id: staffRow.business_id,
       error,
     });
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -35,23 +45,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { data: staffRow } = await supabase
-    .from("staff")
-    .select("business_id")
-    .eq("auth_user_id", user.id)
-    .single();
-  if (!staffRow)
-    return NextResponse.json(
-      { error: "Akun staf tidak ditemukan" },
-      { status: 403 },
-    );
+  const ctx = await requireStaff();
+  if ("error" in ctx) return ctx.error;
+  const { supabase, staffRow } = ctx;
 
   const parsed = supplierSchema.safeParse(await req.json());
   if (!parsed.success) {

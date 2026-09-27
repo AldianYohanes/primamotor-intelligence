@@ -1,33 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/src/lib/supabase/server";
 import { createAdminClient } from "@/src/lib/supabase/admin";
 import { reconfirmPin } from "@/src/lib/auth/confirm-pin";
 import { logger } from "@/src/lib/logging/logger";
+import { requireStaffRow } from "@/src/lib/auth/staff-context";
+import type { Permission } from "@/src/lib/auth/rbac";
 
-async function requireStaff() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user)
-    return {
-      error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
-    } as const;
-  const { data: staffRow } = await supabase
-    .from("staff")
-    .select("id, business_id, role, username, businesses(slug)")
-    .eq("auth_user_id", user.id)
-    .single();
-  if (!staffRow)
-    return {
-      error: NextResponse.json(
-        { error: "Akun staf tidak ditemukan" },
-        { status: 403 },
-      ),
-    } as const;
-  return { supabase, staffRow } as const;
-}
+// Otorisasi terpusat (src/lib/auth/staff-context.ts); business_id = tenant aktif.
+const requireStaff = (permission: Permission = "pos.manage") => requireStaffRow(permission);
 
 const voidSchema = z.object({
   pin: z.string().min(6),
@@ -49,7 +29,7 @@ export async function POST(
 ) {
   const ctx = await requireStaff();
   if ("error" in ctx) return ctx.error;
-  const { staffRow } = ctx;
+  const { supabase, staffRow } = ctx;
   const { id } = await params;
 
   if (staffRow.role !== "owner" && staffRow.role !== "admin") {
@@ -67,10 +47,23 @@ export async function POST(
     );
   }
 
-  // @ts-expect-error -- bentuk join Supabase, businesses adalah objek tunggal (many-to-one)
-  const businessSlug: string = staffRow.businesses.slug;
+  // RPC void_sale hanya menerima sale_id dan berjalan dengan service_role, jadi
+  // kepemilikan nota wajib dicek di sini. Tanpa ini owner toko lain bisa
+  // membatalkan nota tenant mana pun asal tahu ID-nya.
+  const { data: sale } = await supabase
+    .from("sales")
+    .select("id")
+    .eq("id", id)
+    .eq("business_id", staffRow.business_id)
+    .maybeSingle();
+  if (!sale) {
+    return NextResponse.json({ error: "Nota tidak ditemukan" }, { status: 404 });
+  }
+
+  // PIN diverifikasi terhadap akun staf di tenant tempat ia terdaftar (bagi
+  // super admin bisa berbeda dari tenant aktif).
   const pinResult = await reconfirmPin(
-    businessSlug,
+    ctx.ctx.ownBusiness.slug,
     staffRow.username,
     parsed.data.pin,
   );

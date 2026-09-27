@@ -1,9 +1,18 @@
 'use client'
 
-import { Suspense, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { AlertCircle } from 'lucide-react'
+import { HOME_PATH, safeRedirect } from '@/src/lib/auth/rbac'
+import { createClient } from '@/src/lib/supabase/client'
+
+// Dikirim requirePage() saat sesi masih ada tapi akunnya tidak boleh masuk.
+const SESSION_ERRORS: Record<string, string> = {
+  inactive: 'Akun Anda sudah dinonaktifkan. Hubungi owner toko.',
+  no_staff: 'Akun ini tidak terdaftar sebagai staf toko mana pun.',
+  tenant_inactive: 'Toko belum disetujui atau sedang dinonaktifkan.',
+}
 
 // useSearchParams() mewajibkan Suspense boundary di sekitarnya saat prerender
 // (Next.js App Router) — kalau tidak, `next build` gagal dengan error
@@ -23,8 +32,15 @@ function LoginForm() {
   const [businessSlug, setBusinessSlug] = useState('')
   const [username, setUsername] = useState('')
   const [pin, setPin] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const sessionError = SESSION_ERRORS[searchParams.get('error') ?? ''] ?? null
+  const [error, setError] = useState<string | null>(sessionError)
   const [loading, setLoading] = useState(false)
+
+  // Sesi yang ditolak requirePage() diputus di sini, supaya middleware tidak
+  // terus mengarahkan pengguna yang "masih login" kembali ke /menu.
+  useEffect(() => {
+    if (sessionError) createClient().auth.signOut().catch(() => {})
+  }, [sessionError])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -44,7 +60,8 @@ function LoginForm() {
       return
     }
 
-    router.push(searchParams.get('redirect') ?? '/chat')
+    // Hanya path internal yang diikuti (mencegah open redirect ke situs lain).
+    router.replace(safeRedirect(searchParams.get('redirect')) ?? HOME_PATH)
     router.refresh()
   }
 
