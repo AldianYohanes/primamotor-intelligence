@@ -19,6 +19,11 @@ import type {
 } from "@/src/lib/eval/types";
 
 import { EVAL_DEVICE_POSITION, EVAL_TENANT_SLUG } from "@/src/lib/eval/tenant";
+import {
+  PREFILL_CHUNK_OPTIONS,
+  getPrefillChunkPreference,
+  setPrefillChunkPreference,
+} from "@/src/lib/agents/prefill-preference";
 
 const fixedDevicePosition = () => Promise.resolve(EVAL_DEVICE_POSITION);
 const SCENARIOS = scenarioFile.scenarios as unknown as Scenario[];
@@ -96,6 +101,8 @@ async function collectEnvironment(modelId: string) {
     hardwareConcurrency: navigator.hardwareConcurrency,
     deviceMemoryGB: (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? null,
     gpu: await readGpuInfo(),
+    /** Diisi setelah model dimuat; lihat prefill-preference.ts. */
+    prefillChunkSize: null as { effective: number | null; modelDefault: number | null } | null,
   };
 }
 
@@ -114,6 +121,11 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   const [gpuInfo, setGpuInfo] = useState<GpuInfo | null | "loading">("loading");
   const [alertsOn, setAlertsOn] = useState(true);
   const [notifPermission, setNotifPermission] = useState<ReturnType<typeof notificationPermission>>("default");
+  const [prefillChunk, setPrefillChunk] = useState<number | null>(null);
+
+  useEffect(() => {
+    setPrefillChunk(getPrefillChunkPreference());
+  }, []);
 
   useEffect(() => {
     const sync = () => setNotifPermission(notificationPermission());
@@ -249,7 +261,10 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
       const refs = await resolveRefs();
       await checkTenantIsFresh();
 
-      const [{ getWebLLMEngine, resetWebLLMEngine }, { runAgentTurn }] = await Promise.all([
+      const [
+        { getWebLLMEngine, resetWebLLMEngine, refreshPrefillChunkSize, getEffectivePrefillChunkSize },
+        { runAgentTurn },
+      ] = await Promise.all([
         import("@/src/lib/agents/webllm-engine"),
         import("@/src/lib/agents/orchestrator"),
       ]);
@@ -272,6 +287,10 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
           modelId,
         ),
       );
+
+      await refreshPrefillChunkSize();
+      const prefill = await getEffectivePrefillChunkSize();
+      setEnvironment((env) => (env ? { ...env, prefillChunkSize: prefill } : env));
 
       // Inferensi pertama memuat shader/kernel GPU; tidak ikut dihitung supaya latensi tidak bias.
       setStatus("Pemanasan model (tidak dinilai)…");
@@ -486,6 +505,30 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             disabled={running}
           />
         </label>
+        <label className="space-y-1 text-sm">
+          <span className="font-medium text-slate-700">Potongan prefill (GPU lemah)</span>
+          <select
+            className="field-input w-full"
+            value={prefillChunk ?? ""}
+            onChange={(e) => {
+              const size = e.target.value ? Number(e.target.value) : null;
+              setPrefillChunk(size);
+              setPrefillChunkPreference(size);
+            }}
+            disabled={running}
+          >
+            <option value="">Bawaan model</option>
+            {PREFILL_CHUNK_OPTIONS.map((n) => (
+              <option key={n} value={n}>
+                {n} token
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="self-end text-xs text-slate-500 sm:col-span-1 lg:col-span-3">
+          Kecilkan bila GPU di-reset Windows (DXGI_ERROR_DEVICE_HUNG) saat pemanasan. Tersimpan di perangkat ini,
+          berlaku juga untuk /chat, dan dicatat di JSON hasil.
+        </p>
         <p className="text-xs text-slate-500 sm:col-span-2 lg:col-span-4">
           {gpuInfo === "loading"
             ? "Membaca info GPU…"

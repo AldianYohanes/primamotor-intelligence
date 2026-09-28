@@ -2,6 +2,7 @@
 
 import * as webllm from "@mlc-ai/web-llm";
 import { MODEL_ID } from "@/src/lib/agents/model-options";
+import { getPrefillChunkPreference } from "@/src/lib/agents/prefill-preference";
 
 export { MODEL_ID };
 
@@ -10,6 +11,44 @@ let engineModelId: string | null = null;
 
 export function getActiveModelId(): string {
   return engineModelId ?? MODEL_ID;
+}
+
+/** Terapkan ulang preferensi potongan prefill (prefill-preference.ts) ke engine yang sudah dimuat. */
+export async function refreshPrefillChunkSize() {
+  const engine = await enginePromise?.catch(() => null);
+  if (engine) applyPrefillChunkSize(engine);
+}
+
+// web-llm 0.2.84 membaca prefillChunkSize dari metadata model dan tidak
+// menyediakan opsi untuk mengubahnya; potongan lebih kecil aman karena prefill
+// memang diproses per potongan (getChunkedPrefillInputData).
+interface PipelineLike {
+  prefillChunkSize?: number;
+  modelDefaultPrefillChunkSize?: number;
+}
+
+function applyPrefillChunkSize(engine: webllm.MLCEngineInterface) {
+  const pipelines = (engine as unknown as { loadedModelIdToPipeline?: Map<string, PipelineLike> })
+    .loadedModelIdToPipeline;
+  for (const pipeline of pipelines?.values() ?? []) {
+    if (typeof pipeline.prefillChunkSize !== "number") continue;
+    pipeline.modelDefaultPrefillChunkSize ??= pipeline.prefillChunkSize;
+    const preferred = getPrefillChunkPreference();
+    pipeline.prefillChunkSize = preferred
+      ? Math.min(preferred, pipeline.modelDefaultPrefillChunkSize)
+      : pipeline.modelDefaultPrefillChunkSize;
+  }
+}
+
+/** Ukuran potongan prefill yang sedang dipakai engine, untuk dicatat di hasil evaluasi. */
+export async function getEffectivePrefillChunkSize(): Promise<{ effective: number | null; modelDefault: number | null }> {
+  const engine = await enginePromise?.catch(() => null);
+  const pipeline = (engine as unknown as { loadedModelIdToPipeline?: Map<string, PipelineLike> } | null)
+    ?.loadedModelIdToPipeline?.values().next().value;
+  return {
+    effective: pipeline?.prefillChunkSize ?? null,
+    modelDefault: pipeline?.modelDefaultPrefillChunkSize ?? null,
+  };
 }
 
 /**
@@ -157,6 +196,7 @@ export function getWebLLMEngine(
         // reload() tidak melempar error saat di-abort, cuma selesai diam-diam
         // dengan model kosong.
         if (attempt.cancelled) throw new ModelLoadCancelledError();
+        applyPrefillChunkSize(engine);
         return engine;
       })
       .catch((err) => {
