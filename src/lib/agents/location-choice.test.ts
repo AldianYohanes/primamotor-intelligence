@@ -7,6 +7,7 @@ import {
   mentionedLocations,
   nearestLocation,
   resolveLocationRef,
+  resolveTransferLocations,
   resolveUpdateLocation,
   type TenantLocation,
 } from "@/src/lib/agents/location-choice";
@@ -96,6 +97,40 @@ describe("resolveUpdateLocation", () => {
 
   it("meneruskan apa adanya bila daftar lokasi tidak tersedia (server tetap memvalidasi)", () => {
     expect(resolveUpdateLocation({}, "masuk 5", [])).toBe("passthrough");
+  });
+});
+
+describe("resolveTransferLocations", () => {
+  it("memakai asal & tujuan tulisan model", () => {
+    expect(resolveTransferLocations({ from_location: "gudang", to_location: "toko" }, "pindah", locations)).toEqual({
+      from: "lg",
+      to: "lt",
+    });
+  });
+
+  it("mengisi tujuan yang dikosongkan model dari lokasi lain yang disebut staf (pola T-07)", () => {
+    expect(
+      resolveTransferLocations(
+        { from_location: "gudang", to_location: "" },
+        "Toko butuh 2 lampu belakang kiri, ambil dari gudang ya",
+        locations,
+      ),
+    ).toEqual({ from: "lg", to: "lt" });
+  });
+
+  it("mengisi asal yang kosong dengan cara yang sama", () => {
+    expect(resolveTransferLocations({ to_location: "toko" }, "dari gudang ke toko", locations)).toEqual({
+      from: "lg",
+      to: "lt",
+    });
+  });
+
+  it("tidak menebak bila staf hanya menyebut satu lokasi atau keduanya kosong", () => {
+    expect(resolveTransferLocations({ to_location: "gudang" }, "Pindahin gril depan 240 ke gudang 2 biji", locations)).toEqual({
+      from: null,
+      to: "lg",
+    });
+    expect(resolveTransferLocations({}, "pindahin gudang ke toko", locations)).toEqual({ from: null, to: null });
   });
 });
 

@@ -24,6 +24,7 @@ import {
   locationChoiceMessage,
   readDevicePosition,
   resolveLocationRef,
+  resolveTransferLocations,
   resolveUpdateLocation,
   type GeoPoint,
   type LocationChoice,
@@ -221,7 +222,7 @@ async function executeTool(
             source: "offline_cache",
             status: "no_cached_match",
             cache_note:
-              "Sedang offline dan part ini tidak ada di cache. Ini BUKAN berarti stok nol — sampaikan ke staf bahwa stok belum bisa dicek sampai online lagi.",
+              "Server tidak bisa dihubungi (offline atau gangguan) dan part ini tidak ada di cache. Ini BUKAN berarti stok nol — sampaikan ke staf bahwa stok belum bisa dicek, coba lagi sebentar lagi.",
           };
         }
         const lastSyncedAt = cached.reduce(
@@ -243,7 +244,7 @@ async function executeTool(
           })),
           source: "offline_cache",
           cache_note:
-            "Data ini dari cache offline, bisa saja tidak 100% terbaru — sampaikan ini ke staf.",
+            "Server tidak bisa dihubungi, jadi data ini dari cache perangkat dan bisa saja tidak 100% terbaru — sampaikan ini ke staf.",
         };
       }
     }
@@ -332,8 +333,11 @@ const OFFLINE_MUTATION_MESSAGE =
 async function searchProducts(query: string, conversationId: string, businessId: string) {
   const res = (await executeTool("getStock", { query, limit: 5 }, conversationId, businessId)) as {
     results?: ProductSearchResult[];
+    source?: string;
   } | null;
-  return res?.results ?? [];
+  // getStock jatuh ke cache offline bila request ke server gagal; saat online
+  // itu berarti server bermasalah, bukan barangnya tidak ada.
+  return { results: res?.results ?? [], fromCache: res?.source === "offline_cache" };
 }
 
 async function executeMutation(
@@ -387,11 +391,18 @@ async function advanceMutation(
   if (!productId) {
     const query = String(args.product ?? args.product_name ?? "").trim();
     if (!query) return { message: "Barang apa yang mau dicatat?", result: { status: "product_missing" } };
-    const pick = pickProduct(await searchProducts(query, conversationId, businessId));
+    const search = await searchProducts(query, conversationId, businessId);
+    if (search.fromCache) {
+      return {
+        message: "Pencarian barang ke server sedang gagal. Coba kirim ulang sebentar lagi.",
+        result: { status: "product_search_failed", query },
+      };
+    }
+    const pick = pickProduct(search.results);
     if (pick.status === "none") {
       return {
         message: `Barang "${query}" tidak ditemukan di data toko. Coba sebut nama lain atau nomor part-nya.`,
-        result: { status: "product_not_found", query },
+        result: { status: "product_not_found", query, search_results: search.results.length },
       };
     }
     if (pick.status === "ambiguous") {
@@ -463,8 +474,7 @@ async function advanceMutation(
     return { ...outcome, resolvedArgs };
   }
 
-  const from = resolvedArgs.from_location_id as string | null;
-  const to = resolvedArgs.to_location_id as string | null;
+  const { from, to } = resolveTransferLocations(args, userMessage, locations);
   if (!from || !to || from === to) {
     return {
       message: `Pindah ${name} dari mana ke mana? Sebutkan lokasi asal dan tujuannya, misalnya "dari gudang ke toko".`,

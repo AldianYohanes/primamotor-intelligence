@@ -149,6 +149,29 @@ export function resolveUpdateLocation(
   return "choose";
 }
 
+/**
+ * Asal & tujuan transferStock. Tulisan model dipakai dulu; bila hanya satu sisi
+ * yang terbaca dan staf menyebut tepat satu lokasi lain, lokasi itu mengisi sisi
+ * yang kosong ("ambil dari gudang" + "toko butuh" → gudang → toko).
+ */
+export function resolveTransferLocations(
+  args: Record<string, unknown>,
+  userMessage: string,
+  locations: TenantLocation[],
+): { from: string | null; to: string | null } {
+  let from = resolveLocationRef(args.from_location ?? args.from_location_id, locations)?.id ?? null;
+  let to = resolveLocationRef(args.to_location ?? args.to_location_id, locations)?.id ?? null;
+  const mentioned = mentionedLocations(userMessage, locations);
+  if (from && !to) {
+    const others = mentioned.filter((l) => l.id !== from);
+    if (others.length === 1) to = others[0].id;
+  } else if (to && !from) {
+    const others = mentioned.filter((l) => l.id !== to);
+    if (others.length === 1) from = others[0].id;
+  }
+  return { from, to };
+}
+
 export function buildLocationChoice(
   args: Record<string, unknown>,
   userMessage: string,
