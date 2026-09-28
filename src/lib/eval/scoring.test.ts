@@ -218,6 +218,110 @@ describe("scoreScenario", () => {
   });
 });
 
+describe("parameter dari alat satu langkah", () => {
+  it("menilai nama barang & lokasi tulisan model lewat resolvedArgs", () => {
+    const update: Scenario = {
+      id: "T-04",
+      message: "Catat masuk 4 bilah wiper bosch di toko",
+      expected_route: "transaction",
+      variant: "langsung",
+      expected_tools: ["updateStock"],
+      expected_action: { tool: "updateStock", product: "EVAL-004", location: "Toko", quantity: 4, direction: "masuk" },
+      expect_pending: true,
+      confirm: "pin",
+      expected_stock_delta: [{ product: "EVAL-004", location: "Toko", delta: 4 }],
+      label_status: "draft",
+    };
+    const row = scoreScenario(
+      update,
+      observe({
+        predictedRoute: "transaction",
+        toolTrace: [
+          {
+            name: "updateStock",
+            args: { product: "wiper bosch", location: "toko", quantity: 4, direction: "masuk" },
+            resolvedArgs: { product_id: "p4", location_id: "lt", quantity: 4, direction: "masuk" },
+            executedArgs: { product_id: "p4", location_id: "lt", quantity: 4, direction: "masuk" },
+            result: { status: "pending_confirmation" },
+          },
+        ],
+        pending: true,
+        confirmOutcome: "confirmed",
+        stockAfter: { ...baseStock, [stockKey("p4", "lt")]: 14 },
+      }),
+      refs,
+    );
+    expect(row.paramCorrectFields).toBe(4);
+    expect(row.success).toBe(true);
+  });
+});
+
+describe("faithfulness", () => {
+  const stockQuestion: Scenario = {
+    id: "Q-02",
+    message: "Sisa filter oli mahle berapa?",
+    expected_route: "query",
+    variant: "langsung",
+    expected_tools: ["getStock"],
+    expected_entity: "EVAL-006",
+    expect_pending: false,
+    label_status: "draft",
+  };
+  const trace = (toko: number, gudang: number) => [
+    {
+      name: "getStock",
+      args: { query: "filter oli mahle" },
+      result: {
+        results: [
+          {
+            product_id: "p6",
+            stock_by_location: [
+              { location_id: "lt", available_quantity: toko },
+              { location_id: "lg", available_quantity: gudang },
+            ],
+          },
+        ],
+      },
+    },
+  ];
+  const judge = (text: string, toko = 25, gudang = 60) =>
+    scoreScenario(stockQuestion, observe({ toolTrace: trace(toko, gudang), assistantText: text }), refs).faithfulness;
+
+  it("setia bila menyebut angka stok yang benar", () => {
+    expect(judge("Filter oli mahle ada 25 di toko dan 60 di gudang.")).toBe("faithful");
+  });
+
+  it("tidak setia bila mengaku tidak ditemukan padahal stok ada (pola Llama run 10)", () => {
+    expect(judge('Maaf, part "filter oli mahle" tidak ditemukan.')).toBe("unfaithful");
+  });
+
+  it("tidak setia bila angkanya salah", () => {
+    expect(judge("Stoknya tinggal 3 unit.")).toBe("unfaithful");
+  });
+
+  it("'kosong di toko' benar bila memang ada lokasi berstok nol", () => {
+    expect(judge("Di toko kosong, tapi gudang masih ada 4.", 0, 4)).toBe("faithful");
+  });
+
+  it("jawaban benar tanpa angka stok ditandai review, angka dari nama barang tidak dihitung", () => {
+    expect(judge("Ya, filter oli mahle masih tersedia di gudang dan toko.")).toBe("review");
+    const karbu = { ...stockQuestion, message: "karbu 240 masih ada?" };
+    expect(
+      scoreScenario(karbu, observe({ toolTrace: trace(1, 1), assistantText: "Karburator Volvo 240 masih ada di gudang dan toko." }), refs)
+        .faithfulness,
+    ).toBe("review");
+  });
+
+  it("jawaban campuran ditandai untuk dibaca manual", () => {
+    expect(judge("Tidak ditemukan, tapi ada Filter Oli Mahle 25 unit di toko.")).toBe("review");
+  });
+
+  it("tidak dinilai untuk skenario non-query atau tren penjualan", () => {
+    const trend = { ...stockQuestion, expected_tools: ["getStock", "getSalesTrend"] };
+    expect(scoreScenario(trend, observe({ toolTrace: trace(1, 1), assistantText: "x" }), refs).faithfulness).toBeNull();
+  });
+});
+
 describe("summarize", () => {
   it("menghitung Macro F1 dari confusion matrix tiga kelas", () => {
     const mk = (expected: Scenario["expected_route"], predicted: Scenario["expected_route"]) =>

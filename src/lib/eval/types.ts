@@ -66,6 +66,8 @@ export interface Observation {
     suggestedLocationId: string | null;
     suggestionReason: "mentioned" | "nearest" | null;
   };
+  /** Ada saat nama barang dari model cocok ke beberapa produk dan staf diminta memilih. */
+  productPrompt?: { candidateIds: string[] };
   confirmOutcome: ConfirmOutcome;
   confirmError?: string;
   stockBefore: StockSnapshot;
@@ -97,4 +99,11 @@ export interface ScoredRow {
   stockCorrect: boolean;
   success: boolean;
   failedStage: FailedStage | null;
+  /**
+   * Kebenaran isi jawaban (terpisah dari ETSR): null = tidak dinilai, "review" =
+   * heuristik ragu dan perlu dibaca manual.
+   */
+  faithfulness: Faithfulness;
 }
+
+export type Faithfulness = "faithful" | "unfaithful" | "review" | null;

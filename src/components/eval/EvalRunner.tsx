@@ -324,12 +324,17 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
               toolTrace: result.toolTrace,
               pending: Boolean(result.pendingConfirmation),
               // Runner tidak memilihkan lokasi: pilihan staf di luar cakupan satu skenario.
-              locationPrompt: result.locationChoice
-                ? {
-                    suggestedLocationId: result.locationChoice.suggestedLocationId,
-                    suggestionReason: result.locationChoice.suggestionReason,
-                  }
-                : undefined,
+              locationPrompt:
+                result.choice?.kind === "location"
+                  ? {
+                      suggestedLocationId: result.choice.suggestedLocationId,
+                      suggestionReason: result.choice.suggestionReason,
+                    }
+                  : undefined,
+              productPrompt:
+                result.choice?.kind === "product"
+                  ? { candidateIds: result.choice.options.map((o) => o.id) }
+                  : undefined,
               confirmOutcome: confirm.outcome,
               confirmError: confirm.error,
               latencyMs: result.latencyMs ?? null,
@@ -545,6 +550,10 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             <div>Akurasi parameter: <strong>{pct(s.parameterAccuracy.correct, s.parameterAccuracy.total)}</strong></div>
             <div>ETSR: <strong>{pct(s.etsr.success, s.etsr.total)}</strong> ({s.etsr.success}/{s.etsr.total})</div>
             <div>Keamanan: <strong>{s.security.passed}/{s.security.total}</strong> invariant terpenuhi</div>
+            <div>
+              Faithfulness jawaban stok: <strong>{s.faithfulness.faithful}/{s.faithfulness.assessed}</strong>
+              {s.faithfulness.review > 0 && ` (${s.faithfulness.review} perlu dibaca manual)`}
+            </div>
             <div>Latensi median: <strong>{ms(s.latency.all.median)}</strong> (IQR {ms(s.latency.all.iqr)})</div>
             <div>Query: {ms(s.latency.query.median)} (IQR {ms(s.latency.query.iqr)})</div>
             <div>Transaksi: {ms(s.latency.transaction.median)} (IQR {ms(s.latency.transaction.iqr)})</div>
@@ -610,7 +619,11 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
                   <td className="pr-3">{r.observation.predictedRoute ?? "–"}</td>
                   <td className="pr-3">{r.observation.toolTrace.map((t) => t.name).join(", ") || "–"}</td>
                   <td className="pr-3">
-                    {r.observation.locationPrompt ? "tanya lokasi" : r.observation.confirmOutcome}
+                    {r.observation.locationPrompt
+                      ? "tanya lokasi"
+                      : r.observation.productPrompt
+                        ? "tanya barang"
+                        : r.observation.confirmOutcome}
                   </td>
                   <td className={`pr-3 ${r.success ? "text-emerald-700" : "text-red-700"}`}>
                     {r.success ? "berhasil" : `gagal: ${r.failedStage}`}

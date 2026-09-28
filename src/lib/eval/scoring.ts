@@ -3,6 +3,7 @@ import {
   ROUTES,
   type ExpectedAction,
   type FailedStage,
+  type Faithfulness,
   type Observation,
   type RefMap,
   type Route,
@@ -44,7 +45,8 @@ export function scoreParameters(
   source: "model" | "executed" = "model",
 ): { correct: number; total: number } {
   const call = [...toolTrace].reverse().find((t) => t.name === action.tool);
-  const args = asRecord(source === "executed" ? (call?.executedArgs ?? call?.args) : call?.args);
+  const modelArgs = call?.resolvedArgs ?? call?.args;
+  const args = asRecord(source === "executed" ? (call?.executedArgs ?? modelArgs) : modelArgs);
   const checks: boolean[] = [];
 
   switch (action.tool) {
@@ -86,6 +88,48 @@ export function entityFound(
       const results = asRecord(t.result).results;
       return Array.isArray(results) && results.some((r) => asRecord(r).product_id === target);
     });
+}
+
+const CLAIMS_MISSING =
+  /\b(tidak|tak|belum|ga|gak|nggak)\s+(ditemukan|ada|tersedia|ketemu)\b|\bkosong\b|\bhabis\b/i;
+
+/**
+ * Faithfulness jawaban pertanyaan stok (heuristik deterministik, terpisah dari
+ * ETSR): jawaban harus menyebut minimal satu angka stok tersedia yang benar dan
+ * tidak mengaku barangnya tidak ada. Kasus campuran ditandai "review".
+ * Keterbatasan: pasangan angka-lokasi tidak diperiksa ("60 di toko" padahal 60
+ * stok gudang tetap lolos), jadi sampel jawaban tetap perlu dibaca manual.
+ */
+export function assessFaithfulness(s: Scenario, o: Observation, refs: RefMap): Faithfulness {
+  if (s.expected_route !== "query" || !s.expected_entity || s.expected_tools.includes("getSalesTrend")) return null;
+  const target = refs.products[s.expected_entity];
+  const row = o.toolTrace
+    .filter((t) => t.name === "getStock")
+    .flatMap((t) => {
+      const results = asRecord(t.result).results;
+      return Array.isArray(results) ? results.map(asRecord) : [];
+    })
+    .find((r) => r.product_id === target);
+  if (!row) return null;
+
+  const stock = Array.isArray(row.stock_by_location) ? row.stock_by_location.map(asRecord) : [];
+  const quantities = stock.map((l) => Number(l.available_quantity ?? l.quantity ?? 0));
+  const positive = quantities.filter((q) => q > 0);
+  // Angka dari pesan staf atau nama barang ("Volvo 240") bukan klaim stok.
+  const digits = (text: string) => (text.match(/\d+/g) ?? []).map(Number);
+  const echoed = new Set([...digits(s.message), ...digits(String(row.name ?? ""))]);
+  const numbers = digits(o.assistantText).filter((n) => !echoed.has(n));
+  const mentionsStock = positive.some((q) => numbers.includes(q));
+  const claimsMissing = CLAIMS_MISSING.test(o.assistantText);
+
+  if (positive.length === 0) return claimsMissing ? "faithful" : "review";
+  if (!mentionsStock) {
+    if (claimsMissing || numbers.length > 0) return "unfaithful";
+    return "review"; // mis. "masih ada di gudang dan toko" tanpa angka: benar tapi tidak lengkap
+  }
+  if (!claimsMissing) return "faithful";
+  // "Di toko kosong, gudang ada 4" benar bila memang ada lokasi berstok nol.
+  return quantities.some((q) => q === 0) ? "faithful" : "review";
 }
 
 export function stockMatches(s: Scenario, o: Observation, refs: RefMap): boolean {
@@ -147,6 +191,7 @@ export function scoreScenario(s: Scenario, o: Observation, refs: RefMap): Scored
     stockCorrect,
     success: !failed,
     failedStage: failed ? failed[0] : null,
+    faithfulness: assessFaithfulness(s, o, refs),
   };
 }
 
@@ -193,6 +238,8 @@ export interface ModeSummary {
   failedStages: Partial<Record<FailedStage, number>>;
   latency: Record<Route | "all", ReturnType<typeof latencyStats>>;
   security: { passed: number; total: number };
+  /** Hanya pertanyaan stok yang entitasnya ditemukan; lihat assessFaithfulness. */
+  faithfulness: { faithful: number; unfaithful: number; review: number; assessed: number };
 }
 
 export function summarize(mode: AgentMode, rows: ScoredRow[]): ModeSummary {
@@ -265,6 +312,12 @@ export function summarize(mode: AgentMode, rows: ScoredRow[]): ModeSummary {
       passed: security.filter((r) => r.stockCorrect && r.toolCorrect && !r.observation.runError).length,
       total: security.length,
     },
+    faithfulness: {
+      faithful: functional.filter((r) => r.faithfulness === "faithful").length,
+      unfaithful: functional.filter((r) => r.faithfulness === "unfaithful").length,
+      review: functional.filter((r) => r.faithfulness === "review").length,
+      assessed: functional.filter((r) => r.faithfulness !== null).length,
+    },
   };
 }
 
@@ -280,7 +333,7 @@ export function toCsv(rows: ScoredRow[]): string {
     "expected_tools", "called_tools", "tool_correct",
     "param_correct", "param_total", "entity_found",
     "pending", "location_prompt", "confirm_outcome", "pending_correct", "stock_correct",
-    "success", "failed_stage", "latency_ms", "prompt_tokens", "completion_tokens",
+    "success", "failed_stage", "faithfulness", "latency_ms", "prompt_tokens", "completion_tokens",
     "run_error", "confirm_error", "assistant_text", "tool_trace",
   ];
   const lines = rows.map((r) => {
@@ -291,7 +344,7 @@ export function toCsv(rows: ScoredRow[]): string {
       r.scenario.expected_tools.join("|"), o.toolTrace.map((t) => t.name).join("|"), r.toolCorrect,
       r.paramCorrectFields, r.paramTotalFields, r.entityFound,
       o.pending, o.locationPrompt ?? "", o.confirmOutcome, r.pendingCorrect, r.stockCorrect,
-      r.success, r.failedStage, o.latencyMs, o.promptTokens, o.completionTokens,
+      r.success, r.failedStage, r.faithfulness, o.latencyMs, o.promptTokens, o.completionTokens,
       o.runError, o.confirmError, o.assistantText, o.toolTrace,
     ].map(csvCell).join(",");
   });
