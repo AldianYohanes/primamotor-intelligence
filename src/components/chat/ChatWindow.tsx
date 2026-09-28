@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   Send,
   Plus,
+  History,
   WifiOff,
 } from "lucide-react";
 import { createClient } from "@/src/lib/supabase/client";
@@ -30,8 +31,11 @@ import {
 import { useOnlineStatus } from "@/src/lib/network/online-status";
 import {
   getOrCreateActiveConversation,
+  listConversations,
+  resumeConversation,
   startNewConversation,
 } from "@/src/lib/agents/conversation";
+import { ConversationHistoryPanel } from "./ConversationHistoryPanel";
 import { EnableNotificationsBanner } from "./EnableNotificationsBanner";
 import { MessageBubble } from "./MessageBubble";
 import { PinConfirmDialog } from "./PinConfirmDialog";
@@ -79,6 +83,8 @@ export function ChatWindow({
     useState<PendingConfirmation | null>(null);
   const [mutationChoice, setMutationChoice] = useState<MutationChoice | null>(null);
   const [submittingChoice, setSubmittingChoice] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [resuming, setResuming] = useState(false);
   const isOnline = useOnlineStatus();
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -92,13 +98,9 @@ export function ChatWindow({
         // Pesan yang sempat gagal terkirim saat offline (masih tersimpan di IndexedDB,
         // belum ter-flush ke agent_messages) tetap harus tampil di riwayat, supaya
         // staf tidak merasa pesannya "hilang" walau sebenarnya cuma tertunda kirim.
-        const pending = await getPendingMessages(id);
-        const pendingAsMessages: ChatMessage[] = pending.map((p) => ({
-          role: p.role,
-          content: p.content,
-        }));
+        const withPending = await appendPendingMessages(id, history);
         setConversationId(id);
-        setMessages([...history, ...pendingAsMessages]);
+        setMessages(withPending);
         setLoadingHistory(false);
       })
       .catch((err) => {
@@ -245,22 +247,43 @@ export function ChatWindow({
     appendAssistant("Oke, tidak jadi dicatat.");
   }
 
+  /**
+   * Pesan yang sempat gagal terkirim saat offline (masih tersimpan di IndexedDB,
+   * belum ter-flush ke agent_messages) tetap harus tampil di riwayat, supaya
+   * staf tidak merasa pesannya "hilang" walau sebenarnya cuma tertunda kirim.
+   */
+  async function appendPendingMessages(
+    id: string,
+    history: ChatMessage[],
+  ): Promise<ChatMessage[]> {
+    const pending = await getPendingMessages(id);
+    return [...history, ...pending.map((p) => ({ role: p.role, content: p.content }))];
+  }
+
+  /**
+   * Sama seperti Batal di PinConfirmDialog — pindah percakapan (baru atau dari
+   * riwayat) while ada pendingConfirmation yang belum diproses juga
+   * "meninggalkan" proposal itu, jadi harus di-reject juga supaya reservasi
+   * stoknya dilepas (bukan cuma dibersihkan dari state lokal).
+   */
+  function abandonPendingActions() {
+    if (pendingConfirmation) {
+      fetch("/api/agent/tools/reject", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          audit_log_id: pendingConfirmation.audit_log_id,
+        }),
+      }).catch(() => {});
+    }
+    setPendingConfirmation(null);
+    setMutationChoice(null);
+  }
+
   async function handleNewConversation() {
     if (isThinking) return;
     try {
-      // Sama seperti Batal di PinConfirmDialog — mulai percakapan baru while ada
-      // pendingConfirmation yang belum diproses juga "meninggalkan" proposal itu,
-      // jadi harus di-reject juga supaya reservasi stoknya dilepas (bukan cuma
-      // dibersihkan dari state lokal).
-      if (pendingConfirmation) {
-        fetch("/api/agent/tools/reject", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            audit_log_id: pendingConfirmation.audit_log_id,
-          }),
-        }).catch(() => {});
-      }
+      abandonPendingActions();
       const newId = await startNewConversation(
         supabase,
         businessId,
@@ -269,10 +292,24 @@ export function ChatWindow({
       );
       setConversationId(newId);
       setMessages([]);
-      setPendingConfirmation(null);
-      setMutationChoice(null);
     } catch (err) {
       console.error(err);
+    }
+  }
+
+  async function handleResumeConversation(id: string) {
+    if (isThinking || resuming || id === conversationId) return;
+    setResuming(true);
+    try {
+      const history = await resumeConversation(supabase, id, conversationId);
+      abandonPendingActions();
+      setConversationId(id);
+      setMessages(await appendPendingMessages(id, history));
+      setHistoryOpen(false);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setResuming(false);
     }
   }
 
@@ -370,15 +407,26 @@ export function ChatWindow({
         title="Asisten Stok"
         subtitle={`${fullName} · ${tenantName}`}
         actions={
-          <button
-            onClick={handleNewConversation}
-            disabled={isThinking || !engine}
-            className="btn btn-secondary rounded-full !text-xs !py-1.5 !px-3"
-            title="Percakapan baru"
-          >
-            <Plus size={13} />
-            <span className="hidden sm:inline">Percakapan Baru</span>
-          </button>
+          <>
+            <button
+              onClick={() => setHistoryOpen(true)}
+              disabled={isThinking || loadingHistory}
+              className="btn btn-secondary rounded-full !text-xs !py-1.5 !px-3"
+              title="Riwayat percakapan"
+            >
+              <History size={13} />
+              <span className="hidden sm:inline">Riwayat</span>
+            </button>
+            <button
+              onClick={handleNewConversation}
+              disabled={isThinking || !engine}
+              className="btn btn-secondary rounded-full !text-xs !py-1.5 !px-3"
+              title="Percakapan baru"
+            >
+              <Plus size={13} />
+              <span className="hidden sm:inline">Percakapan Baru</span>
+            </button>
+          </>
         }
       />
 
@@ -469,6 +517,16 @@ export function ChatWindow({
           </button>
         </div>
       </div>
+
+      {historyOpen && (
+        <ConversationHistoryPanel
+          currentConversationId={conversationId}
+          load={() => listConversations(supabase, businessId, staffId)}
+          onSelect={handleResumeConversation}
+          onClose={() => setHistoryOpen(false)}
+          busy={resuming}
+        />
+      )}
 
       {pendingConfirmation && (
         <PinConfirmDialog

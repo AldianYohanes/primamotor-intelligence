@@ -31,6 +31,7 @@ import {
   type TenantLocation,
 } from "@/src/lib/agents/location-choice";
 import { describeStock, pickProduct, type ProductSearchResult } from "@/src/lib/agents/product-resolution";
+import { trimHistoryForContext } from "@/src/lib/agents/history-window";
 
 export type { LocationChoice } from "@/src/lib/agents/location-choice";
 
@@ -611,7 +612,7 @@ async function runAgentTurnInner(
       role: "system",
       content: `${systemPrompt}\n\n${buildToolInstructions(tools)}`,
     },
-    ...history,
+    ...trimHistoryForContext(history),
     { role: "user", content: userMessage },
   ];
 
@@ -735,8 +736,10 @@ export async function runAgentTurn(
   // tokenizer) — proxy kasar tapi cukup untuk melihat tren "percakapan makin
   // panjang -> makin lambat" di evaluasi BAB 4, tanpa perlu tokenizer WebLLM
   // di-load terpisah cuma untuk menghitung ini.
+  // Dihitung dari riwayat yang benar-benar dikirim ke agent (setelah sliding window).
   const contextLengthAtCall =
-    history.reduce((sum, m) => sum + m.content.length, 0) + userMessage.length;
+    trimHistoryForContext(history).reduce((sum, m) => sum + m.content.length, 0) +
+    userMessage.length;
   const usageAcc = { promptTokens: 0, completionTokens: 0, hasUsage: false };
   const modelReplies: string[] = [];
 
