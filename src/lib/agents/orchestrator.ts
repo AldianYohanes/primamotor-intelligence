@@ -263,7 +263,8 @@ async function executeTool(
         const res = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...args, conversation_id: conversationId }),
+          // Route mewajibkan business_id dan mencocokkannya dengan sesi staf (403 bila beda).
+          body: JSON.stringify({ ...args, business_id: businessId, conversation_id: conversationId }),
         });
         return await res.json();
       } catch {
