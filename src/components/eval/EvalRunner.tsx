@@ -117,6 +117,13 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   const [rows, setRows] = useState<ScoredRow[]>([]);
   const [environment, setEnvironment] = useState<Awaited<ReturnType<typeof collectEnvironment>> | null>(null);
   const [startedAt, setStartedAt] = useState<string | null>(null);
+  // Ikut diekspor supaya run yang berhenti di tengah bisa ditelusuri dari JSON saja.
+  const [stoppedReason, setStoppedReason] = useState<{
+    kind: "gpu" | "error";
+    message: string;
+    during: string;
+    at: string;
+  } | null>(null);
   const [modelId, setModelId] = useState<string>(MODEL_ID);
   const [gpuInfo, setGpuInfo] = useState<GpuInfo | null | "loading">("loading");
   const [alertsOn, setAlertsOn] = useState(true);
@@ -150,7 +157,9 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   }, []);
 
   const isEvalTenant = businessSlug === EVAL_TENANT_SLUG;
-  const selected = SCENARIOS.filter((s) => !idFilter.trim() || s.id.startsWith(idFilter.trim().toUpperCase()));
+  // Beberapa awalan dipisah koma, mis. "T-06, T-07, T-08, T-09, T-1".
+  const prefixes = idFilter.split(",").map((p) => p.trim().toUpperCase()).filter(Boolean);
+  const selected = SCENARIOS.filter((s) => prefixes.length === 0 || prefixes.some((p) => s.id.startsWith(p)));
   const modes: AgentMode[] = modeChoice === "both" ? ["multi_agent", "single_agent"] : [modeChoice];
   const needsPin = selected.some((s) => s.confirm === "pin");
   const draftCount = SCENARIOS.filter((s) => s.label_status !== "reviewed").length;
@@ -254,6 +263,8 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
     let resetEngine: (() => void) | undefined;
     setRunning(true);
     setRows([]);
+    setStoppedReason(null);
+    let during = "persiapan";
     setStartedAt(new Date().toISOString());
     try {
       if (!isWebGPUAvailable()) throw new Error("Browser ini tidak mendukung WebGPU.");
@@ -280,6 +291,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
       deviceFailure.catch(() => {});
       const guard = <T,>(p: Promise<T>) => Promise.race([p, deviceFailure]);
 
+      during = "memuat model";
       const engine: MLCEngineInterface = await guard(
         getWebLLMEngine(
           (p) => setStatus(`Memuat model: ${Math.round((p.progress ?? 0) * 100)}% — ${p.text}`),
@@ -294,6 +306,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
 
       // Inferensi pertama memuat shader/kernel GPU; tidak ikut dihitung supaya latensi tidak bias.
       setStatus("Pemanasan model (tidak dinilai)…");
+      during = "pemanasan model";
       await guard(runAgentTurn(engine, [], "halo", await createConversation("multi_agent"), businessId));
 
       const collected: ScoredRow[] = [];
@@ -304,6 +317,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         for (const mode of modes) {
           i += 1;
           setStatus(`[${i}/${total}] ${scenario.id} · ${mode}`);
+          during = `${scenario.id} · ${mode}`;
           const stockBefore = await snapshotStock();
           const base: Omit<Observation, "stockAfter"> = {
             scenarioId: scenario.id,
@@ -380,6 +394,12 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      setStoppedReason({
+        kind: err instanceof GpuDeviceError ? "gpu" : "error",
+        message,
+        during,
+        at: new Date().toISOString(),
+      });
       if (err instanceof GpuDeviceError) {
         resetEngine?.();
         setStatus(
@@ -409,6 +429,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
           scenarioVersion: scenarioFile.version,
           draftLabels: draftCount,
           environment,
+          stoppedReason,
           summaries,
           rows: rows.map((r) => ({ ...r, scenario: r.scenario.id })),
         },
@@ -487,7 +508,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
           <span className="font-medium text-slate-700">Filter ID (awalan)</span>
           <input
             className="field-input w-full"
-            placeholder="mis. Q, T-0, S"
+            placeholder="mis. Q, T-0, atau T-06, T-1"
             value={idFilter}
             onChange={(e) => setIdFilter(e.target.value)}
             disabled={running}
@@ -575,7 +596,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
           <button className="btn btn-secondary px-4 py-2" onClick={() => download(`eval-${startedAt ?? "run"}.csv`, toCsv(rows), "text/csv")} disabled={rows.length === 0}>
             Unduh CSV
           </button>
-          <button className="btn btn-secondary px-4 py-2" onClick={exportJson} disabled={rows.length === 0}>
+          <button className="btn btn-secondary px-4 py-2" onClick={exportJson} disabled={rows.length === 0 && !stoppedReason}>
             Unduh JSON
           </button>
           <span className="text-sm text-slate-600">{status}</span>
