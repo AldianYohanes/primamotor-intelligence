@@ -19,6 +19,7 @@ import { enablePushNotifications, getPushSupportStatus } from "@/src/lib/notific
 import { isStandalone, useInstallPrompt } from "@/src/lib/pwa/install-prompt";
 import { useModelStore } from "@/src/lib/stores/model-store";
 import { formatBytes } from "@/src/lib/agents/model-progress";
+import { MODEL_OPTIONS } from "@/src/lib/agents/model-options";
 
 export interface AccountInfo {
   fullName: string;
@@ -140,11 +141,14 @@ function DeviceSettings() {
   const install = useInstallPrompt((s) => s.install);
 
   const modelStatus = useModelStore((s) => s.status);
+  const modelId = useModelStore((s) => s.modelId);
   const cachedBytes = useModelStore((s) => s.cachedBytes);
   const totalBytes = useModelStore((s) => s.totalBytes);
   const refreshInfo = useModelStore((s) => s.refreshInfo);
   const removeFromDevice = useModelStore((s) => s.removeFromDevice);
+  const setModelId = useModelStore((s) => s.setModelId);
   const [removing, setRemoving] = useState(false);
+  const [switchingModel, setSwitchingModel] = useState(false);
 
   useEffect(() => {
     refreshInfo().catch(() => {});
@@ -230,6 +234,32 @@ function DeviceSettings() {
           ) : undefined
         }
       />
+      <div className="pt-1">
+        <label htmlFor="account-model-switch" className="mb-1 block text-[11px] font-medium text-slate-500">
+          Ganti model AI {modelBusy && "(tunggu sampai selesai dulu)"}
+        </label>
+        <select
+          id="account-model-switch"
+          value={modelId}
+          disabled={modelBusy || switchingModel}
+          onChange={async (e) => {
+            setSwitchingModel(true);
+            await setModelId(e.target.value).catch(() => {});
+            setSwitchingModel(false);
+          }}
+          className="field-input w-full !py-1.5 text-xs disabled:opacity-60"
+        >
+          {MODEL_OPTIONS.map((opt) => (
+            <option key={opt.id} value={opt.id}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-[11px] text-slate-400">
+          Kalau asisten sering berhenti karena error GPU, coba varian
+          &ldquo;tanpa f16&rdquo;. Model baru perlu diunduh ulang.
+        </p>
+      </div>
     </>
   );
 }

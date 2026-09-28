@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/src/lib/supabase/client";
 import { useModelStore } from "@/src/lib/stores/model-store";
+import { MODEL_OPTIONS } from "@/src/lib/agents/model-options";
 import { ModelSetupPanel } from "@/src/components/model/ModelSetupPanel";
 import { AppHeader } from "@/src/components/nav/AppHeader";
 import type { AppModule } from "@/src/lib/auth/rbac";
@@ -67,8 +68,11 @@ export function ChatWindow({
   const modelStatus = useModelStore((s) => s.status);
   const engine = useModelStore((s) => s.engine);
   const engineError = useModelStore((s) => s.error);
+  const modelId = useModelStore((s) => s.modelId);
   const prepareModel = useModelStore((s) => s.prepare);
   const retryModel = useModelStore((s) => s.retry);
+  const setModelId = useModelStore((s) => s.setModelId);
+  const [switchingModel, setSwitchingModel] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
   const [draftText, setDraftText] = useState("");
   const [pendingConfirmation, setPendingConfirmation] =
@@ -309,6 +313,13 @@ export function ChatWindow({
             Asisten AI gagal dimuat
           </p>
           <p className="text-sm text-slate-600">{engineError}</p>
+          {/(f16|WGSL|GPU)/i.test(engineError) && (
+            <p className="text-xs text-slate-500">
+              Ini biasanya error dukungan GPU/browser terhadap model saat ini.
+              Coba ganti ke model lain di bawah (varian &ldquo;tanpa f16&rdquo;
+              biasanya lebih kompatibel).
+            </p>
+          )}
           <div className="mt-1 flex justify-center gap-2">
             <button onClick={retryModel} className="btn btn-primary">
               Coba Lagi
@@ -319,6 +330,34 @@ export function ChatWindow({
             >
               Muat Ulang Halaman
             </button>
+          </div>
+
+          <div className="mt-2 border-t border-slate-100 pt-3 text-left">
+            <label htmlFor="model-switch" className="mb-1 block text-xs font-medium text-slate-600">
+              Atau ganti model AI
+            </label>
+            <select
+              id="model-switch"
+              value={modelId}
+              disabled={switchingModel}
+              onChange={async (e) => {
+                setSwitchingModel(true);
+                await setModelId(e.target.value).catch(() => {});
+                setSwitchingModel(false);
+              }}
+              className="field-input w-full !py-1.5 text-xs disabled:opacity-60"
+            >
+              {MODEL_OPTIONS.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-slate-400">
+              {switchingModel
+                ? "Menyiapkan model baru…"
+                : "Model baru perlu diunduh (~1–5 GB) sebelum bisa dipakai."}
+            </p>
           </div>
         </div>
       </div>

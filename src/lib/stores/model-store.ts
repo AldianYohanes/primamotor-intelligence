@@ -56,6 +56,8 @@ interface ModelState {
   removeFromDevice: () => Promise<void>;
   /** Baca ulang ukuran model & bagian yang tersimpan (panel Account). */
   refreshInfo: () => Promise<void>;
+  /** Ganti model aktif (mis. staf pindah ke varian tanpa f16 setelah error GPU) lalu cek ulang unduhan. */
+  setModelId: (modelId: string) => Promise<void>;
 }
 
 const loadEngineModule = () => import("@/src/lib/agents/webllm-engine");
@@ -309,6 +311,32 @@ export const useModelStore = create<ModelState>((set, get) => {
 
     refreshInfo: async () => {
       await refreshDownloadInfo();
+    },
+
+    setModelId: async (modelId: string) => {
+      if (modelId === get().modelId) return;
+      attempt += 1;
+      pausedByNetwork = false;
+      releaseWakeLock();
+      resettingSelf = true;
+      const mod = await loadEngineModule();
+      mod.resetWebLLMEngine();
+      resettingSelf = false;
+      set({
+        status: "idle",
+        phase: "preparing",
+        modelId,
+        totalBytes: null,
+        cachedBytes: 0,
+        downloadedBytes: 0,
+        bytesPerSecond: null,
+        secondsLeft: null,
+        loadFraction: 0,
+        notice: null,
+        error: null,
+        engine: null,
+      });
+      await get().prepare();
     },
   };
 });
