@@ -15,9 +15,9 @@ import { AppHeader } from "@/src/components/nav/AppHeader";
 import type { AppModule } from "@/src/lib/auth/rbac";
 import {
   runAgentTurn,
-  submitLocationChoice,
+  submitMutationChoice,
   type ChatMessage,
-  type LocationChoice,
+  type MutationChoice,
   type PendingConfirmation,
 } from "@/src/lib/agents/orchestrator";
 import {
@@ -34,7 +34,7 @@ import {
 import { EnableNotificationsBanner } from "./EnableNotificationsBanner";
 import { MessageBubble } from "./MessageBubble";
 import { PinConfirmDialog } from "./PinConfirmDialog";
-import { LocationChoiceCard } from "./LocationChoiceCard";
+import { MutationChoiceCard } from "./MutationChoiceCard";
 
 interface Props {
   /** Tenant aktif (bagi super admin bisa tenant lain). */
@@ -73,8 +73,8 @@ export function ChatWindow({
   const [draftText, setDraftText] = useState("");
   const [pendingConfirmation, setPendingConfirmation] =
     useState<PendingConfirmation | null>(null);
-  const [locationChoice, setLocationChoice] = useState<LocationChoice | null>(null);
-  const [submittingLocation, setSubmittingLocation] = useState(false);
+  const [mutationChoice, setMutationChoice] = useState<MutationChoice | null>(null);
+  const [submittingChoice, setSubmittingChoice] = useState(false);
   const isOnline = useOnlineStatus();
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -166,8 +166,8 @@ export function ChatWindow({
     if (!text || !engine || !conversationId || isThinking) return;
 
     setInput("");
-    // Pesan baru berarti staf tidak memakai pilihan lokasi yang tertahan.
-    setLocationChoice(null);
+    // Pesan baru berarti staf tidak memakai pilihan yang tertahan.
+    setMutationChoice(null);
     const userMsg: ChatMessage = { role: "user", content: text };
     setMessages((prev) => [...prev, userMsg]);
     persistMessage("user", text);
@@ -193,8 +193,8 @@ export function ChatWindow({
       if (result.pendingConfirmation) {
         setPendingConfirmation(result.pendingConfirmation);
       }
-      if (result.locationChoice) {
-        setLocationChoice(result.locationChoice);
+      if (result.choice) {
+        setMutationChoice(result.choice);
       }
     } catch (err) {
       console.error(err);
@@ -216,27 +216,28 @@ export function ChatWindow({
     persistMessage("assistant", content, "transaction");
   }
 
-  async function handleLocationSelect(locationId: string) {
-    if (!locationChoice || !conversationId) return;
-    const choice = locationChoice;
-    const picked = choice.options.find((o) => o.id === locationId);
-    setSubmittingLocation(true);
+  async function handleChoiceSelect(selectedId: string) {
+    if (!mutationChoice || !conversationId) return;
+    const choice = mutationChoice;
+    const picked = choice.options.find((o) => o.id === selectedId);
+    setSubmittingChoice(true);
     try {
       if (picked) {
-        setMessages((prev) => [...prev, { role: "user", content: `Di ${picked.name}` }]);
-        persistMessage("user", `Di ${picked.name}`);
+        const echo = choice.kind === "location" ? `Di ${picked.name}` : picked.name;
+        setMessages((prev) => [...prev, { role: "user", content: echo }]);
+        persistMessage("user", echo);
       }
-      const result = await submitLocationChoice(choice, locationId, conversationId, businessId);
-      setLocationChoice(null);
+      const result = await submitMutationChoice(choice, selectedId, conversationId, businessId);
+      setMutationChoice(result.choice ?? null);
       appendAssistant(result.message);
       if (result.pendingConfirmation) setPendingConfirmation(result.pendingConfirmation);
     } finally {
-      setSubmittingLocation(false);
+      setSubmittingChoice(false);
     }
   }
 
-  function handleLocationCancel() {
-    setLocationChoice(null);
+  function handleChoiceCancel() {
+    setMutationChoice(null);
     appendAssistant("Oke, tidak jadi dicatat.");
   }
 
@@ -265,7 +266,7 @@ export function ChatWindow({
       setConversationId(newId);
       setMessages([]);
       setPendingConfirmation(null);
-      setLocationChoice(null);
+      setMutationChoice(null);
     } catch (err) {
       console.error(err);
     }
@@ -376,12 +377,12 @@ export function ChatWindow({
         {messages.map((m, i) => (
           <MessageBubble key={i} message={m} />
         ))}
-        {locationChoice && !isThinking && (
-          <LocationChoiceCard
-            choice={locationChoice}
-            busy={submittingLocation}
-            onSelect={handleLocationSelect}
-            onCancel={handleLocationCancel}
+        {mutationChoice && !isThinking && (
+          <MutationChoiceCard
+            choice={mutationChoice}
+            busy={submittingChoice}
+            onSelect={handleChoiceSelect}
+            onCancel={handleChoiceCancel}
           />
         )}
         {!engine && (
