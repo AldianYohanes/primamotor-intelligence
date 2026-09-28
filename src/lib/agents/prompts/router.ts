@@ -4,7 +4,7 @@ Tugasmu HANYA menentukan agent tujuan berdasarkan pesan staf, bukan menjawab lan
 - Jika staf bertanya soal stok/ketersediaan part ("ada radiator 240 gak?", "sisa berapa bohlam sein?") → arahkan ke QUERY_AGENT
 - Jika staf ingin mencatat perubahan stok ("masuk barang 10 pcs filter oli", "keluar 2 unit karbu", "pindahkan ke gudang") → arahkan ke TRANSACTION_AGENT
 - Jika staf bertanya soal tren/laporan ("part apa yang paling laku bulan ini?") → arahkan ke QUERY_AGENT (getSalesTrend)
-- Pesan yang tidak berkaitan dengan stok/part → jawab singkat bahwa kamu hanya membantu urusan stok suku cadang.
+- Pesan yang tidak berkaitan dengan stok/part → OFF_TOPIC.
 
 Cara membedakan:
 - Pesan berisi kata pergerakan barang (masuk, keluar, kejual, laku, pindah, transfer, kurangi, tambah) beserta nama barang
@@ -12,12 +12,27 @@ Cara membedakan:
   Contoh: "masuk 3 busi bosch" → TRANSACTION_AGENT.
 - Pertanyaan ada/sisa/berapa/stok sebuah barang di toko ini, atau penjualannya → QUERY_AGENT, termasuk istilah part
   yang tidak kamu kenal.
-- OFF_TOPIC untuk pesan yang tidak meminta data stok/penjualan toko ini dan tidak meminta pencatatan barang.
+- Pertanyaan barang apa saja yang dijual/tersedia di toko ini ("di toko ada produk apa aja?") → QUERY_AGENT.
+- Pertanyaan lanjutan soal stok atau transaksi yang baru dibahas ("kenapa stoknya berubah?", "yang tadi sisa berapa?")
+  → QUERY_AGENT. Lihat "Balasan asisten sebelumnya" bila ada untuk memahami konteksnya.
+- OFF_TOPIC untuk pesan yang tidak meminta data stok/penjualan toko ini dan tidak meminta pencatatan barang,
+  termasuk sapaan dan pertanyaan soal kemampuanmu.
 
 Staf sering pakai istilah informal/typo (karbu = karburator, bohlam sein = lampu sein, dll) —
 jangan koreksi mereka, teruskan apa adanya ke agent tujuan yang akan melakukan fuzzy search.
 
 Balas HANYA dengan salah satu token: QUERY_AGENT, TRANSACTION_AGENT, atau OFF_TOPIC.`
+
+const ROUTER_CONTEXT_MAX_CHARS = 300;
+
+/**
+ * Router tidak menerima riwayat penuh (hemat token), tapi pesan lanjutan seperti
+ * "kenapa stoknya berubah?" tidak bisa diklasifikasi tanpa balasan terakhir.
+ */
+export function buildRouterInput(userMessage: string, lastAssistantText?: string): string {
+  const context = lastAssistantText?.trim().slice(0, ROUTER_CONTEXT_MAX_CHARS);
+  return context ? `Balasan asisten sebelumnya: "${context}"\nPesan staf: ${userMessage}` : userMessage;
+}
 
 /**
  * Toleran terhadap variasi keluaran model ("TRANSACTION", "transaction_agent",

@@ -1,7 +1,7 @@
 "use client";
 
 import type { MLCEngineInterface } from "@mlc-ai/web-llm";
-import { ROUTER_SYSTEM_PROMPT, parseRouterReply } from "@/src/lib/agents/prompts/router";
+import { ROUTER_SYSTEM_PROMPT, buildRouterInput, parseRouterReply } from "@/src/lib/agents/prompts/router";
 import { QUERY_AGENT_SYSTEM_PROMPT } from "@/src/lib/agents/prompts/query-agent";
 import { TRANSACTION_AGENT_SYSTEM_PROMPT } from "@/src/lib/agents/prompts/transaction-agent";
 import { SINGLE_AGENT_SYSTEM_PROMPT } from "@/src/lib/agents/prompts/single-agent";
@@ -511,18 +511,28 @@ interface NonStreamUsage {
   completion_tokens?: number;
 }
 
+/** Juga menjawab "apa yang bisa kamu lakukan?", yang oleh Router diarahkan ke OFF_TOPIC. */
+export const OFF_TOPIC_REPLY =
+  "Maaf, saya hanya bisa membantu urusan stok & suku cadang toko ini. Contohnya:\n" +
+  '- Cek stok: "stok radiator di toko berapa?"\n' +
+  '- Catat barang masuk/keluar: "masuk 10 filter oli di gudang"\n' +
+  '- Pindah barang: "pindahkan 2 busi dari gudang ke toko"\n' +
+  '- Tren penjualan: "penjualan radiator 6 bulan terakhir"';
+
 async function routeMessage(
   engine: MLCEngineInterface,
   userMessage: string,
+  history: ChatMessage[],
 ): Promise<{
   agentType: "query" | "transaction" | "off_topic";
   text: string;
   usage: NonStreamUsage | null;
 }> {
+  const lastAssistant = history.findLast((m) => m.role === "assistant")?.content;
   const completion = await engine.chat.completions.create({
     messages: [
       { role: "system", content: ROUTER_SYSTEM_PROMPT },
-      { role: "user", content: userMessage },
+      { role: "user", content: buildRouterInput(userMessage, lastAssistant) },
     ],
     temperature: 0,
   });
@@ -556,7 +566,7 @@ async function runAgentTurnInner(
   let systemPrompt = SINGLE_AGENT_SYSTEM_PROMPT;
 
   if (mode === "multi_agent") {
-    const routed = await routeMessage(engine, userMessage);
+    const routed = await routeMessage(engine, userMessage, history);
     agentType = routed.agentType;
     modelReplies.push(`[router] ${routed.text}`);
     if (routed.usage) {
@@ -568,8 +578,7 @@ async function runAgentTurnInner(
     if (agentType === "off_topic") {
       return {
         agentType,
-        assistantText:
-          "Maaf, saya hanya bisa membantu urusan stok & suku cadang toko ini.",
+        assistantText: OFF_TOPIC_REPLY,
         toolTrace,
       };
     }
