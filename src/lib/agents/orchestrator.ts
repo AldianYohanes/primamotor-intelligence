@@ -29,6 +29,7 @@ import {
   type LocationChoice,
   type TenantLocation,
 } from "@/src/lib/agents/location-choice";
+import { describeStock, pickProduct, type ProductSearchResult } from "@/src/lib/agents/product-resolution";
 
 export type { LocationChoice } from "@/src/lib/agents/location-choice";
 
@@ -51,13 +52,13 @@ export interface AgentTurnResult {
   agentType: "query" | "transaction" | "off_topic";
   assistantText: string;
   pendingConfirmation?: PendingConfirmation;
-  /** updateStock ditahan sampai staf memilih lokasi (lihat location-choice.ts). */
-  locationChoice?: LocationChoice;
+  /** Transaksi ditahan sampai staf memilih produk atau lokasi. */
+  choice?: MutationChoice;
   /**
-   * args = keluaran asli model (dasar metrik akurasi parameter); executedArgs =
-   * argumen yang benar-benar dikirim bila kode memetakan lokasi.
+   * args = keluaran asli model; resolvedArgs = tulisan model dipetakan ke UUID
+   * (dasar ParameterAccuracy); executedArgs = yang benar-benar dikirim ke server.
    */
-  toolTrace: { name: string; args: unknown; result: unknown; executedArgs?: unknown }[];
+  toolTrace: { name: string; args: unknown; result: unknown; resolvedArgs?: unknown; executedArgs?: unknown }[];
   latencyMs?: number;
   /** Keluaran mentah model per iterasi, untuk analisis evaluasi. */
   modelReplies?: string[];
@@ -84,8 +85,7 @@ export function inferAgentTypeFromTrace(
   return toolTrace.length > 0 ? "query" : "off_topic";
 }
 
-// getStock → (dorongan) → mutasi, plus satu retry, harus muat.
-const MAX_TOOL_ITERATIONS = 5;
+const MAX_TOOL_ITERATIONS = 4;
 
 const AGENT_TOOLS_BY_TYPE: Record<"query" | "transaction" | "off_topic", string[]> = {
   query: ["getStock", "getSalesTrend"],
@@ -296,71 +296,213 @@ async function fetchTenantLocations(): Promise<TenantLocation[] | null> {
   }
 }
 
-// Ditujukan ke model: model kecil cenderung meneruskan pesan error apa adanya ke staf.
-const PRODUCT_ID_NOT_FROM_GETSTOCK =
-  "Panggilan ditolak sistem: product_id bukan dari hasil getStock. Pesan ini untukmu, bukan untuk staf. Balasan berikutnya WAJIB blok <tool_call> getStock dengan nama barang dari pesan staf, lalu ulangi pencatatan memakai product_id dari hasilnya.";
+type MutationTool = "updateStock" | "transferStock";
 
-// Model 3B jarang menyambung ke langkah kedua setelah menerima hasil alat.
-const MUTATION_NEXT_STEP =
-  "Pesan untukmu, bukan untuk staf: kalau staf meminta mencatat barang masuk/keluar/pindah, balasan berikutnya WAJIB blok <tool_call> updateStock atau transferStock memakai product_id dari hasil ini (kosongkan location_id kalau staf tidak menyebut lokasi). Jangan meminta PIN lewat teks — sistem memintanya sendiri setelah alat dipanggil. Kalau staf hanya bertanya stok, jawab biasa.";
-
-function withMutationHint(name: string, result: unknown, allowedTools: Set<string>): unknown {
-  const canMutate = allowedTools.has("updateStock") || allowedTools.has("transferStock");
-  const results = (result as { results?: unknown[] } | null)?.results;
-  if (name !== "getStock" || !canMutate || !Array.isArray(results) || results.length === 0) return result;
-  return { ...(result as object), next_step: MUTATION_NEXT_STEP };
+function isMutationTool(name: string): name is MutationTool {
+  return name === "updateStock" || name === "transferStock";
 }
 
-function productIdsFromTrace(toolTrace: AgentTurnResult["toolTrace"]): Set<string> {
-  const ids = new Set<string>();
-  for (const t of toolTrace) {
-    if (t.name !== "getStock") continue;
-    const results = (t.result as { results?: { product_id?: string }[] } | null)?.results;
-    for (const r of results ?? []) if (r.product_id) ids.add(r.product_id);
-  }
-  return ids;
+export interface ProductChoice {
+  kind: "product";
+  toolName: MutationTool;
+  /** Argumen dari model; product_id diisi dari pilihan staf. */
+  args: Record<string, unknown>;
+  userMessage: string;
+  options: { id: string; name: string; detail: string }[];
 }
 
-function productNameFromTrace(
-  toolTrace: AgentTurnResult["toolTrace"],
-  productId: unknown,
-): string | null {
-  for (const t of toolTrace) {
-    if (t.name !== "getStock") continue;
-    const results = (t.result as { results?: { product_id?: string; name?: string }[] } | null)?.results;
-    const match = results?.find((r) => r.product_id === productId);
-    if (match?.name) return match.name;
+export type MutationChoice = ProductChoice | LocationChoice;
+
+interface MutationOutcome {
+  message: string;
+  pendingConfirmation?: PendingConfirmation;
+  choice?: MutationChoice;
+  /** Ringkasan untuk toolTrace/evaluasi. */
+  result: Record<string, unknown>;
+  /** Nama barang & lokasi TULISAN MODEL dipetakan ke UUID, tanpa bantuan kata staf (dasar ParameterAccuracy). */
+  resolvedArgs?: Record<string, unknown>;
+  /** Argumen yang benar-benar dikirim ke server. */
+  executedArgs?: Record<string, unknown>;
+}
+
+const OFFLINE_MUTATION_MESSAGE =
+  "Sedang offline — perubahan stok butuh koneksi internet untuk verifikasi PIN dan mencatat transaksi dengan aman. Coba lagi setelah tersambung.";
+
+async function searchProducts(query: string, conversationId: string, businessId: string) {
+  const res = (await executeTool("getStock", { query, limit: 5 }, conversationId, businessId)) as {
+    results?: ProductSearchResult[];
+  } | null;
+  return res?.results ?? [];
+}
+
+async function executeMutation(
+  toolName: MutationTool,
+  executedArgs: Record<string, unknown>,
+  product: ProductSearchResult | null,
+  conversationId: string,
+  businessId: string,
+): Promise<MutationOutcome> {
+  const result = (await executeTool(toolName, executedArgs, conversationId, businessId)) as {
+    audit_log_id?: string;
+    message?: string;
+    error?: string;
+  } | null;
+  if (result?.audit_log_id && result.message) {
+    return {
+      message: result.message,
+      pendingConfirmation: { audit_log_id: result.audit_log_id, tool_name: toolName, message: result.message },
+      result: { status: "pending_confirmation", audit_log_id: result.audit_log_id },
+      executedArgs,
+    };
   }
-  return null;
+  const error = result?.error ?? "Gagal mencatat transaksi. Coba lagi ya.";
+  const stockNote = product && /tidak mencukupi/i.test(error) ? ` Stok tersedia ${product.name}: ${describeStock(product)}.` : "";
+  return { message: `${error}.${stockNote}`.replace("..", "."), result: { status: "rejected", error }, executedArgs };
 }
 
 /**
- * Lanjutkan updateStock yang ditahan setelah staf memilih lokasi. Deterministik,
- * tanpa LLM; hasilnya masuk alur konfirmasi PIN yang sama.
+ * Alat transaksi satu langkah: model cukup menulis nama barang, jumlah, arah, dan
+ * lokasi seperti disebut staf. Kode yang mencari produk, memetakan lokasi, dan
+ * mengeksekusi; hasilnya pesan deterministik, konfirmasi PIN, atau kartu pilihan.
  */
-export async function submitLocationChoice(
-  choice: LocationChoice,
-  locationId: string,
+async function advanceMutation(
+  toolName: MutationTool,
+  args: Record<string, unknown>,
+  userMessage: string,
   conversationId: string,
   businessId: string,
-): Promise<{ pendingConfirmation?: PendingConfirmation; message: string }> {
-  const result = (await executeTool(
-    choice.toolName,
-    { ...choice.args, location_id: locationId },
-    conversationId,
-    businessId,
-  )) as { audit_log_id?: string; message?: string; error?: string } | null;
-  if (result?.audit_log_id && result.message) {
+  getDevicePosition: () => Promise<GeoPoint | null>,
+): Promise<MutationOutcome> {
+  if (!navigator.onLine) return { message: OFFLINE_MUTATION_MESSAGE, result: { status: "offline" } };
+
+  const locations = await fetchTenantLocations();
+  const locRef = (v: unknown) => (locations ? resolveLocationRef(v, locations)?.id ?? null : null);
+
+  // 1. Produk: dari pilihan staf (product_id) atau dicari dari nama tulisan model.
+  let product: ProductSearchResult | null = null;
+  let productId = typeof args.product_id === "string" ? args.product_id : null;
+  let productName = typeof args.product_name === "string" ? args.product_name : null;
+  let modelProductId: string | null = null;
+  if (!productId) {
+    const query = String(args.product ?? args.product_name ?? "").trim();
+    if (!query) return { message: "Barang apa yang mau dicatat?", result: { status: "product_missing" } };
+    const pick = pickProduct(await searchProducts(query, conversationId, businessId));
+    if (pick.status === "none") {
+      return {
+        message: `Barang "${query}" tidak ditemukan di data toko. Coba sebut nama lain atau nomor part-nya.`,
+        result: { status: "product_not_found", query },
+      };
+    }
+    if (pick.status === "ambiguous") {
+      return {
+        message: `Ada beberapa barang yang mirip "${query}". Pilih yang dimaksud di bawah.`,
+        choice: {
+          kind: "product",
+          toolName,
+          args,
+          userMessage,
+          options: pick.candidates.map((c) => ({ id: c.product_id, name: c.name, detail: describeStock(c) })),
+        },
+        result: { status: "product_choice_required", candidates: pick.candidates.map((c) => c.product_id) },
+      };
+    }
+    product = pick.product;
+    productId = product.product_id;
+    productName = product.name;
+    modelProductId = product.product_id;
+  }
+  const name = productName ?? "barang ini";
+
+  const quantity = Number(args.quantity);
+  const reasoning = String(args.reasoning ?? "").trim() || userMessage;
+  const resolvedArgs: Record<string, unknown> =
+    toolName === "updateStock"
+      ? {
+          product_id: modelProductId,
+          location_id: locRef(args.location ?? args.location_id),
+          quantity: args.quantity,
+          direction: args.direction,
+        }
+      : {
+          product_id: modelProductId,
+          quantity: args.quantity,
+          from_location_id: locRef(args.from_location ?? args.from_location_id),
+          to_location_id: locRef(args.to_location ?? args.to_location_id),
+        };
+
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    return { message: `Berapa jumlah ${name} yang mau dicatat?`, result: { status: "quantity_missing" }, resolvedArgs };
+  }
+  if (!locations) {
+    return { message: "Daftar lokasi toko tidak bisa dimuat. Coba lagi sebentar lagi.", result: { status: "locations_unavailable" }, resolvedArgs };
+  }
+
+  if (toolName === "updateStock") {
+    const direction = String(args.direction ?? "").toLowerCase();
+    if (direction !== "masuk" && direction !== "keluar") {
+      return { message: `${name} mau dicatat masuk atau keluar?`, result: { status: "direction_missing" }, resolvedArgs };
+    }
+    const base = { product_id: productId, quantity, direction, reasoning };
+    const resolved = resolveUpdateLocation({ location_id: args.location ?? args.location_id }, userMessage, locations);
+    if (resolved === "choose") {
+      const choice = buildLocationChoice(base, userMessage, locations, await getDevicePosition());
+      return {
+        message: locationChoiceMessage(choice, productName),
+        choice,
+        result: {
+          status: "location_choice_required",
+          suggested_location_id: choice.suggestedLocationId,
+          suggestion_reason: choice.suggestionReason,
+        },
+        resolvedArgs,
+      };
+    }
+    const locationId = resolved === "passthrough" ? null : resolved.locationId;
+    const outcome = await executeMutation(toolName, { ...base, location_id: locationId }, product, conversationId, businessId);
+    return { ...outcome, resolvedArgs };
+  }
+
+  const from = resolvedArgs.from_location_id as string | null;
+  const to = resolvedArgs.to_location_id as string | null;
+  if (!from || !to || from === to) {
     return {
-      pendingConfirmation: {
-        audit_log_id: result.audit_log_id,
-        tool_name: choice.toolName,
-        message: result.message,
-      },
-      message: result.message,
+      message: `Pindah ${name} dari mana ke mana? Sebutkan lokasi asal dan tujuannya, misalnya "dari gudang ke toko".`,
+      result: { status: "transfer_locations_missing" },
+      resolvedArgs,
     };
   }
-  return { message: result?.error ?? "Gagal mencatat transaksi. Coba lagi ya." };
+  const outcome = await executeMutation(
+    toolName,
+    { product_id: productId, quantity, from_location_id: from, to_location_id: to, reasoning },
+    product,
+    conversationId,
+    businessId,
+  );
+  return { ...outcome, resolvedArgs };
+}
+
+/**
+ * Lanjutkan transaksi yang ditahan setelah staf memilih produk atau lokasi.
+ * Deterministik, tanpa LLM; hasilnya masuk alur konfirmasi PIN yang sama.
+ */
+export async function submitMutationChoice(
+  choice: MutationChoice,
+  selectedId: string,
+  conversationId: string,
+  businessId: string,
+): Promise<{ message: string; pendingConfirmation?: PendingConfirmation; choice?: MutationChoice }> {
+  if (choice.kind === "location") {
+    return executeMutation(choice.toolName, { ...choice.args, location_id: selectedId }, null, conversationId, businessId);
+  }
+  const picked = choice.options.find((o) => o.id === selectedId);
+  return advanceMutation(
+    choice.toolName,
+    { ...choice.args, product_id: selectedId, product_name: picked?.name },
+    choice.userMessage,
+    conversationId,
+    businessId,
+    readDevicePosition,
+  );
 }
 
 interface NonStreamUsage {
@@ -454,7 +596,6 @@ async function runAgentTurnInner(
   ];
 
   let nudgedMissingCall = false;
-  const productRejection = { error: PRODUCT_ID_NOT_FROM_GETSTOCK };
   for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
     const { content, usage } = await streamChatCompletion(engine, messages, onToken);
     if (usage) {
@@ -472,14 +613,13 @@ async function runAgentTurnInner(
       messages.push({ role: "user", content: MALFORMED_TOOL_CALL_FEEDBACK });
       continue;
     }
-    // Sama seperti di atas untuk "Saya akan panggil alat…" tanpa blok tool call,
-    // atau jawaban teks tepat setelah panggilannya ditolak penjaga produk.
-    const lastRejected = toolTrace.at(-1)?.result === productRejection;
+    // Sama seperti di atas untuk "Saya akan panggil alat…" tanpa blok tool call.
     if (
       reply.calls.length === 0 &&
       !nudgedMissingCall &&
+      toolTrace.length === 0 &&
       i < MAX_TOOL_ITERATIONS - 1 &&
-      ((toolTrace.length === 0 && announcesToolCall(reply.text || content)) || lastRejected)
+      announcesToolCall(reply.text || content)
     ) {
       nudgedMissingCall = true;
       messages.push({ role: "assistant", content });
@@ -502,78 +642,32 @@ async function runAgentTurnInner(
     for (const call of reply.calls) {
       const args = call.arguments;
       const allowed = allowedTools.has(call.name);
-      let executedArgs = args;
 
-      if (allowed && (call.name === "updateStock" || call.name === "transferStock")) {
-        // Aturan "getStock dulu" ditegakkan kode: model kecil sering mengarang product_id.
-        if (!productIdsFromTrace(toolTrace).has(String(args.product_id))) {
-          toolTrace.push({ name: call.name, args, result: productRejection });
-          responses.push(formatToolResponse(call.name, productRejection));
-          continue;
-        }
-
-        const locations = navigator.onLine ? await fetchTenantLocations() : null;
-        if (locations && call.name === "updateStock") {
-          const resolved = resolveUpdateLocation(args, userMessage, locations);
-          if (resolved === "choose") {
-            const choice = buildLocationChoice(args, userMessage, locations, await getDevicePosition());
-            toolTrace.push({
-              name: call.name,
-              args,
-              result: {
-                status: "location_choice_required",
-                suggested_location_id: choice.suggestedLocationId,
-                suggestion_reason: choice.suggestionReason,
-              },
-            });
-            return {
-              agentType,
-              assistantText: locationChoiceMessage(choice, productNameFromTrace(toolTrace, args.product_id)),
-              locationChoice: choice,
-              toolTrace,
-            };
-          }
-          if (resolved !== "passthrough") executedArgs = { ...args, location_id: resolved.locationId };
-        } else if (locations) {
-          const from = resolveLocationRef(args.from_location_id, locations);
-          const to = resolveLocationRef(args.to_location_id, locations);
-          if (from || to) {
-            executedArgs = {
-              ...args,
-              ...(from && { from_location_id: from.id }),
-              ...(to && { to_location_id: to.id }),
-            };
-          }
-        }
-      }
-
-      const result = allowed
-        ? await executeTool(call.name, executedArgs, conversationId, businessId)
-        : { error: `Tool ${call.name} tidak tersedia untuk agent ini.` };
-      toolTrace.push({ name: call.name, args, result, ...(executedArgs !== args && { executedArgs }) });
-
-      // updateStock/transferStock TIDAK melanjutkan loop — harus berhenti untuk
-      // menunggu staf memasukkan PIN. Loop lanjut lagi setelah confirm terpisah.
-      if (
-        (call.name === "updateStock" || call.name === "transferStock") &&
-        result &&
-        typeof result === "object" &&
-        "audit_log_id" in result
-      ) {
-        const r = result as { audit_log_id: string; message: string };
+      // Mutasi mengakhiri giliran: sisa alur (produk, lokasi, validasi, PIN)
+      // deterministik, model tidak perlu merangkai langkah berikutnya.
+      if (allowed && isMutationTool(call.name)) {
+        const outcome = await advanceMutation(call.name, args, userMessage, conversationId, businessId, getDevicePosition);
+        toolTrace.push({
+          name: call.name,
+          args,
+          result: outcome.result,
+          ...(outcome.resolvedArgs && { resolvedArgs: outcome.resolvedArgs }),
+          ...(outcome.executedArgs && { executedArgs: outcome.executedArgs }),
+        });
         return {
           agentType,
-          assistantText: r.message,
-          pendingConfirmation: {
-            audit_log_id: r.audit_log_id,
-            tool_name: call.name,
-            message: r.message,
-          },
+          assistantText: outcome.message,
+          pendingConfirmation: outcome.pendingConfirmation,
+          choice: outcome.choice,
           toolTrace,
         };
       }
 
-      responses.push(formatToolResponse(call.name, withMutationHint(call.name, result, allowedTools)));
+      const result = allowed
+        ? await executeTool(call.name, args, conversationId, businessId)
+        : { error: `Tool ${call.name} tidak tersedia untuk agent ini.` };
+      toolTrace.push({ name: call.name, args, result });
+      responses.push(formatToolResponse(call.name, result));
     }
 
     // Dikirim sebagai pesan user, bukan role 'tool': template chat model non-Hermes

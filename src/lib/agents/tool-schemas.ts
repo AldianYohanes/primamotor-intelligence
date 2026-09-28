@@ -68,7 +68,10 @@ export type CreateReorderSuggestionInput = z.infer<typeof createReorderSuggestio
 
 /**
  * Deskripsi tool dalam format function-calling (OpenAI-compatible, yang juga dipakai
- * WebLLM). Nama & parameter HARUS sinkron dengan Route Handler di app/api/agent/tools/*.
+ * WebLLM). getStock/getSalesTrend sinkron dengan Route Handler. updateStock &
+ * transferStock sengaja memakai NAMA barang/lokasi (satu langkah untuk model kecil);
+ * orchestrator memetakannya ke product_id/location_id sebelum memanggil Route Handler,
+ * yang tetap memvalidasi UUID lewat skema Zod di atas.
  */
 export const AGENT_TOOL_DEFINITIONS = [
   {
@@ -92,22 +95,20 @@ export const AGENT_TOOL_DEFINITIONS = [
     function: {
       name: 'updateStock',
       description:
-        'Catat niat perubahan stok (barang masuk/keluar). TIDAK langsung mengubah stok — akan meminta konfirmasi PIN staf dulu (human-in-the-loop).',
+        'Catat niat barang masuk/keluar. Sistem yang mencari barangnya dan mengecek stok. TIDAK langsung mengubah stok — sistem meminta konfirmasi PIN staf dulu (human-in-the-loop).',
       parameters: {
         type: 'object',
         properties: {
-          product_id: { type: 'string', description: 'UUID produk, didapat dari hasil getStock' },
-          location_id: {
-            type: 'string',
-            description:
-              'UUID lokasi (toko/gudang) yang disebut staf. Kosongkan kalau staf tidak menyebut lokasi — sistem akan menanyakannya ke staf.',
-          },
-          quantity: { type: 'number', description: 'Jumlah unit' },
+          product: { type: 'string', description: 'Nama barang persis seperti ditulis staf (boleh singkatan/typo)' },
+          quantity: { type: 'number', description: 'Jumlah unit dari pesan staf' },
           direction: { type: 'string', enum: ['masuk', 'keluar'] },
-          reasoning: { type: 'string', description: 'Alasan/ringkasan permintaan staf, untuk audit log' },
+          location: {
+            type: 'string',
+            description: 'Lokasi yang disebut staf, mis. "toko" atau "gudang". Kosongkan kalau staf tidak menyebut lokasi — sistem akan menanyakannya.',
+          },
+          reasoning: { type: 'string', description: 'Ringkasan permintaan staf, untuk audit log' },
         },
-        // location_id sengaja tidak wajib di sini; server (updateStockSchema) tetap mewajibkannya.
-        required: ['product_id', 'quantity', 'direction', 'reasoning'],
+        required: ['product', 'quantity', 'direction', 'reasoning'],
       },
     },
   },
@@ -115,17 +116,17 @@ export const AGENT_TOOL_DEFINITIONS = [
     type: 'function' as const,
     function: {
       name: 'transferStock',
-      description: 'Catat niat transfer stok antar lokasi (toko <-> gudang). Butuh konfirmasi PIN staf.',
+      description: 'Catat niat pindah stok antar lokasi (toko <-> gudang). Sistem yang mencari barangnya. Butuh konfirmasi PIN staf.',
       parameters: {
         type: 'object',
         properties: {
-          product_id: { type: 'string' },
-          quantity: { type: 'number' },
-          from_location_id: { type: 'string' },
-          to_location_id: { type: 'string' },
-          reasoning: { type: 'string' },
+          product: { type: 'string', description: 'Nama barang persis seperti ditulis staf' },
+          quantity: { type: 'number', description: 'Jumlah unit' },
+          from_location: { type: 'string', description: 'Lokasi asal, mis. "gudang"' },
+          to_location: { type: 'string', description: 'Lokasi tujuan, mis. "toko"' },
+          reasoning: { type: 'string', description: 'Ringkasan permintaan staf, untuk audit log' },
         },
-        required: ['product_id', 'quantity', 'from_location_id', 'to_location_id', 'reasoning'],
+        required: ['product', 'quantity', 'from_location', 'to_location', 'reasoning'],
       },
     },
   },

@@ -21,8 +21,9 @@ export interface TenantLocation {
 }
 
 export interface LocationChoice {
+  kind: "location";
   toolName: "updateStock";
-  /** Argumen dari model tanpa location_id; location_id diisi dari pilihan staf. */
+  /** Argumen dengan product_id sudah terisi, tanpa location_id; location_id diisi dari pilihan staf. */
   args: Record<string, unknown>;
   suggestedLocationId: string | null;
   suggestionReason: "mentioned" | "nearest" | null;
@@ -175,7 +176,7 @@ export function buildLocationChoice(
     .map(({ id, name, type }) => ({ id, name, type }))
     .sort((a, b) => Number(b.id === suggestedLocationId) - Number(a.id === suggestedLocationId));
 
-  return { toolName: "updateStock", args: rest, suggestedLocationId, suggestionReason, distanceMeters, options };
+  return { kind: "location", toolName: "updateStock", args: rest, suggestedLocationId, suggestionReason, distanceMeters, options };
 }
 
 export function formatDistance(meters: number): string {
