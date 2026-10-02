@@ -7,7 +7,6 @@ const nextConfig = {
   experimental: {
     serverActions: { bodySizeLimit: "10mb" },
     optimizePackageImports: [
-      "@mantine/core",
       "@tabler/icons-react",
       "lucide-react",
       "@tanstack/react-table",

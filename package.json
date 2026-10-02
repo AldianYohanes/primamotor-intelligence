@@ -11,9 +11,6 @@
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
-    "@mantine/core": "^9.4.1",
-    "@mantine/modals": "^9.4.1",
-    "@mantine/notifications": "^9.4.1",
     "@mlc-ai/web-llm": "^0.2.84",
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.110.5",
