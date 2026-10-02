@@ -566,6 +566,12 @@ export const OFF_TOPIC_REPLY =
   '- Pindah barang: "pindahkan 2 busi dari gudang ke toko"\n' +
   '- Tren penjualan: "penjualan radiator 6 bulan terakhir"';
 
+const KNOWN_TOOL_NAMES = new Set<string>(AGENT_TOOL_DEFINITIONS.map((t) => t.function.name));
+
+export const UNAVAILABLE_TOOL_REPLY =
+  "Maaf, permintaan itu di luar kemampuan saya. Saya hanya bisa cek stok, melihat tren penjualan, " +
+  "dan mencatat barang masuk/keluar/pindah lokasi (dengan konfirmasi PIN).";
+
 async function routeMessage(
   engine: MLCEngineInterface,
   userMessage: string,
@@ -660,6 +666,7 @@ async function runAgentTurnInner(
   ];
 
   let nudgedMissingCall = false;
+  const rejectedTools = new Set<string>();
   for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
     const { content, usage } = await streamChatCompletion(engine, messages, onToken);
     if (usage) {
@@ -749,6 +756,18 @@ async function runAgentTurnInner(
       toolTrace.push({ name: call.name, args, result });
       rec.finish(running, { ...start, label: start.label.replace(/…$/, ""), status: "done" });
       rec.add(toolResultStep(call.name, result));
+
+      // Alat yang tidak ada sama sekali, atau alat agent lain yang diulang
+      // setelah ditolak: model tidak akan berubah pikiran, jadi giliran diakhiri
+      // kode alih-alih menghabiskan sisa iterasi.
+      if (!allowed) {
+        const unknownTool = !KNOWN_TOOL_NAMES.has(call.name);
+        if (unknownTool || rejectedTools.has(call.name)) {
+          rec.add(answerStep("code"));
+          return { agentType, assistantText: UNAVAILABLE_TOOL_REPLY, toolTrace };
+        }
+        rejectedTools.add(call.name);
+      }
       responses.push(formatToolResponse(call.name, result));
     }
 
