@@ -15,6 +15,7 @@ import {
   formatToolResponse,
   parseModelReply,
   visibleStreamText,
+  withClosedToolCall,
 } from "@/src/lib/agents/tool-protocol";
 import { searchCachedStock } from "@/src/lib/cache/indexeddb";
 import { getActiveModelId } from "@/src/lib/agents/webllm-engine";
@@ -680,7 +681,7 @@ async function runAgentTurnInner(
     // Model kecil kadang menulis JSON tool call yang rusak; beri satu kesempatan
     // memperbaiki selama masih ada sisa iterasi, alih-alih langsung menyerah.
     if (reply.calls.length === 0 && reply.malformed && i < MAX_TOOL_ITERATIONS - 1) {
-      messages.push({ role: "assistant", content });
+      messages.push({ role: "assistant", content: withClosedToolCall(content) });
       messages.push({ role: "user", content: MALFORMED_TOOL_CALL_FEEDBACK });
       rec.add(retryStep("malformed"));
       continue;
@@ -694,7 +695,7 @@ async function runAgentTurnInner(
       announcesToolCall(reply.text || content)
     ) {
       nudgedMissingCall = true;
-      messages.push({ role: "assistant", content });
+      messages.push({ role: "assistant", content: withClosedToolCall(content) });
       messages.push({ role: "user", content: MISSING_TOOL_CALL_FEEDBACK });
       rec.add(retryStep("missing_call"));
       continue;
@@ -710,7 +711,7 @@ async function runAgentTurnInner(
       };
     }
 
-    messages.push({ role: "assistant", content });
+    messages.push({ role: "assistant", content: withClosedToolCall(content) });
     const responses: string[] = [];
 
     for (const call of reply.calls) {

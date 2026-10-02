@@ -31,8 +31,23 @@ export interface ParsedReply {
 const OPEN = "<tool_call>";
 const CLOSE = "</tool_call>";
 
-/** Keluaran berhenti di sini supaya model tidak mengarang hasil tool sendiri. */
-export const TOOL_STOP_SEQUENCES = ["<tool_response>"];
+/**
+ * Keluaran berhenti di sini supaya model tidak mengarang hasil tool sendiri atau
+ * melanjutkan dengan giliran "Staf: …" karangan (Run 17–19: sampai 625 token
+ * terbuang per giliran). Akibatnya satu balasan memuat paling banyak satu tool
+ * call; panggilan berikutnya dilakukan di iterasi berikutnya.
+ */
+export const TOOL_STOP_SEQUENCES = [CLOSE, "<tool_response>"];
+
+/**
+ * Tag penutup terpotong oleh stop sequence; dipasang kembali sebelum balasan
+ * masuk riwayat supaya model tidak meniru blok tanpa penutup.
+ */
+export function withClosedToolCall(content: string): string {
+  const lastOpen = content.lastIndexOf(OPEN);
+  if (lastOpen === -1 || content.indexOf(CLOSE, lastOpen) !== -1) return content;
+  return `${content.trimEnd()}\n${CLOSE}`;
+}
 
 export function buildToolInstructions(tools: readonly ToolDefinition[]): string {
   const schema = tools.map((t) => ({
