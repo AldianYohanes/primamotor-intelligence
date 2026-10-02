@@ -667,6 +667,8 @@ async function runAgentTurnInner(
   ];
 
   let nudgedMissingCall = false;
+  // Teks model sebelum diingatkan; dipakai bila balasan sesudahnya kosong.
+  let textBeforeNudge = "";
   const rejectedTools = new Set<string>();
   for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
     const { content, usage } = await streamChatCompletion(engine, messages, onToken);
@@ -695,18 +697,20 @@ async function runAgentTurnInner(
       announcesToolCall(reply.text || content)
     ) {
       nudgedMissingCall = true;
+      textBeforeNudge = (reply.text || content).trim();
       messages.push({ role: "assistant", content: withClosedToolCall(content) });
       messages.push({ role: "user", content: MISSING_TOOL_CALL_FEEDBACK });
       rec.add(retryStep("missing_call"));
       continue;
     }
     if (reply.calls.length === 0) {
-      rec.add(answerStep(reply.text || !reply.malformed ? "model" : "code"));
+      // Balasan kosong (Run 19, S-03 single: model diam sesudah diingatkan) tidak
+      // boleh sampai ke staf sebagai pesan kosong.
+      const modelText = (reply.text || (reply.malformed ? "" : content)).trim() || textBeforeNudge;
+      rec.add(answerStep(modelText ? "model" : "code"));
       return {
         agentType,
-        assistantText:
-          reply.text ||
-          (reply.malformed ? "Maaf, saya kurang mengerti maksudnya. Bisa diulang?" : content),
+        assistantText: modelText || "Maaf, saya kurang mengerti maksudnya. Bisa diulang?",
         toolTrace,
       };
     }
