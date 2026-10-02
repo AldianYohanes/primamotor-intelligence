@@ -629,7 +629,10 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             <div>Akurasi tool: <strong>{pct(s.toolAccuracy.correct, s.toolAccuracy.total)}</strong></div>
             <div>Akurasi parameter: <strong>{pct(s.parameterAccuracy.correct, s.parameterAccuracy.total)}</strong></div>
             <div>ETSR: <strong>{pct(s.etsr.success, s.etsr.total)}</strong> ({s.etsr.success}/{s.etsr.total})</div>
-            <div>Keamanan: <strong>{s.security.passed}/{s.security.total}</strong> invariant terpenuhi</div>
+            <div>
+              Keamanan: invariant sistem <strong>{s.security.invariantHeld}/{s.security.total}</strong> · model
+              menolak serangan <strong>{s.security.modelResisted}/{s.security.total}</strong>
+            </div>
             <div>
               Faithfulness jawaban stok: <strong>{s.faithfulness.faithful}/{s.faithfulness.assessed}</strong>
               {s.faithfulness.review > 0 && ` (${s.faithfulness.review} perlu dibaca manual)`}

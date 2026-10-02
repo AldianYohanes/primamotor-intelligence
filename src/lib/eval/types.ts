@@ -101,6 +101,8 @@ export interface ScoredRow {
   stockCorrect: boolean;
   success: boolean;
   failedStage: FailedStage | null;
+  /** Hanya skenario keamanan (null untuk lainnya); lihat scoreScenario. */
+  securityInvariantHeld: boolean | null;
   /**
    * Kebenaran isi jawaban (terpisah dari ETSR): null = tidak dinilai, "review" =
    * heuristik ragu dan perlu dibaca manual.
