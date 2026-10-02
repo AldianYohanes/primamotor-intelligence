@@ -1,5 +1,7 @@
 import Dexie, { type Table } from "dexie";
 import type { createClient } from "@/src/lib/supabase/client";
+import type { Json } from "@/src/lib/db/types";
+import type { ProcessStep } from "@/src/lib/agents/process-trace";
 
 export interface CachedStock {
   product_id: string;
@@ -18,6 +20,8 @@ export interface CachedConversationMessage {
   content: string;
   created_at: string;
   pending_sync: boolean; // true kalau dibuat offline & belum ter-flush ke agent_messages
+  /** Langkah "Lihat proses" pesan asisten; ikut terkirim saat flush. Bukan kolom indeks. */
+  trace?: ProcessStep[];
 }
 
 class AppCache extends Dexie {
@@ -133,13 +137,12 @@ export async function flushPendingMessages(
 
   let flushed = 0;
   for (const msg of rows) {
-    const { error } = await supabase
+    const row = { conversation_id: msg.conversation_id, role: msg.role, content: msg.content };
+    let { error } = await supabase
       .from("agent_messages")
-      .insert({
-        conversation_id: msg.conversation_id,
-        role: msg.role,
-        content: msg.content,
-      });
+      .insert(msg.trace ? { ...row, trace: msg.trace as unknown as Json } : row);
+    // Kolom trace belum ada (migrasi 0036 belum jalan): pesannya tetap dikirim tanpa trace.
+    if (error && msg.trace) ({ error } = await supabase.from("agent_messages").insert(row));
     if (error) continue; // masih gagal (masih offline?) — biarkan di antrean, coba lagi nanti
 
     await cache.pendingMessages.delete(msg.id);

@@ -10,6 +10,7 @@ import {
   WifiOff,
 } from "lucide-react";
 import { createClient } from "@/src/lib/supabase/client";
+import type { Json } from "@/src/lib/db/types";
 import { useModelStore } from "@/src/lib/stores/model-store";
 import { MODEL_OPTIONS } from "@/src/lib/agents/model-options";
 import { ModelSetupPanel } from "@/src/components/model/ModelSetupPanel";
@@ -21,7 +22,9 @@ import {
   type ChatMessage,
   type MutationChoice,
   type PendingConfirmation,
+  type ProcessStep,
 } from "@/src/lib/agents/orchestrator";
+import { liveStatusLabel } from "@/src/lib/agents/process-trace";
 import {
   syncStockCache,
   queuePendingMessage,
@@ -34,12 +37,14 @@ import {
   listConversations,
   resumeConversation,
   startNewConversation,
+  type StoredChatMessage,
 } from "@/src/lib/agents/conversation";
 import { ConversationHistoryPanel } from "./ConversationHistoryPanel";
 import { EnableNotificationsBanner } from "./EnableNotificationsBanner";
 import { MessageBubble } from "./MessageBubble";
 import { PinConfirmDialog } from "./PinConfirmDialog";
 import { MutationChoiceCard } from "./MutationChoiceCard";
+import { ProcessDetails } from "./ProcessDetails";
 
 interface Props {
   /** Tenant aktif (bagi super admin bisa tenant lain). */
@@ -64,7 +69,7 @@ export function ChatWindow({
 }: Props) {
   const supabase = createClient();
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<StoredChatMessage[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [input, setInput] = useState("");
   // Engine dikelola store global supaya unduhan model tetap jalan saat staf
@@ -79,6 +84,8 @@ export function ChatWindow({
   const [switchingModel, setSwitchingModel] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
   const [draftText, setDraftText] = useState("");
+  // Langkah "Lihat proses" giliran yang sedang berjalan (live).
+  const [liveSteps, setLiveSteps] = useState<ProcessStep[]>([]);
   const [pendingConfirmation, setPendingConfirmation] =
     useState<PendingConfirmation | null>(null);
   const [mutationChoice, setMutationChoice] = useState<MutationChoice | null>(null);
@@ -125,7 +132,7 @@ export function ChatWindow({
       top: scrollRef.current.scrollHeight,
       behavior: "smooth",
     });
-  }, [messages, isThinking]);
+  }, [messages, isThinking, liveSteps.length]);
 
   // Begitu koneksi kembali: sinkron ulang cache stok (biar tidak makin basi) dan
   // kirim ulang semua pesan yang sempat tertunda.
@@ -144,14 +151,15 @@ export function ChatWindow({
     role: "user" | "assistant",
     content: string,
     agentType?: string,
+    trace?: ProcessStep[],
   ) {
     if (!conversationId) return;
-    const { error } = await supabase.from("agent_messages").insert({
-      conversation_id: conversationId,
-      role,
-      content,
-      agent_type: agentType,
-    });
+    const row = { conversation_id: conversationId, role, content, agent_type: agentType };
+    let { error } = await supabase
+      .from("agent_messages")
+      .insert(trace ? { ...row, trace: trace as unknown as Json } : row);
+    // Kolom trace belum ada (migrasi 0036 belum jalan): simpan pesannya tanpa trace.
+    if (error && trace) ({ error } = await supabase.from("agent_messages").insert(row));
 
     if (error) {
       // Kemungkinan besar karena offline — jangan biarkan pesan hilang begitu saja,
@@ -162,6 +170,7 @@ export function ChatWindow({
           role,
           content,
           created_at: new Date().toISOString(),
+          ...(trace && { trace }),
         });
       }
     }
@@ -179,6 +188,9 @@ export function ChatWindow({
     persistMessage("user", text);
     setIsThinking(true);
     setDraftText("");
+    setLiveSteps([]);
+    // Salinan terakhir dari onStep, dipakai bila giliran gagal di tengah jalan.
+    let lastSteps: ProcessStep[] = [];
 
     try {
       const result = await runAgentTurn(
@@ -188,13 +200,21 @@ export function ChatWindow({
         conversationId,
         businessId,
         setDraftText,
+        {
+          onStep: (steps) => {
+            lastSteps = steps;
+            setLiveSteps(steps);
+          },
+        },
       );
-      const assistantMsg: ChatMessage = {
+      const trace = result.processSteps ?? [];
+      const assistantMsg: StoredChatMessage = {
         role: "assistant",
         content: result.assistantText,
+        trace,
       };
       setMessages((prev) => [...prev, assistantMsg]);
-      persistMessage("assistant", result.assistantText, result.agentType);
+      persistMessage("assistant", result.assistantText, result.agentType, trace);
 
       if (result.pendingConfirmation) {
         setPendingConfirmation(result.pendingConfirmation);
@@ -209,17 +229,20 @@ export function ChatWindow({
         {
           role: "assistant",
           content: "Maaf, terjadi kesalahan. Coba lagi ya.",
+          // runAgentTurn menandai langkah yang terputus sebagai gagal sebelum melempar error.
+          trace: lastSteps,
         },
       ]);
     } finally {
       setIsThinking(false);
       setDraftText("");
+      setLiveSteps([]);
     }
   }
 
-  function appendAssistant(content: string) {
-    setMessages((prev) => [...prev, { role: "assistant", content }]);
-    persistMessage("assistant", content, "transaction");
+  function appendAssistant(content: string, trace?: ProcessStep[]) {
+    setMessages((prev) => [...prev, { role: "assistant", content, ...(trace && { trace }) }]);
+    persistMessage("assistant", content, "transaction", trace);
   }
 
   async function handleChoiceSelect(selectedId: string) {
@@ -235,7 +258,7 @@ export function ChatWindow({
       }
       const result = await submitMutationChoice(choice, selectedId, conversationId, businessId);
       setMutationChoice(result.choice ?? null);
-      appendAssistant(result.message);
+      appendAssistant(result.message, result.processSteps);
       if (result.pendingConfirmation) setPendingConfirmation(result.pendingConfirmation);
     } finally {
       setSubmittingChoice(false);
@@ -254,10 +277,13 @@ export function ChatWindow({
    */
   async function appendPendingMessages(
     id: string,
-    history: ChatMessage[],
-  ): Promise<ChatMessage[]> {
+    history: StoredChatMessage[],
+  ): Promise<StoredChatMessage[]> {
     const pending = await getPendingMessages(id);
-    return [...history, ...pending.map((p) => ({ role: p.role, content: p.content }))];
+    return [
+      ...history,
+      ...pending.map((p) => ({ role: p.role, content: p.content, ...(p.trace && { trace: p.trace }) })),
+    ];
   }
 
   /**
@@ -478,22 +504,22 @@ export function ChatWindow({
           </div>
         )}
         {isThinking && (
-          <>
-            {draftText ? (
+          <div>
+            {draftText && (
               <MessageBubble
                 message={{ role: "assistant", content: draftText }}
               />
-            ) : (
-              <div className="flex items-center gap-1.5 px-1 text-xs text-slate-400">
-                <span className="flex gap-0.5">
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300 [animation-delay:-0.3s]" />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300 [animation-delay:-0.15s]" />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300" />
-                </span>
-                Asisten sedang berpikir…
-              </div>
             )}
-          </>
+            <div className="mt-1 flex items-center gap-1.5 px-1 text-xs text-slate-400">
+              <span className="flex gap-0.5">
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300 [animation-delay:-0.3s]" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300 [animation-delay:-0.15s]" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300" />
+              </span>
+              {liveStatusLabel(liveSteps)}
+            </div>
+            <ProcessDetails steps={liveSteps} live />
+          </div>
         )}
       </div>
 

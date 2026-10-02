@@ -1,7 +1,10 @@
 import type { createClient } from "@/src/lib/supabase/client";
-import type { ChatMessage } from "@/src/lib/agents/orchestrator";
+import type { ChatMessage, ProcessStep } from "@/src/lib/agents/orchestrator";
 
 type SupabaseBrowserClient = ReturnType<typeof createClient>;
+
+/** Pesan yang ditampilkan di chat: pesan asisten bisa membawa langkah "Lihat proses". */
+export type StoredChatMessage = ChatMessage & { trace?: ProcessStep[] };
 
 /**
  * Sebelumnya: SETIAP kali halaman chat dibuka, baris agent_conversations baru
@@ -30,7 +33,7 @@ export async function getOrCreateActiveConversation(
   supabase: SupabaseBrowserClient,
   businessId: string,
   staffId: string,
-): Promise<{ conversationId: string; history: ChatMessage[] }> {
+): Promise<{ conversationId: string; history: StoredChatMessage[] }> {
   const cutoff = Date.now() - ACTIVE_CONVERSATION_WINDOW_HOURS * 60 * 60 * 1000;
 
   // Biasanya hanya ada satu yang terbuka (Percakapan Baru & Lanjutkan menutup
@@ -62,17 +65,25 @@ export async function getOrCreateActiveConversation(
 export async function loadConversationHistory(
   supabase: SupabaseBrowserClient,
   conversationId: string,
-): Promise<ChatMessage[]> {
-  const { data } = await supabase
-    .from("agent_messages")
-    .select("role, content")
-    .eq("conversation_id", conversationId)
-    .in("role", ["user", "assistant"]) // pesan 'tool' sengaja tidak ditampilkan ke staf
-    .order("created_at", { ascending: true });
+): Promise<StoredChatMessage[]> {
+  const query = (columns: string) =>
+    supabase
+      .from("agent_messages")
+      .select(columns)
+      .eq("conversation_id", conversationId)
+      .in("role", ["user", "assistant"]) // pesan 'tool' sengaja tidak ditampilkan ke staf
+      .order("created_at", { ascending: true })
+      .returns<{ role: string; content: string | null; trace?: unknown }[]>();
+
+  const withTrace = await query("role, content, trace");
+  let data = withTrace.data;
+  // Kolom trace baru ada setelah migrasi 0036; sebelum itu riwayat tetap harus tampil.
+  if (withTrace.error) ({ data } = await query("role, content"));
 
   return (data ?? []).map((m) => ({
     role: m.role as ChatMessage["role"],
     content: m.content ?? "",
+    ...(Array.isArray(m.trace) && { trace: m.trace as ProcessStep[] }),
   }));
 }
 
@@ -152,7 +163,7 @@ export async function resumeConversation(
   supabase: SupabaseBrowserClient,
   conversationId: string,
   currentConversationId: string | null,
-): Promise<ChatMessage[]> {
+): Promise<StoredChatMessage[]> {
   if (currentConversationId && currentConversationId !== conversationId) {
     await closeConversation(supabase, currentConversationId);
   }

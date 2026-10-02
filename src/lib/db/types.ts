@@ -460,6 +460,7 @@ export interface Database {
           agent_type: string | null
           content: string | null
           tool_calls: Json | null
+          trace: Json | null
           created_at: string
         }
         Insert: Partial<Database['public']['Tables']['agent_messages']['Row']> & {

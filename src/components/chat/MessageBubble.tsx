@@ -1,12 +1,13 @@
 import clsx from "clsx";
-import type { ChatMessage } from "@/src/lib/agents/orchestrator";
+import type { StoredChatMessage } from "@/src/lib/agents/conversation";
+import { ProcessDetails } from "./ProcessDetails";
 
-export function MessageBubble({ message }: { message: ChatMessage }) {
+export function MessageBubble({ message }: { message: StoredChatMessage }) {
   if (message.role === "tool" || message.role === "system") return null;
 
   const isUser = message.role === "user";
   return (
-    <div className={clsx("flex", isUser ? "justify-end" : "justify-start")}>
+    <div className={clsx("flex flex-col", isUser ? "items-end" : "items-start")}>
       <div
         className={clsx(
           "max-w-[80%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
@@ -17,6 +18,7 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
       >
         {message.content}
       </div>
+      {!isUser && message.trace && <ProcessDetails steps={message.trace} />}
     </div>
   );
 }

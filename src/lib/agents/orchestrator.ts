@@ -32,8 +32,19 @@ import {
 } from "@/src/lib/agents/location-choice";
 import { describeStock, pickProduct, type ProductSearchResult } from "@/src/lib/agents/product-resolution";
 import { trimHistoryForContext } from "@/src/lib/agents/history-window";
+import {
+  ProcessRecorder,
+  answerStep,
+  mutationOutcomeStep,
+  retryStep,
+  routeStep,
+  toolResultStep,
+  toolStartStep,
+  type ProcessStep,
+} from "@/src/lib/agents/process-trace";
 
 export type { LocationChoice } from "@/src/lib/agents/location-choice";
+export type { ProcessStep } from "@/src/lib/agents/process-trace";
 
 export type ChatRole = "user" | "assistant" | "system" | "tool";
 
@@ -65,6 +76,8 @@ export interface AgentTurnResult {
   /** Keluaran mentah model per iterasi, untuk analisis evaluasi. */
   modelReplies?: string[];
   usage?: { promptTokens: number; completionTokens: number } | null;
+  /** Langkah "Lihat proses" (process-trace.ts), ditampilkan ke staf. */
+  processSteps?: ProcessStep[];
 }
 
 /**
@@ -378,6 +391,8 @@ async function advanceMutation(
   conversationId: string,
   businessId: string,
   getDevicePosition: () => Promise<GeoPoint | null>,
+  /** Tindakan kode untuk "Lihat proses" (mis. "Lokasi diisi: Gudang"). */
+  note: (text: string) => void = () => {},
 ): Promise<MutationOutcome> {
   if (!navigator.onLine) return { message: OFFLINE_MUTATION_MESSAGE, result: { status: "offline" } };
 
@@ -423,6 +438,7 @@ async function advanceMutation(
     productId = product.product_id;
     productName = product.name;
     modelProductId = product.product_id;
+    note(`Barang dicocokkan kode: ${product.name}`);
   }
   const name = productName ?? "barang ini";
 
@@ -471,6 +487,8 @@ async function advanceMutation(
       };
     }
     const locationId = resolved === "passthrough" ? null : resolved.locationId;
+    const locationName = locations.find((l) => l.id === locationId)?.name;
+    note(locationName ? `Lokasi diisi: ${locationName}` : "Lokasi diteruskan ke server untuk divalidasi");
     const outcome = await executeMutation(toolName, { ...base, location_id: locationId }, product, conversationId, businessId);
     return { ...outcome, resolvedArgs };
   }
@@ -483,6 +501,8 @@ async function advanceMutation(
       resolvedArgs,
     };
   }
+  const locName = (id: string) => locations.find((l) => l.id === id)?.name ?? "lokasi";
+  note(`Lokasi diisi: dari ${locName(from)} ke ${locName(to)}`);
   const outcome = await executeMutation(
     toolName,
     { product_id: productId, quantity, from_location_id: from, to_location_id: to, reasoning },
@@ -502,19 +522,35 @@ export async function submitMutationChoice(
   selectedId: string,
   conversationId: string,
   businessId: string,
-): Promise<{ message: string; pendingConfirmation?: PendingConfirmation; choice?: MutationChoice }> {
-  if (choice.kind === "location") {
-    return executeMutation(choice.toolName, { ...choice.args, location_id: selectedId }, null, conversationId, businessId);
-  }
+  onStep?: (steps: ProcessStep[]) => void,
+): Promise<{
+  message: string;
+  pendingConfirmation?: PendingConfirmation;
+  choice?: MutationChoice;
+  processSteps: ProcessStep[];
+}> {
+  const rec = new ProcessRecorder(onStep);
   const picked = choice.options.find((o) => o.id === selectedId);
-  return advanceMutation(
-    choice.toolName,
-    { ...choice.args, product_id: selectedId, product_name: picked?.name },
-    choice.userMessage,
-    conversationId,
-    businessId,
-    readDevicePosition,
-  );
+  rec.add({
+    kind: "action",
+    label: `Staf memilih ${choice.kind === "location" ? "lokasi" : "barang"}: ${picked?.name ?? selectedId}`,
+    status: "done",
+  });
+  const outcome =
+    choice.kind === "location"
+      ? await executeMutation(choice.toolName, { ...choice.args, location_id: selectedId }, null, conversationId, businessId)
+      : await advanceMutation(
+          choice.toolName,
+          { ...choice.args, product_id: selectedId, product_name: picked?.name },
+          choice.userMessage,
+          conversationId,
+          businessId,
+          readDevicePosition,
+          (text) => rec.add({ kind: "action", label: text, status: "done" }),
+        );
+  rec.add(mutationOutcomeStep(outcome.result));
+  rec.add(answerStep("code"));
+  return { ...outcome, processSteps: rec.steps };
 }
 
 interface NonStreamUsage {
@@ -569,6 +605,7 @@ async function runAgentTurnInner(
   mode: AgentMode,
   modelReplies: string[],
   getDevicePosition: () => Promise<GeoPoint | null>,
+  rec: ProcessRecorder,
   onToken?: (partialText: string) => void,
 ): Promise<AgentTurnResult> {
   const toolTrace: AgentTurnResult["toolTrace"] = [];
@@ -577,8 +614,10 @@ async function runAgentTurnInner(
   let systemPrompt = SINGLE_AGENT_SYSTEM_PROMPT;
 
   if (mode === "multi_agent") {
+    const routing = rec.add({ kind: "route", label: "Router menentukan agent…", status: "running" });
     const routed = await routeMessage(engine, userMessage, history);
     agentType = routed.agentType;
+    rec.finish(routing, routeStep(agentType));
     modelReplies.push(`[router] ${routed.text}`);
     if (routed.usage) {
       usageAcc.hasUsage = true;
@@ -587,6 +626,7 @@ async function runAgentTurnInner(
     }
 
     if (agentType === "off_topic") {
+      rec.add(answerStep("code"));
       return {
         agentType,
         assistantText: OFF_TOPIC_REPLY,
@@ -598,6 +638,8 @@ async function runAgentTurnInner(
       agentType === "query"
         ? QUERY_AGENT_SYSTEM_PROMPT
         : TRANSACTION_AGENT_SYSTEM_PROMPT;
+  } else {
+    rec.add({ kind: "route", label: "Mode satu agent (baseline evaluasi), tanpa Router", status: "done" });
   }
   // Agent spesialis hanya menerima tool miliknya (rancangan-evaluasi.tex), baseline
   // menerima semua. Daftar ini juga ditegakkan saat eksekusi di bawah.
@@ -612,7 +654,8 @@ async function runAgentTurnInner(
       role: "system",
       content: `${systemPrompt}\n\n${buildToolInstructions(tools)}`,
     },
-    ...trimHistoryForContext(history),
+    // Hanya role & content: pesan di UI bisa membawa field lain (mis. trace).
+    ...trimHistoryForContext(history).map(({ role, content }) => ({ role, content })),
     { role: "user", content: userMessage },
   ];
 
@@ -632,6 +675,7 @@ async function runAgentTurnInner(
     if (reply.calls.length === 0 && reply.malformed && i < MAX_TOOL_ITERATIONS - 1) {
       messages.push({ role: "assistant", content });
       messages.push({ role: "user", content: MALFORMED_TOOL_CALL_FEEDBACK });
+      rec.add(retryStep("malformed"));
       continue;
     }
     // Sama seperti di atas untuk "Saya akan panggil alat…" tanpa blok tool call.
@@ -645,9 +689,11 @@ async function runAgentTurnInner(
       nudgedMissingCall = true;
       messages.push({ role: "assistant", content });
       messages.push({ role: "user", content: MISSING_TOOL_CALL_FEEDBACK });
+      rec.add(retryStep("missing_call"));
       continue;
     }
     if (reply.calls.length === 0) {
+      rec.add(answerStep(reply.text || !reply.malformed ? "model" : "code"));
       return {
         agentType,
         assistantText:
@@ -666,8 +712,21 @@ async function runAgentTurnInner(
 
       // Mutasi mengakhiri giliran: sisa alur (produk, lokasi, validasi, PIN)
       // deterministik, model tidak perlu merangkai langkah berikutnya.
+      const start = toolStartStep(call.name, args);
+      const running = rec.add(start);
       if (allowed && isMutationTool(call.name)) {
-        const outcome = await advanceMutation(call.name, args, userMessage, conversationId, businessId, getDevicePosition);
+        const outcome = await advanceMutation(
+          call.name,
+          args,
+          userMessage,
+          conversationId,
+          businessId,
+          getDevicePosition,
+          (text) => rec.add({ kind: "action", label: text, status: "done" }),
+        );
+        rec.finish(running, { ...start, label: `Model memanggil ${call.name}`, status: "done" });
+        rec.add(mutationOutcomeStep(outcome.result));
+        rec.add(answerStep("code"));
         toolTrace.push({
           name: call.name,
           args,
@@ -688,6 +747,8 @@ async function runAgentTurnInner(
         ? await executeTool(call.name, args, conversationId, businessId)
         : { error: `Tool ${call.name} tidak tersedia untuk agent ini.` };
       toolTrace.push({ name: call.name, args, result });
+      rec.finish(running, { ...start, label: start.label.replace(/…$/, ""), status: "done" });
+      rec.add(toolResultStep(call.name, result));
       responses.push(formatToolResponse(call.name, result));
     }
 
@@ -696,6 +757,7 @@ async function runAgentTurnInner(
     messages.push({ role: "user", content: responses.join("\n") });
   }
 
+  rec.add(answerStep("fallback"));
   return {
     agentType,
     assistantText:
@@ -728,6 +790,8 @@ export async function runAgentTurn(
     mode?: AgentMode;
     /** Posisi perangkat untuk saran lokasi terdekat; /eval memakai posisi tetap. */
     getDevicePosition?: () => Promise<GeoPoint | null>;
+    /** Langkah "Lihat proses" secara live; hasil akhirnya juga ada di processSteps. */
+    onStep?: (steps: ProcessStep[]) => void;
   } = {},
 ): Promise<AgentTurnResult> {
   const mode = options.mode ?? "multi_agent";
@@ -742,6 +806,7 @@ export async function runAgentTurn(
     userMessage.length;
   const usageAcc = { promptTokens: 0, completionTokens: 0, hasUsage: false };
   const modelReplies: string[] = [];
+  const rec = new ProcessRecorder(options.onStep);
 
   try {
     const inner = await runAgentTurnInner(
@@ -754,6 +819,7 @@ export async function runAgentTurn(
       mode,
       modelReplies,
       options.getDevicePosition ?? readDevicePosition,
+      rec,
       onToken,
     );
     const latencyMs = Math.round(performance.now() - startedAt);
@@ -765,6 +831,7 @@ export async function runAgentTurn(
           ? inferAgentTypeFromTrace(inner.toolTrace)
           : inner.agentType,
       latencyMs,
+      processSteps: rec.steps,
       usage: usageAcc.hasUsage
         ? {
             promptTokens: usageAcc.promptTokens,
@@ -785,6 +852,7 @@ export async function runAgentTurn(
     });
     return result;
   } catch (err) {
+    rec.failRunning();
     // agent_type tidak diketahui pasti kalau error terjadi sebelum/di tengah
     // routing (mis. engine belum siap) — "off_topic" dipakai sebagai nilai
     // netral di kolom yang NOT NULL, bukan klaim bahwa pesannya off-topic.
