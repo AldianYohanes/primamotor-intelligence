@@ -21,6 +21,17 @@ import type {
 
 import { EVAL_DEVICE_POSITION, EVAL_TENANT_SLUG } from "@/src/lib/eval/tenant";
 import {
+  getGpuPreference,
+  gpuLabel,
+  probeGpus,
+  recommendGpu,
+  setGpuPreference,
+  type GpuAdapterSummary,
+  type GpuPowerPreference,
+  type GpuProbe,
+  type GpuRecommendation,
+} from "@/src/lib/agents/gpu-preference";
+import {
   PREFILL_CHUNK_OPTIONS,
   getPrefillChunkPreference,
   setPrefillChunkPreference,
@@ -64,42 +75,13 @@ function download(filename: string, content: string, type: string) {
   URL.revokeObjectURL(url);
 }
 
-interface GpuInfo {
-  vendor?: string;
-  architecture?: string;
-  device?: string;
-  description?: string;
-  maxStorageBufferBindingSizeMB: number;
-  maxBufferSizeMB: number;
-  shaderF16: boolean;
-}
+type GpuInfo = GpuAdapterSummary;
 
-interface MinimalAdapter {
-  info?: Record<string, string>;
-  limits: { maxStorageBufferBindingSize: number; maxBufferSize: number };
-  features: { has: (name: string) => boolean };
-}
-
+/** Adapter yang benar-benar dipakai engine: sesuai preferensi GPU tersimpan. */
 async function readGpuInfo(): Promise<GpuInfo | null> {
-  const gpu = (navigator as Navigator & {
-    gpu?: { requestAdapter: (o?: { powerPreference?: string }) => Promise<MinimalAdapter | null> };
-  }).gpu;
-  try {
-    const adapter = await gpu?.requestAdapter({ powerPreference: "high-performance" });
-    if (!adapter) return null;
-    const info = adapter.info ?? {};
-    return {
-      vendor: info.vendor,
-      architecture: info.architecture,
-      device: info.device,
-      description: info.description,
-      maxStorageBufferBindingSizeMB: Math.round(adapter.limits.maxStorageBufferBindingSize / 2 ** 20),
-      maxBufferSizeMB: Math.round(adapter.limits.maxBufferSize / 2 ** 20),
-      shaderF16: adapter.features.has("shader-f16"),
-    };
-  } catch {
-    return null;
-  }
+  const probes = await probeGpus();
+  const pref = getGpuPreference() ?? "high-performance";
+  return probes.find((p) => p.preference === pref)?.adapter ?? null;
 }
 
 async function collectEnvironment(modelId: string) {
@@ -109,6 +91,8 @@ async function collectEnvironment(modelId: string) {
     hardwareConcurrency: navigator.hardwareConcurrency,
     deviceMemoryGB: (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? null,
     gpu: await readGpuInfo(),
+    /** null = bawaan web-llm (high-performance); lihat gpu-preference.ts. */
+    gpuPreference: getGpuPreference(),
     /** Diisi setelah model dimuat; lihat prefill-preference.ts. */
     prefillChunkSize: null as { effective: number | null; modelDefault: number | null } | null,
   };
@@ -140,9 +124,15 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   const [notifPermission, setNotifPermission] = useState<ReturnType<typeof notificationPermission>>("default");
   const [liveSteps, setLiveSteps] = useState<ProcessStep[]>([]);
   const [prefillChunk, setPrefillChunk] = useState<number | null>(null);
+  const [gpuProbes, setGpuProbes] = useState<GpuProbe[] | null>(null);
+  const [gpuPref, setGpuPref] = useState<GpuPowerPreference | null>(null);
+  // Ganti GPU baru berlaku untuk engine baru; engine yang sudah dimuat tetap di GPU lama.
+  const [gpuPrefChanged, setGpuPrefChanged] = useState(false);
 
   useEffect(() => {
     setPrefillChunk(getPrefillChunkPreference());
+    setGpuPref(getGpuPreference());
+    probeGpus().then(setGpuProbes);
   }, []);
 
   useEffect(() => {
@@ -165,7 +155,9 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
 
   useEffect(() => {
     readGpuInfo().then(setGpuInfo);
-  }, []);
+  }, [gpuPref]);
+
+  const gpuRecommendation = gpuProbes ? recommendGpu(gpuProbes) : null;
 
   const isEvalTenant = businessSlug === EVAL_TENANT_SLUG;
   // Beberapa awalan dipisah koma, mis. "T-06, T-07, T-08, T-09, T-1".
@@ -569,6 +561,18 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
           Kecilkan bila GPU di-reset Windows (DXGI_ERROR_DEVICE_HUNG) saat pemanasan. Tersimpan di perangkat ini,
           berlaku juga untuk /chat, dan dicatat di JSON hasil.
         </p>
+        <GpuChoice
+          probes={gpuProbes}
+          recommendation={gpuRecommendation}
+          value={gpuPref}
+          disabled={running}
+          changed={gpuPrefChanged}
+          onChange={(pref) => {
+            setGpuPref(pref);
+            setGpuPreference(pref);
+            setGpuPrefChanged(true);
+          }}
+        />
         <p className="text-xs text-slate-500 sm:col-span-2 lg:col-span-4">
           {gpuInfo === "loading"
             ? "Membaca info GPU…"
@@ -746,5 +750,64 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         </section>
       )}
     </main>
+  );
+}
+
+const PREFERENCE_LABEL: Record<GpuPowerPreference, string> = {
+  "high-performance": "Performa tinggi",
+  "low-power": "Hemat daya",
+};
+
+/** Pilihan GPU untuk laptop dua GPU, beserta rekomendasi (gpu-preference.ts). */
+function GpuChoice({
+  probes,
+  recommendation,
+  value,
+  disabled,
+  changed,
+  onChange,
+}: {
+  probes: GpuProbe[] | null;
+  recommendation: GpuRecommendation | null;
+  value: GpuPowerPreference | null;
+  disabled: boolean;
+  changed: boolean;
+  onChange: (pref: GpuPowerPreference | null) => void;
+}) {
+  if (!probes || !recommendation || recommendation.kind === "none") return null;
+  const recommended = recommendation.kind === "choose" ? recommendation.preference : null;
+  const describe = (pref: GpuPowerPreference) => {
+    const adapter = probes.find((p) => p.preference === pref)?.adapter;
+    const name = adapter ? `${gpuLabel(adapter)}${adapter.shaderF16 ? "" : " (tanpa f16)"}` : "tidak tersedia";
+    return `${PREFERENCE_LABEL[pref]}: ${name}${pref === recommended ? " (disarankan)" : ""}`;
+  };
+
+  return (
+    <div className="space-y-1 text-sm sm:col-span-2 lg:col-span-4">
+      {recommendation.kind === "choose" ? (
+        <label className="block space-y-1">
+          <span className="font-medium text-slate-700">GPU</span>
+          <select
+            className="field-input w-full sm:w-auto"
+            value={value ?? ""}
+            onChange={(e) => onChange((e.target.value || null) as GpuPowerPreference | null)}
+            disabled={disabled}
+          >
+            <option value="">Bawaan browser ({describe("high-performance")})</option>
+            <option value="high-performance">{describe("high-performance")}</option>
+            <option value="low-power">{describe("low-power")}</option>
+          </select>
+        </label>
+      ) : (
+        <p className="font-medium text-slate-700">GPU: {gpuLabel(recommendation.adapter)}</p>
+      )}
+      <p className="text-xs text-slate-500">
+        {recommendation.kind === "choose" && <>Disarankan: {recommendation.reason} </>}
+        {recommendation.kind === "single" && "Browser hanya melihat satu GPU di perangkat ini."}
+        {recommendation.kind === "browser_ignores" &&
+          "Browser memberi GPU yang sama untuk kedua pilihan (Chrome/Edge di Windows dikenal mengabaikan pilihan ini). Bila laptop punya dua GPU, pilih lewat Windows Settings > System > Display > Graphics > Microsoft Edge, lalu muat ulang halaman."}
+        {changed && <span className="text-amber-700"> Muat ulang halaman agar GPU baru dipakai.</span>}
+      </p>
+    </div>
   );
 }

@@ -3,6 +3,7 @@
 import * as webllm from "@mlc-ai/web-llm";
 import { MODEL_ID } from "@/src/lib/agents/model-options";
 import { getPrefillChunkPreference } from "@/src/lib/agents/prefill-preference";
+import { installGpuPreferencePatch } from "@/src/lib/agents/gpu-preference";
 
 export { MODEL_ID };
 
@@ -200,6 +201,7 @@ export function getWebLLMEngine(
   if (!enginePromise) {
     engineModelId = modelId;
     installGPUDevicePatch((error) => activeDeviceErrorHandler?.(error));
+    installGpuPreferencePatch();
     // Setara CreateMLCEngine, tapi instance-nya disimpan supaya unduhan bisa
     // dihentikan lewat unload() (web-llm meng-abort fetch yang sedang jalan).
     const engine = new webllm.MLCEngine({
