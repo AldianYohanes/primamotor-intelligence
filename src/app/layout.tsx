@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Outfit, Forum } from "next/font/google";
 import "../styles/globals.css";
+import { densityBootScript } from "../lib/ui/density-config";
 import { PwaProvider } from "../components/pwa/PwaProvider";
 
 const inter = Inter({
@@ -57,6 +58,9 @@ export default function RootLayout({
       className={`${inter.variable} ${outfit.variable} ${forum.variable}`}
       suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: densityBootScript }} />
+      </head>
       <body>
         <PwaProvider>{children}</PwaProvider>
       </body>

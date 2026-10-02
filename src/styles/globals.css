@@ -83,6 +83,35 @@
   --radius-xl: calc(var(--radius) + 6px);
 }
 
+/**
+ * Kepadatan tampilan (Pengaturan > Tampilan). "Sedang" = nilai bawaan lama;
+ * diatur lewat atribut data-density di <html>.
+ */
+:root {
+  --d-ctl-y: 0.5rem;
+  --d-ctl-x: 0.875rem;
+  --d-cell-y: 0.75rem;
+  --d-cell-x: 1rem;
+  --d-head-y: 0.625rem;
+  --d-page: 2rem;
+}
+[data-density="compact"] {
+  --d-ctl-y: 0.3125rem;
+  --d-ctl-x: 0.75rem;
+  --d-cell-y: 0.4375rem;
+  --d-cell-x: 0.75rem;
+  --d-head-y: 0.375rem;
+  --d-page: 1rem;
+}
+[data-density="spacious"] {
+  --d-ctl-y: 0.6875rem;
+  --d-ctl-x: 1rem;
+  --d-cell-y: 1.0625rem;
+  --d-cell-x: 1.25rem;
+  --d-head-y: 0.875rem;
+  --d-page: 2.5rem;
+}
+
 :root {
   color-scheme: light;
 }
@@ -180,7 +209,7 @@ h6 {
     border-radius: 0.5rem;
     font-size: 0.8125rem;
     font-weight: 500;
-    padding: 0.5rem 0.875rem;
+    padding: var(--d-ctl-y) var(--d-ctl-x);
     transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
     white-space: nowrap;
   }
@@ -235,7 +264,7 @@ h6 {
     border-radius: 0.5rem;
     border: 1px solid #e2e8f0;
     background-color: #fff;
-    padding: 0.5rem 0.75rem;
+    padding: var(--d-ctl-y) 0.75rem;
     font-size: 0.8125rem;
     color: #0f172a;
     transition: border-color 0.12s ease, box-shadow 0.12s ease;
@@ -367,5 +396,23 @@ h6 {
   .animate-indeterminate,
   .animate-fade-in-up {
     animation: none;
+  }
+}
+
+/* Sel tabel ikut kepadatan; dipakai DataTable. */
+@layer components {
+  .dt-head {
+    padding: var(--d-head-y) var(--d-cell-x);
+  }
+  .dt-cell {
+    padding: var(--d-cell-y) var(--d-cell-x);
+  }
+  .page-pad {
+    padding: 1rem;
+  }
+  @media (min-width: 640px) {
+    .page-pad {
+      padding: var(--d-page);
+    }
   }
 }

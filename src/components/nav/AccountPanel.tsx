@@ -11,9 +11,11 @@ import {
   Cpu,
   KeyRound,
   LogOut,
+  Rows3,
   Smartphone,
   Undo2,
 } from "lucide-react";
+import { DensitySetting } from "@/src/components/settings/DensitySetting";
 import { logoutAndClear } from "@/src/lib/auth/logout-client";
 import { enablePushNotifications, getPushSupportStatus } from "@/src/lib/notifications/subscribe-client";
 import { isStandalone, useInstallPrompt } from "@/src/lib/pwa/install-prompt";
@@ -309,6 +311,9 @@ export function AccountPanel({ account, onNavigate }: { account: AccountInfo; on
         </div>
       )}
 
+      <Section icon={Rows3} title="Tampilan">
+        <DensitySetting />
+      </Section>
       <Section icon={KeyRound} title="Ganti PIN">
         <ChangePinForm />
       </Section>

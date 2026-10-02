@@ -62,7 +62,7 @@ export function DataTable<T>({
                   return (
                     <th
                       key={header.id}
-                      className="whitespace-nowrap px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500"
+                      className="dt-head whitespace-nowrap text-[11px] font-semibold uppercase tracking-wide text-slate-500"
                     >
                       {header.isPlaceholder ? null : canSort ? (
                         <button
@@ -106,7 +106,7 @@ export function DataTable<T>({
             {table.getRowModel().rows.map((row) => (
               <tr key={row.id} className="transition-colors hover:bg-slate-50/70">
                 {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="px-4 py-3 align-middle text-slate-700">
+                  <td key={cell.id} className="dt-cell align-middle text-slate-700">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
                 ))}
