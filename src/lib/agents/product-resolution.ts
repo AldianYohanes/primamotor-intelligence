@@ -30,8 +30,8 @@ const CLEAR_WINNER_GAP = 0.15;
 const MAX_CANDIDATES = 5;
 
 /** search_products bisa mengembalikan produk sama dua kali (cocok lewat nama & alias). */
-export function dedupeResults(results: ProductSearchResult[]): ProductSearchResult[] {
-  const best = new Map<string, ProductSearchResult>();
+export function dedupeResults<T extends ProductSearchResult>(results: T[]): T[] {
+  const best = new Map<string, T>();
   for (const r of results) {
     const prev = best.get(r.product_id);
     if (!prev || (r.similarity_score ?? 0) > (prev.similarity_score ?? 0)) best.set(r.product_id, r);

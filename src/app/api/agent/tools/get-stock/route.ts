@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { logger } from "@/src/lib/logging/logger";
 import { requireStaffRow } from "@/src/lib/auth/staff-context";
+import { dedupeResults } from "@/src/lib/agents/product-resolution";
 
 const querySchema = z.object({
   query: z.string().min(1),
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const { data: matches, error: searchError } = await supabase.rpc(
+  const { data: rawMatches, error: searchError } = await supabase.rpc(
     "search_products",
     {
       p_business_id: staffRow.business_id,
@@ -49,7 +50,10 @@ export async function GET(req: NextRequest) {
     });
     return NextResponse.json({ error: searchError.message }, { status: 500 });
   }
-  if (!matches || matches.length === 0)
+  // Satu produk bisa cocok lewat nama dan beberapa alias sekaligus; model
+  // cukup melihatnya sekali (dengan skor terbaik).
+  const matches = dedupeResults(rawMatches ?? []);
+  if (matches.length === 0)
     return NextResponse.json({ results: [] });
 
   const productIds = matches.map((m) => m.product_id);
