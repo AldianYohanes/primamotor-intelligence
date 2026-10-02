@@ -1,4 +1,4 @@
-import type { AgentMode, AgentTurnResult } from "@/src/lib/agents/orchestrator";
+import type { AgentMode, AgentTurnResult, ProcessStep } from "@/src/lib/agents/orchestrator";
 
 export type Route = AgentTurnResult["agentType"];
 export const ROUTES: Route[] = ["query", "transaction", "off_topic"];
@@ -59,6 +59,8 @@ export interface Observation {
   predictedRoute: Route | null;
   assistantText: string;
   modelReplies?: string[];
+  /** Langkah "Lihat proses" yang sama dengan /chat. */
+  processSteps?: ProcessStep[];
   toolTrace: AgentTurnResult["toolTrace"];
   pending: boolean;
   /** Ada saat updateStock ditahan untuk pemilihan lokasi. */

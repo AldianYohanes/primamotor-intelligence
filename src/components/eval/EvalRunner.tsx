@@ -5,7 +5,8 @@ import type { MLCEngineInterface } from "@mlc-ai/web-llm";
 import { createClient } from "@/src/lib/supabase/client";
 import { isWebGPUAvailable } from "@/src/lib/agents/webgpu-support";
 import { MODEL_ID, MODEL_OPTIONS } from "@/src/lib/agents/model-options";
-import type { AgentMode } from "@/src/lib/agents/orchestrator";
+import type { AgentMode, ProcessStep } from "@/src/lib/agents/orchestrator";
+import { ProcessTimeline } from "@/src/components/chat/ProcessDetails";
 import scenarioFile from "@/src/lib/eval/scenarios.json";
 import { scoreScenario, stockKey, summarize, toCsv, type ModeSummary } from "@/src/lib/eval/scoring";
 import { alertUser, notificationPermission, primeAlerts } from "@/src/lib/eval/alerts";
@@ -128,6 +129,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   const [gpuInfo, setGpuInfo] = useState<GpuInfo | null | "loading">("loading");
   const [alertsOn, setAlertsOn] = useState(true);
   const [notifPermission, setNotifPermission] = useState<ReturnType<typeof notificationPermission>>("default");
+  const [liveSteps, setLiveSteps] = useState<ProcessStep[]>([]);
   const [prefillChunk, setPrefillChunk] = useState<number | null>(null);
 
   useEffect(() => {
@@ -333,12 +335,14 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             completionTokens: null,
           };
           let observation: Observation;
+          setLiveSteps([]);
           try {
             const conversationId = await createConversation(mode);
             const result = await guard(
               runAgentTurn(engine, [], scenario.message, conversationId, businessId, undefined, {
                 mode,
                 getDevicePosition: fixedDevicePosition,
+                onStep: setLiveSteps,
               }),
             );
             let confirm: { outcome: ConfirmOutcome; error?: string } = { outcome: "none" };
@@ -354,6 +358,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
               predictedRoute: result.agentType,
               assistantText: result.assistantText,
               modelReplies: result.modelReplies,
+              processSteps: result.processSteps,
               toolTrace: result.toolTrace,
               pending: Boolean(result.pendingConfirmation),
               // Runner tidak memilihkan lokasi: pilihan staf di luar cakupan satu skenario.
@@ -603,6 +608,17 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         </div>
       </section>
 
+      {running && (
+        <section className="space-y-2 rounded-xl border border-slate-200 bg-white p-4">
+          <h2 className="text-sm font-semibold text-slate-900">Proses saat ini · {status}</h2>
+          {liveSteps.length === 0 ? (
+            <p className="text-xs text-slate-500">Asisten sedang berpikir…</p>
+          ) : (
+            <ProcessTimeline steps={liveSteps} />
+          )}
+        </section>
+      )}
+
       {summaries.map((s) => (
         <section key={s.mode} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
           <h2 className="font-semibold text-slate-900">
@@ -693,7 +709,19 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
                     {r.success ? "berhasil" : `gagal: ${r.failedStage}`}
                     {r.observation.runError && <div className="text-xs">{r.observation.runError}</div>}
                   </td>
-                  <td className="pr-3">{ms(r.observation.latencyMs)}</td>
+                  <td className="pr-3">
+                    {ms(r.observation.latencyMs)}
+                    {r.observation.processSteps && r.observation.processSteps.length > 0 && (
+                      <details className="mt-1 text-xs">
+                        <summary className="cursor-pointer text-slate-500 hover:text-slate-700">
+                          Lihat proses ({r.observation.processSteps.length})
+                        </summary>
+                        <div className="mt-1.5 w-72">
+                          <ProcessTimeline steps={r.observation.processSteps} />
+                        </div>
+                      </details>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
