@@ -38,7 +38,14 @@ interface Props {
 
 type ModeChoice = AgentMode | "both";
 
-class GpuDeviceError extends Error {}
+class GpuDeviceError extends Error {
+  constructor(
+    message: string,
+    readonly detail?: string,
+  ) {
+    super(message);
+  }
+}
 
 function pct(n: number, d: number) {
   return d === 0 ? "–" : `${((n / d) * 100).toFixed(1)}%`;
@@ -122,6 +129,8 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   const [stoppedReason, setStoppedReason] = useState<{
     kind: "gpu" | "error";
     message: string;
+    /** Keterangan asli browser untuk error GPU (alasan device lost dsb.). */
+    detail?: string;
     during: string;
     at: string;
   } | null>(null);
@@ -288,7 +297,11 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
       // tanpa ini run akan menggantung selamanya.
       let failDevice: (e: Error) => void = () => {};
       const deviceFailure = new Promise<never>((_, reject) => {
-        failDevice = (e) => reject(new GpuDeviceError(e.message));
+        // webllm-engine diimpor dinamis, jadi GpuDeviceFailure dikenali dari field detail-nya.
+        failDevice = (e) => {
+          const detail = (e as Error & { detail?: unknown }).detail;
+          reject(new GpuDeviceError(e.message, typeof detail === "string" ? detail : undefined));
+        };
       });
       deviceFailure.catch(() => {});
       const guard = <T,>(p: Promise<T>) => Promise.race([p, deviceFailure]);
@@ -402,13 +415,14 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
       setStoppedReason({
         kind: err instanceof GpuDeviceError ? "gpu" : "error",
         message,
+        detail: err instanceof GpuDeviceError ? err.detail : undefined,
         during,
         at: new Date().toISOString(),
       });
       if (err instanceof GpuDeviceError) {
         resetEngine?.();
         setStatus(
-          `Berhenti karena error GPU: ${message} Penyebab umum: halaman dimuat ulang saat berjalan (termasuk hot reload dev server karena ada file yang berubah), atau memori GPU tidak cukup untuk ${modelId}. Muat ulang halaman lalu jalankan lagi; kalau terulang tanpa ada reload, coba model yang lebih kecil.`,
+          `Berhenti karena error GPU: ${message} Penyebab umum: Windows me-reset GPU karena satu tugas terlalu lama (TDR, LiveKernelEvent 141 di Event Viewer), halaman dimuat ulang saat berjalan (termasuk hot reload dev server karena ada file yang berubah), atau memori GPU tidak cukup untuk ${modelId}. Muat ulang halaman lalu lanjutkan dari skenario yang terputus; kalau sering terulang, kecilkan "Potongan prefill".`,
         );
       } else {
         setStatus(`Berhenti: ${message}`);

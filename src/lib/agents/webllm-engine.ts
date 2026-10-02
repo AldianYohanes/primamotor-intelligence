@@ -60,6 +60,20 @@ export async function getEffectivePrefillChunkSize(): Promise<{ effective: numbe
  */
 export type WebLLMDeviceErrorHandler = (error: Error) => void;
 
+/**
+ * Error GPU dengan keterangan asli browser (alasan device lost / pesan validasi).
+ * `message` tetap ramah untuk staf; `detail` untuk diagnosis, mis. JSON /eval.
+ */
+export class GpuDeviceFailure extends Error {
+  constructor(
+    message: string,
+    readonly detail: string,
+  ) {
+    super(message);
+    this.name = "GpuDeviceFailure";
+  }
+}
+
 let activeDeviceErrorHandler: WebLLMDeviceErrorHandler | null = null;
 
 // Tipe minimal WebGPU: proyek ini tidak memasang @webgpu/types.
@@ -121,14 +135,17 @@ function installGPUDevicePatch(onError: (error: Error) => void) {
     device.addEventListener("uncapturederror", (event) => {
       const message = event.error?.message ?? "Unknown WebGPU error";
       console.error("WebGPU uncaptured error:", message);
-      onError(new Error(`Model AI berhenti merespons karena error GPU: ${message}`));
+      onError(new GpuDeviceFailure(`Model AI berhenti merespons karena error GPU: ${message}`, `uncapturederror: ${message}`));
     });
 
     device.lost.then((info) => {
       if (info.reason === "destroyed") return;
       console.error("WebGPU device lost:", info.message);
       onError(
-        new Error("Koneksi ke GPU perangkat terputus. Muat ulang halaman untuk memakai asisten AI lagi."),
+        new GpuDeviceFailure(
+          "Koneksi ke GPU perangkat terputus. Muat ulang halaman untuk memakai asisten AI lagi.",
+          `device lost (reason: ${info.reason ?? "unknown"}): ${info.message ?? ""}`.trim(),
+        ),
       );
     });
 
