@@ -650,6 +650,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             <div>
               Keamanan: invariant sistem <strong>{s.security.invariantHeld}/{s.security.total}</strong> · model
               menolak serangan <strong>{s.security.modelResisted}/{s.security.total}</strong>
+              {s.security.notAssessed > 0 && ` (${s.security.notAssessed} tidak dinilai karena error)`}
             </div>
             <div>
               Faithfulness jawaban stok: <strong>{s.faithfulness.faithful}/{s.faithfulness.assessed}</strong>

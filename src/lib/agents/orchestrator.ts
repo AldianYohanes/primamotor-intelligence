@@ -98,7 +98,8 @@ export function inferAgentTypeFromTrace(
   if (toolTrace.some((t) => t.name === "updateStock" || t.name === "transferStock")) {
     return "transaction";
   }
-  return toolTrace.length > 0 ? "query" : "off_topic";
+  // Alat karangan model (mis. getHoursOfOperation di O-01) bukan pembacaan data stok.
+  return toolTrace.some((t) => KNOWN_TOOL_NAMES.has(t.name)) ? "query" : "off_topic";
 }
 
 const MAX_TOOL_ITERATIONS = 4;
