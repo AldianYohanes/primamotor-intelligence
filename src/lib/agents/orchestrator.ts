@@ -31,7 +31,12 @@ import {
   type LocationChoice,
   type TenantLocation,
 } from "@/src/lib/agents/location-choice";
-import { describeStock, pickProduct, type ProductSearchResult } from "@/src/lib/agents/product-resolution";
+import {
+  compactStockResult,
+  describeStock,
+  pickProduct,
+  type ProductSearchResult,
+} from "@/src/lib/agents/product-resolution";
 import { trimHistoryForContext } from "@/src/lib/agents/history-window";
 import {
   ProcessRecorder,
@@ -774,7 +779,8 @@ async function runAgentTurnInner(
         }
         rejectedTools.add(call.name);
       }
-      responses.push(formatToolResponse(call.name, result));
+      // Model menerima versi ringkas; toolTrace di atas tetap menyimpan hasil lengkap.
+      responses.push(formatToolResponse(call.name, call.name === "getStock" ? compactStockResult(result) : result));
     }
 
     // Dikirim sebagai pesan user, bukan role 'tool': template chat model non-Hermes

@@ -1,10 +1,61 @@
 import { describe, it, expect } from "vitest";
 import {
+  compactStockResult,
   dedupeResults,
   describeStock,
   pickProduct,
   type ProductSearchResult,
 } from "@/src/lib/agents/product-resolution";
+
+describe("compactStockResult", () => {
+  it("membuang UUID lokasi dan field internal, mempertahankan product_id dan stok per nama lokasi", () => {
+    const out = compactStockResult({
+      results: [
+        {
+          product_id: "p17",
+          name: "Karburator Volvo 240",
+          part_number: "EVAL-017",
+          matched_via: "alias:karbu",
+          similarity_score: 1,
+          stock_by_location: [
+            { location_id: "lg", location_name: "Gudang", quantity: 1, reserved_quantity: 0, available_quantity: 1 },
+            { location_id: "lt", location_name: "Toko", quantity: 2, reserved_quantity: 1, available_quantity: 1 },
+          ],
+        },
+      ],
+    });
+    expect(out).toEqual({
+      results: [
+        {
+          product_id: "p17",
+          name: "Karburator Volvo 240",
+          part_number: "EVAL-017",
+          similarity_score: 1,
+          available_quantity_per_location: { Gudang: 1, Toko: 1 },
+        },
+      ],
+    });
+    expect(JSON.stringify(out)).not.toContain("lg");
+  });
+
+  it("menggabungkan baris cache offline per produk dan mempertahankan catatan cache", () => {
+    const out = compactStockResult({
+      source: "offline_cache",
+      last_synced_at: "2026-10-03T02:00:00Z",
+      results: [
+        { product_id: "p1", name: "Filter Oli", stock_by_location: [{ location_id: "lt", location_name: "Toko", available_quantity: 3 }] },
+        { product_id: "p1", name: "Filter Oli", stock_by_location: [{ location_id: "lg", location_name: "Gudang", available_quantity: 5 }] },
+      ],
+    }) as { source: string; results: { available_quantity_per_location: Record<string, number> }[] };
+    expect(out.source).toBe("offline_cache");
+    expect(out.results).toHaveLength(1);
+    expect(out.results[0].available_quantity_per_location).toEqual({ Toko: 3, Gudang: 5 });
+  });
+
+  it("meneruskan hasil tanpa daftar results apa adanya", () => {
+    expect(compactStockResult({ error: "x" })).toEqual({ error: "x" });
+  });
+});
 
 const r = (product_id: string, name: string, similarity_score?: number): ProductSearchResult => ({
   product_id,

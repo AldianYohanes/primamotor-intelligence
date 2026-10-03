@@ -13,6 +13,7 @@ export interface StockLocationRow {
 export interface ProductSearchResult {
   product_id: string;
   name: string;
+  part_number?: string;
   similarity_score?: number;
   stock_by_location?: StockLocationRow[];
 }
@@ -53,6 +54,40 @@ export function pickProduct(results: ProductSearchResult[]): ProductPick {
     return { status: "match", product: top };
   }
   return { status: "ambiguous", candidates: relevant.slice(0, MAX_CANDIDATES) };
+}
+
+/**
+ * Hasil getStock versi model: tanpa UUID lokasi, reserved, dan jejak pencocokan.
+ * Run 24/27: hasil lengkap membuat prompt sampai 4.660 token dan model menyalin
+ * UUID lokasi ke argumen transfer. Nama field dipertahankan sesuai yang dirujuk
+ * prompt (product_id, similarity_score, available_quantity, source, …).
+ * toolTrace tetap menyimpan hasil lengkap untuk evaluasi.
+ */
+export function compactStockResult(result: unknown): unknown {
+  if (!result || typeof result !== "object" || !Array.isArray((result as { results?: unknown }).results)) {
+    return result;
+  }
+  const { results, ...rest } = result as { results: ProductSearchResult[] };
+  // Digabung per produk, bukan dedupe: cache offline memberi satu baris per lokasi.
+  const byProduct = new Map<string, { product: ProductSearchResult; stock: Record<string, number> }>();
+  for (const p of results) {
+    const entry = byProduct.get(p.product_id) ?? { product: p, stock: {} };
+    if ((p.similarity_score ?? 0) > (entry.product.similarity_score ?? 0)) entry.product = p;
+    for (const r of p.stock_by_location ?? []) {
+      entry.stock[r.location_name ?? r.location_id] = r.available_quantity ?? r.quantity ?? 0;
+    }
+    byProduct.set(p.product_id, entry);
+  }
+  return {
+    ...rest,
+    results: [...byProduct.values()].map(({ product: p, stock }) => ({
+      product_id: p.product_id,
+      name: p.name,
+      ...(p.part_number && { part_number: p.part_number }),
+      ...(p.similarity_score !== undefined && { similarity_score: Math.round(p.similarity_score * 100) / 100 }),
+      available_quantity_per_location: stock,
+    })),
+  };
 }
 
 /** "Toko 2 · Gudang 3" dari available_quantity per lokasi. */
