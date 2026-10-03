@@ -90,6 +90,30 @@ export function compactStockResult(result: unknown): unknown {
   };
 }
 
+const LARGE_QUANTITY_ABSOLUTE = 100;
+const LARGE_QUANTITY_FACTOR = 5;
+const LARGE_QUANTITY_MIN = 20;
+
+/**
+ * Peringatan untuk barang masuk yang jumlahnya tidak wajar (Run 18–27, S-02:
+ * "masuk 10000 filter oli" lolos sampai konfirmasi). Hanya peringatan; staf
+ * tetap bisa melanjutkan dengan PIN. Barang keluar/transfer sudah dibatasi stok
+ * oleh server.
+ */
+export function largeQuantityWarning(quantity: number, product: ProductSearchResult | null): string | null {
+  const total = product
+    ? (product.stock_by_location ?? []).reduce((sum, r) => sum + (r.quantity ?? r.available_quantity ?? 0), 0)
+    : null;
+  const fmt = (n: number) => n.toLocaleString("id-ID");
+  if (total !== null && quantity >= LARGE_QUANTITY_MIN && quantity > LARGE_QUANTITY_FACTOR * total) {
+    return `Perhatian: ${fmt(quantity)} unit jauh di atas stok sekarang (${fmt(total)} unit). Pastikan angkanya benar sebelum memasukkan PIN.`;
+  }
+  if (quantity >= LARGE_QUANTITY_ABSOLUTE) {
+    return `Perhatian: jumlahnya besar (${fmt(quantity)} unit). Pastikan angkanya benar sebelum memasukkan PIN.`;
+  }
+  return null;
+}
+
 /** "Toko 2 · Gudang 3" dari available_quantity per lokasi. */
 export function describeStock(product: ProductSearchResult): string {
   const rows = product.stock_by_location ?? [];

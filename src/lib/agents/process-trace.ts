@@ -121,6 +121,8 @@ export function mutationOutcomeStep(result: Record<string, unknown>): ProcessSte
     }
     case "quantity_missing":
       return action("Jumlah belum jelas, bertanya ke staf");
+    case "quantity_invalid":
+      return action(`Jumlah ${result.quantity ?? ""} tidak valid (harus lebih dari 0), bertanya ke staf`);
     case "direction_missing":
       return action("Arah masuk/keluar belum jelas, bertanya ke staf");
     case "locations_unavailable":

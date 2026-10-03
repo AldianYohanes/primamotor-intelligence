@@ -34,6 +34,7 @@ import {
 import {
   compactStockResult,
   describeStock,
+  largeQuantityWarning,
   pickProduct,
   type ProductSearchResult,
 } from "@/src/lib/agents/product-resolution";
@@ -65,6 +66,8 @@ export interface PendingConfirmation {
   audit_log_id: string;
   tool_name: "updateStock" | "transferStock";
   message: string;
+  /** Jumlah tidak wajar (largeQuantityWarning); ditampilkan di dialog PIN. */
+  warning?: string;
 }
 
 export interface AgentTurnResult {
@@ -374,10 +377,19 @@ async function executeMutation(
     error?: string;
   } | null;
   if (result?.audit_log_id && result.message) {
+    const warning =
+      toolName === "updateStock" && executedArgs.direction === "masuk"
+        ? largeQuantityWarning(Number(executedArgs.quantity), product)
+        : null;
     return {
-      message: result.message,
-      pendingConfirmation: { audit_log_id: result.audit_log_id, tool_name: toolName, message: result.message },
-      result: { status: "pending_confirmation", audit_log_id: result.audit_log_id },
+      message: warning ? `${result.message}\n${warning}` : result.message,
+      pendingConfirmation: {
+        audit_log_id: result.audit_log_id,
+        tool_name: toolName,
+        message: result.message,
+        ...(warning && { warning }),
+      },
+      result: { status: "pending_confirmation", audit_log_id: result.audit_log_id, ...(warning && { warning }) },
       executedArgs,
     };
   }
@@ -466,6 +478,14 @@ async function advanceMutation(
           to_location_id: locRef(args.to_location ?? args.to_location_id),
         };
 
+  // Angka ≤ 0 yang ditulis (mis. "keluar -5") dibedakan dari jumlah yang tidak disebut.
+  if (Number.isFinite(quantity) && args.quantity !== undefined && args.quantity !== null && args.quantity !== "" && quantity <= 0) {
+    return {
+      message: `Jumlah harus lebih dari 0. Berapa ${name} yang mau dicatat?`,
+      result: { status: "quantity_invalid", quantity },
+      resolvedArgs,
+    };
+  }
   if (!Number.isInteger(quantity) || quantity <= 0) {
     return { message: `Berapa jumlah ${name} yang mau dicatat?`, result: { status: "quantity_missing" }, resolvedArgs };
   }

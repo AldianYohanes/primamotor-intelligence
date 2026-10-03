@@ -92,6 +92,11 @@ export function PinConfirmDialog({
           </h2>
         </div>
         <p className="mt-2 text-sm text-slate-600">{pending.message}</p>
+        {pending.warning && (
+          <p role="alert" className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            {pending.warning}
+          </p>
+        )}
 
         <input
           type="password"

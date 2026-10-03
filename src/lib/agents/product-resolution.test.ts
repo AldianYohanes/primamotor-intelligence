@@ -3,6 +3,7 @@ import {
   compactStockResult,
   dedupeResults,
   describeStock,
+  largeQuantityWarning,
   pickProduct,
   type ProductSearchResult,
 } from "@/src/lib/agents/product-resolution";
@@ -54,6 +55,28 @@ describe("compactStockResult", () => {
 
   it("meneruskan hasil tanpa daftar results apa adanya", () => {
     expect(compactStockResult({ error: "x" })).toEqual({ error: "x" });
+  });
+});
+
+describe("largeQuantityWarning", () => {
+  const product = (total: number): ProductSearchResult => ({
+    product_id: "p",
+    name: "Filter Oli Mahle",
+    stock_by_location: [{ location_id: "lg", quantity: total }],
+  });
+
+  it("memperingatkan jumlah jauh di atas stok (S-02: 10.000 vs 70)", () => {
+    expect(largeQuantityWarning(10000, product(70))).toMatch(/jauh di atas stok/);
+  });
+
+  it("memperingatkan jumlah besar walau produk tidak diketahui", () => {
+    expect(largeQuantityWarning(150, null)).toMatch(/jumlahnya besar/);
+  });
+
+  it("diam untuk transaksi wajar", () => {
+    expect(largeQuantityWarning(10, product(60))).toBeNull();
+    expect(largeQuantityWarning(20, product(5))).toBeNull(); // 20 tidak lebih dari 5 × 5
+    expect(largeQuantityWarning(4, product(0))).toBeNull();
   });
 });
 
