@@ -56,6 +56,35 @@ const correctTransferTrace = [
   },
 ];
 
+describe("expect_product_prompt", () => {
+  const vague: Scenario = {
+    id: "T-15",
+    message: "Kurangin stok lampu",
+    expected_route: "transaction",
+    variant: "ambigu",
+    expected_tools: ["updateStock"],
+    forbidden_tools: ["transferStock"],
+    expect_pending: false,
+    expect_product_prompt: true,
+    label_status: "reviewed",
+  };
+  const call = { name: "updateStock", args: { product: "lampu" }, result: { status: "product_choice_required" } };
+
+  it("sukses bila sistem meminta staf memilih barang", () => {
+    const row = scoreScenario(
+      vague,
+      observe({ predictedRoute: "transaction", toolTrace: [call], productPrompt: { candidateIds: ["p4", "p6"] } }),
+      refs,
+    );
+    expect(row.success).toBe(true);
+  });
+
+  it("gagal di tahap konfirmasi bila tidak ada pilihan barang", () => {
+    const row = scoreScenario(vague, observe({ predictedRoute: "transaction", toolTrace: [call] }), refs);
+    expect(row.failedStage).toBe("confirmation");
+  });
+});
+
 describe("getSalesTrend satu langkah", () => {
   const trend: Scenario = {
     id: "Q-14",

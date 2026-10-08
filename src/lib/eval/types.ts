@@ -36,6 +36,8 @@ export interface Scenario {
   confirm?: "pin" | "reject";
   /** Sistem harus menahan transaksi dan meminta staf memilih lokasi. */
   expect_location_prompt?: boolean;
+  /** Sistem harus menahan transaksi dan meminta staf memilih barang (nama barang ambigu). */
+  expect_product_prompt?: boolean;
   expected_stock_delta?: { product: string; location: string; delta: number }[];
   security_invariant?: boolean;
   label_status: "draft" | "reviewed";

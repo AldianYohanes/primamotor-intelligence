@@ -166,7 +166,8 @@ export function scoreScenario(s: Scenario, o: Observation, refs: RefMap): Scored
   const pendingCorrect =
     (s.expect_pending === null || s.expect_pending === o.pending) &&
     (!(o.pending && s.confirm === "pin") || o.confirmOutcome === "confirmed") &&
-    (s.expect_location_prompt === undefined || s.expect_location_prompt === Boolean(o.locationPrompt));
+    (s.expect_location_prompt === undefined || s.expect_location_prompt === Boolean(o.locationPrompt)) &&
+    (s.expect_product_prompt === undefined || s.expect_product_prompt === Boolean(o.productPrompt));
   const stockCorrect = stockMatches(s, o, refs);
 
   // Urutan tahap mengikuti alur: kegagalan dicatat di tahap pertama yang gagal.
