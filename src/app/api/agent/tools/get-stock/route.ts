@@ -1,13 +1,68 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { logger } from "@/src/lib/logging/logger";
-import { requireStaffRow } from "@/src/lib/auth/staff-context";
+import { requireStaffRow, type StaffContext } from "@/src/lib/auth/staff-context";
 import { dedupeResults } from "@/src/lib/agents/product-resolution";
 
 const querySchema = z.object({
   query: z.string().min(1),
   limit: z.coerce.number().int().min(1).max(20).default(5),
 });
+
+// Skor tetap untuk hasil cadangan: cukup tinggi agar tidak dianggap "mirip rendah"
+// oleh prompt, dan sama rata sehingga beberapa hasil berakhir sebagai pilihan staf.
+const WORD_MATCH_SCORE = 0.5;
+
+/**
+ * Cadangan bila search_products (trigram, ambang 0,3) kosong: kata umum yang
+ * pendek seperti "lampu" terlalu tidak mirip dengan nama panjang ("Lampu
+ * Belakang Kiri Depo") walau jelas terkandung di dalamnya (Run 30, T-15).
+ * Setiap kata (≥ 3 huruf) harus muncul di nama barang atau salah satu aliasnya.
+ */
+async function searchByWords(
+  supabase: StaffContext["supabase"],
+  businessId: string,
+  query: string,
+  limit: number,
+) {
+  const words = query
+    .toLowerCase()
+    .split(/\s+/)
+    .map((w) => w.replace(/[%_\\]/g, ""))
+    .filter((w) => w.length >= 3);
+  if (words.length === 0) return [];
+
+  let byName = supabase
+    .from("products")
+    .select("id, name, part_number")
+    .eq("business_id", businessId)
+    .eq("is_active", true);
+  for (const w of words) byName = byName.ilike("name", `%${w}%`);
+  const { data: named } = await byName.limit(limit);
+
+  let byAlias = supabase.from("product_aliases").select("product_id");
+  for (const w of words) byAlias = byAlias.ilike("alias", `%${w}%`);
+  const { data: aliased } = await byAlias.limit(limit);
+  const extraIds = (aliased ?? [])
+    .map((a) => a.product_id)
+    .filter((id) => !(named ?? []).some((p) => p.id === id));
+  const { data: viaAlias } = extraIds.length
+    ? await supabase
+        .from("products")
+        .select("id, name, part_number")
+        .in("id", extraIds)
+        .eq("business_id", businessId)
+        .eq("is_active", true)
+    : { data: [] };
+
+  return [...(named ?? []), ...(viaAlias ?? [])].slice(0, limit).map((p) => ({
+    product_id: p.id,
+    name: p.name,
+    part_number: p.part_number,
+    matched_via: "words",
+    similarity_score: WORD_MATCH_SCORE,
+  }));
+}
 
 /**
  * Read-only, tidak butuh HITL. Dipanggil Query Agent & Transaction Agent (untuk
@@ -52,7 +107,10 @@ export async function GET(req: NextRequest) {
   }
   // Satu produk bisa cocok lewat nama dan beberapa alias sekaligus; model
   // cukup melihatnya sekali (dengan skor terbaik).
-  const matches = dedupeResults(rawMatches ?? []);
+  let matches = dedupeResults(rawMatches ?? []);
+  if (matches.length === 0) {
+    matches = await searchByWords(supabase, staffRow.business_id, parsed.data.query, parsed.data.limit);
+  }
   if (matches.length === 0)
     return NextResponse.json({ results: [] });
 

@@ -13,7 +13,7 @@ export interface StockLocationRow {
 export interface ProductSearchResult {
   product_id: string;
   name: string;
-  part_number?: string;
+  part_number?: string | null;
   similarity_score?: number;
   stock_by_location?: StockLocationRow[];
 }
