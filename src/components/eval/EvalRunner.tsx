@@ -9,6 +9,7 @@ import type { AgentMode, ProcessStep } from "@/src/lib/agents/orchestrator";
 import { ProcessTimeline } from "@/src/components/chat/ProcessDetails";
 import scenarioFile from "@/src/lib/eval/scenarios.json";
 import { scoreScenario, stockKey, summarize, toCsv, type ModeSummary } from "@/src/lib/eval/scoring";
+import { holdWakeLock } from "@/src/lib/pwa/wake-lock";
 import { alertUser, notificationPermission, primeAlerts } from "@/src/lib/eval/alerts";
 import type {
   ConfirmOutcome,
@@ -264,6 +265,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
     if (!isEvalTenant) return;
     if (alertsOn) enableAlerts();
     let resetEngine: (() => void) | undefined;
+    const releaseWake = holdWakeLock();
     setRunning(true);
     setRows([]);
     setStoppedReason(null);
@@ -427,6 +429,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         );
       }
     } finally {
+      releaseWake();
       setRunning(false);
     }
   }

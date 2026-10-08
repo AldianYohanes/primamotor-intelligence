@@ -10,6 +10,7 @@ import {
   SpeedTracker,
   type LoadPhase,
 } from "@/src/lib/agents/model-progress";
+import { holdWakeLock } from "@/src/lib/pwa/wake-lock";
 
 /**
  * State model WebLLM untuk seluruh app. Sebelumnya engine dimuat di dalam
@@ -68,24 +69,16 @@ let attempt = 0;
 let resettingSelf = false;
 let listenersInstalled = false;
 let pausedByNetwork = false;
-let wakeLock: { release: () => Promise<void> } | null = null;
+let releaseWakeHold: (() => void) | null = null;
 
-async function acquireWakeLock() {
-  // Layar HP yang mati di tengah unduhan membuat browser menjeda tab.
-  const nav = navigator as Navigator & {
-    wakeLock?: { request: (type: "screen") => Promise<{ release: () => Promise<void> }> };
-  };
-  if (!nav.wakeLock || wakeLock || document.visibilityState !== "visible") return;
-  try {
-    wakeLock = await nav.wakeLock.request("screen");
-  } catch {
-    wakeLock = null;
-  }
+function acquireWakeLock() {
+  // Layar yang mati di tengah unduhan/muat membuat browser menjeda tab.
+  if (!releaseWakeHold) releaseWakeHold = holdWakeLock();
 }
 
 function releaseWakeLock() {
-  wakeLock?.release().catch(() => {});
-  wakeLock = null;
+  releaseWakeHold?.();
+  releaseWakeHold = null;
 }
 
 function notifyReadyIfHidden() {
@@ -136,9 +129,6 @@ export const useModelStore = create<ModelState>((set, get) => {
     window.addEventListener("online", () => {
       if (pausedByNetwork && get().status === "paused") get().start();
     });
-    document.addEventListener("visibilitychange", () => {
-      if (get().status === "loading") acquireWakeLock();
-    });
   }
 
   function onProgress(current: number, report: InitProgressReport) {
@@ -157,7 +147,6 @@ export const useModelStore = create<ModelState>((set, get) => {
         secondsLeft: estimateSecondsLeft(bytes, total, bps),
       });
     } else if (phase === "loading" || phase === "compiling") {
-      releaseWakeLock();
       set({ phase, loadFraction: report.progress, secondsLeft: null });
     } else {
       set({ phase });

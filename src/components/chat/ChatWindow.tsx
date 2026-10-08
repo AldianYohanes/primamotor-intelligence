@@ -31,6 +31,7 @@ import {
   getPendingMessages,
   flushPendingMessages,
 } from "@/src/lib/cache/indexeddb";
+import { holdWakeLock } from "@/src/lib/pwa/wake-lock";
 import { useOnlineStatus } from "@/src/lib/network/online-status";
 import {
   getOrCreateActiveConversation,
@@ -187,6 +188,7 @@ export function ChatWindow({
     setMessages((prev) => [...prev, userMsg]);
     persistMessage("user", text);
     setIsThinking(true);
+    const releaseWake = holdWakeLock();
     setDraftText("");
     setLiveSteps([]);
     // Salinan terakhir dari onStep, dipakai bila giliran gagal di tengah jalan.
@@ -234,6 +236,7 @@ export function ChatWindow({
         },
       ]);
     } finally {
+      releaseWake();
       setIsThinking(false);
       setDraftText("");
       setLiveSteps([]);
