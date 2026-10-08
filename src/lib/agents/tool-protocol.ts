@@ -36,18 +36,14 @@ const CLOSE = "</tool_call>";
  * melanjutkan dengan giliran "Staf: …" karangan (Run 17–19: sampai 625 token
  * terbuang per giliran). Akibatnya satu balasan memuat paling banyak satu tool
  * call; panggilan berikutnya dilakukan di iterasi berikutnya.
+ *
+ * Balasan masuk riwayat apa adanya (tanpa tag penutup yang terpotong): web-llm
+ * hanya memakai ulang KV cache bila riwayat identik dengan yang ia simpan, yaitu
+ * keluaran model tanpa stop string. Menambah `</tool_call>` membuat seluruh
+ * prompt di-prefill ulang di setiap iterasi berikutnya (Run 28–30: prompt Q
+ * single ±4.500 token ≈ 2 × 2.145 + hasil alat).
  */
 export const TOOL_STOP_SEQUENCES = [CLOSE, "<tool_response>"];
-
-/**
- * Tag penutup terpotong oleh stop sequence; dipasang kembali sebelum balasan
- * masuk riwayat supaya model tidak meniru blok tanpa penutup.
- */
-export function withClosedToolCall(content: string): string {
-  const lastOpen = content.lastIndexOf(OPEN);
-  if (lastOpen === -1 || content.indexOf(CLOSE, lastOpen) !== -1) return content;
-  return `${content.trimEnd()}\n${CLOSE}`;
-}
 
 export function buildToolInstructions(tools: readonly ToolDefinition[]): string {
   const schema = tools.map((t) => ({

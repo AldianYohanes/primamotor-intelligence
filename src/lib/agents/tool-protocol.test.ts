@@ -5,22 +5,7 @@ import {
   formatToolResponse,
   parseModelReply,
   visibleStreamText,
-  withClosedToolCall,
 } from "@/src/lib/agents/tool-protocol";
-
-describe("withClosedToolCall", () => {
-  it("memasang kembali penutup yang terpotong stop sequence", () => {
-    const cut = '<tool_call>\n{"name": "getStock", "arguments": {"query": "wiper"}}\n';
-    expect(withClosedToolCall(cut)).toBe(`${cut.trimEnd()}\n</tool_call>`);
-    expect(parseModelReply(withClosedToolCall(cut)).calls).toHaveLength(1);
-  });
-
-  it("tidak mengubah balasan yang sudah tertutup atau tanpa tool call", () => {
-    const closed = '<tool_call>{"name":"getStock","arguments":{"query":"a"}}</tool_call>';
-    expect(withClosedToolCall(closed)).toBe(closed);
-    expect(withClosedToolCall("Stok ada 2 unit.")).toBe("Stok ada 2 unit.");
-  });
-});
 
 describe("announcesToolCall", () => {
   it.each<[string]>([
