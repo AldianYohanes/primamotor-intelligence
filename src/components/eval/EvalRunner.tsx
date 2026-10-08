@@ -9,6 +9,19 @@ import type { AgentMode, ProcessStep } from "@/src/lib/agents/orchestrator";
 import { ProcessTimeline } from "@/src/components/chat/ProcessDetails";
 import scenarioFile from "@/src/lib/eval/scenarios.json";
 import { scoreScenario, stockKey, summarize, toCsv, type ModeSummary } from "@/src/lib/eval/scoring";
+import {
+  buildPlan,
+  clearSavedRun,
+  estimateRemainingMs,
+  formatDuration,
+  fromStoredRows,
+  loadSavedRun,
+  remainingPlan,
+  saveRun,
+  toStoredRow,
+  type Interruption,
+  type SavedRun,
+} from "@/src/lib/eval/run-store";
 import { holdWakeLock } from "@/src/lib/pwa/wake-lock";
 import { alertUser, notificationPermission, primeAlerts } from "@/src/lib/eval/alerts";
 import type {
@@ -129,8 +142,17 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   const [gpuPref, setGpuPref] = useState<GpuPowerPreference | null>(null);
   // Ganti GPU baru berlaku untuk engine baru; engine yang sudah dimuat tetap di GPU lama.
   const [gpuPrefChanged, setGpuPrefChanged] = useState(false);
+  const [savedRun, setSavedRun] = useState<SavedRun | null>(null);
+  const [interruptions, setInterruptions] = useState<Interruption[]>([]);
+  const [progress, setProgress] = useState<{
+    done: number;
+    total: number;
+    elapsedMs: number;
+    etaMs: number | null;
+  } | null>(null);
 
   useEffect(() => {
+    setSavedRun(loadSavedRun());
     setPrefillChunk(getPrefillChunkPreference());
     setGpuPref(getGpuPreference());
     probeGpus().then(setGpuProbes);
@@ -167,6 +189,9 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   const modes: AgentMode[] = modeChoice === "both" ? ["multi_agent", "single_agent"] : [modeChoice];
   const needsPin = selected.some((s) => s.confirm === "pin");
   const draftCount = SCENARIOS.filter((s) => s.label_status !== "reviewed").length;
+  const savedRunNeedsPin = Boolean(
+    savedRun?.plan.some((p) => SCENARIOS.find((s) => s.id === p.scenarioId)?.confirm === "pin"),
+  );
 
   const summaries: ModeSummary[] = useMemo(
     () =>
@@ -261,16 +286,81 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
     return { outcome: "rejected" };
   }
 
-  async function run() {
+  function buildExport(args: {
+    rows: ScoredRow[];
+    startedAt: string | null;
+    environment: unknown;
+    stoppedReason: Interruption | null;
+    interruptions: Interruption[];
+    resumed: SavedRun["resumed"];
+  }) {
+    const byMode = (["multi_agent", "single_agent"] as AgentMode[])
+      .map((m) => args.rows.filter((r) => r.observation.mode === m))
+      .filter((r) => r.length > 0)
+      .map((r) => summarize(r[0].observation.mode, r));
+    return JSON.stringify(
+      {
+        startedAt: args.startedAt,
+        scenarioVersion: scenarioFile.version,
+        draftLabels: draftCount,
+        environment: args.environment,
+        resumed: args.resumed,
+        interruptions: args.interruptions,
+        stoppedReason: args.stoppedReason,
+        summaries: byMode,
+        rows: args.rows.map((r) => ({ ...r, scenario: r.scenario.id })),
+      },
+      null,
+      2,
+    );
+  }
+
+  function downloadResults(json: string, csvRows: ScoredRow[], at: string | null) {
+    download(`eval-${at ?? "run"}.json`, json, "application/json");
+    download(`eval-${at ?? "run"}.csv`, toCsv(csvRows), "text/csv");
+  }
+
+  async function run(resume?: SavedRun) {
     if (!isEvalTenant) return;
+    if (resume && resume.modelId !== modelId) {
+      setStatus(`Run tersimpan memakai ${resume.modelId}. Pilih model yang sama untuk melanjutkan.`);
+      return;
+    }
+    if (resume && resume.scenarioVersion !== scenarioFile.version) {
+      setStatus(`Run tersimpan memakai skenario versi ${resume.scenarioVersion}, sekarang ${scenarioFile.version}. Tidak bisa dilanjutkan.`);
+      return;
+    }
     if (alertsOn) enableAlerts();
     let resetEngine: (() => void) | undefined;
     const releaseWake = holdWakeLock();
+    const runStartedAt = resume?.startedAt ?? new Date().toISOString();
+    const plan = resume?.plan ?? buildPlan(selected.map((s) => s.id), modes);
+    const collected: ScoredRow[] = resume ? fromStoredRows(resume.rows, SCENARIOS) : [];
+    const interruptions: Interruption[] = resume?.interruptions ?? [];
+    const resumed: SavedRun["resumed"] = resume?.resumed ?? [];
+    let runEnvironment: unknown = resume?.environment ?? null;
+    let autosaveOk = true;
+    const persist = () => {
+      autosaveOk = saveRun({
+        scenarioVersion: scenarioFile.version,
+        startedAt: runStartedAt,
+        modelId,
+        plan,
+        environment: runEnvironment,
+        rows: collected.map(toStoredRow),
+        interruptions,
+        resumed,
+        updatedAt: "",
+      });
+    };
+
     setRunning(true);
-    setRows([]);
+    setRows([...collected]);
     setStoppedReason(null);
+    setInterruptions(interruptions);
     let during = "persiapan";
-    setStartedAt(new Date().toISOString());
+    setStartedAt(runStartedAt);
+    let stop: Interruption | null = null;
     try {
       if (!isWebGPUAvailable()) throw new Error("Browser ini tidak mendukung WebGPU.");
       setStatus("Memeriksa data tenant eval…");
@@ -285,7 +375,8 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         import("@/src/lib/agents/orchestrator"),
       ]);
       resetEngine = resetWebLLMEngine;
-      setEnvironment(await collectEnvironment(modelId));
+      let segmentEnvironment = await collectEnvironment(modelId);
+      setEnvironment(segmentEnvironment);
 
       // Error GPU (uncaptured/device lost) tidak me-reject promise inferensi, jadi
       // tanpa ini run akan menggantung selamanya.
@@ -311,145 +402,183 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
 
       await refreshPrefillChunkSize();
       const prefill = await getEffectivePrefillChunkSize();
-      setEnvironment((env) => (env ? { ...env, prefillChunkSize: prefill } : env));
+      segmentEnvironment = { ...segmentEnvironment, prefillChunkSize: prefill };
+      setEnvironment(segmentEnvironment);
+      if (resume) resumed.push({ at: new Date().toISOString(), environment: segmentEnvironment });
+      else runEnvironment = segmentEnvironment;
+      persist();
 
       // Inferensi pertama memuat shader/kernel GPU; tidak ikut dihitung supaya latensi tidak bias.
       setStatus("Pemanasan model (tidak dinilai)…");
       during = "pemanasan model";
       await guard(runAgentTurn(engine, [], "halo", await createConversation("multi_agent"), businessId));
 
-      const collected: ScoredRow[] = [];
-      let i = 0;
-      const total = selected.length * modes.length;
+      const todo = remainingPlan(plan, collected.map(toStoredRow));
+      const durations: number[] = [];
+      const segmentStart = performance.now();
       // Mode diselang-seling per skenario supaya kondisi perangkat (suhu, beban) setara di kedua konfigurasi.
-      for (const scenario of selected) {
-        for (const mode of modes) {
-          i += 1;
-          setStatus(`[${i}/${total}] ${scenario.id} · ${mode}`);
-          during = `${scenario.id} · ${mode}`;
-          const stockBefore = await snapshotStock();
-          const base: Omit<Observation, "stockAfter"> = {
-            scenarioId: scenario.id,
-            mode,
-            predictedRoute: null,
-            assistantText: "",
-            toolTrace: [],
-            pending: false,
-            confirmOutcome: "none",
-            stockBefore,
-            latencyMs: null,
-            promptTokens: null,
-            completionTokens: null,
-          };
-          let observation: Observation;
-          setLiveSteps([]);
-          try {
-            const conversationId = await createConversation(mode);
-            const result = await guard(
-              runAgentTurn(engine, [], scenario.message, conversationId, businessId, undefined, {
-                mode,
-                getDevicePosition: fixedDevicePosition,
-                onStep: setLiveSteps,
-              }),
+      for (const { scenarioId, mode } of todo) {
+        const scenario = SCENARIOS.find((s) => s.id === scenarioId);
+        if (!scenario) continue;
+        const execStart = performance.now();
+        const done = collected.length;
+        setStatus(`[${done + 1}/${plan.length}] ${scenario.id} · ${mode}`);
+        setProgress({
+          done,
+          total: plan.length,
+          elapsedMs: performance.now() - segmentStart,
+          etaMs: estimateRemainingMs(durations, plan.length - done),
+        });
+        during = `${scenario.id} · ${mode}`;
+        const stockBefore = await snapshotStock();
+        const base: Omit<Observation, "stockAfter"> = {
+          scenarioId: scenario.id,
+          mode,
+          predictedRoute: null,
+          assistantText: "",
+          toolTrace: [],
+          pending: false,
+          confirmOutcome: "none",
+          stockBefore,
+          latencyMs: null,
+          promptTokens: null,
+          completionTokens: null,
+        };
+        let observation: Observation;
+        setLiveSteps([]);
+        try {
+          const conversationId = await createConversation(mode);
+          const result = await guard(
+            runAgentTurn(engine, [], scenario.message, conversationId, businessId, undefined, {
+              mode,
+              getDevicePosition: fixedDevicePosition,
+              onStep: setLiveSteps,
+            }),
+          );
+          let confirm: { outcome: ConfirmOutcome; error?: string } = { outcome: "none" };
+          if (result.pendingConfirmation) {
+            confirm = await resolvePending(
+              result.pendingConfirmation.tool_name,
+              result.pendingConfirmation.audit_log_id,
+              scenario,
             );
-            let confirm: { outcome: ConfirmOutcome; error?: string } = { outcome: "none" };
-            if (result.pendingConfirmation) {
-              confirm = await resolvePending(
-                result.pendingConfirmation.tool_name,
-                result.pendingConfirmation.audit_log_id,
-                scenario,
-              );
-            }
-            observation = {
-              ...base,
-              predictedRoute: result.agentType,
-              assistantText: result.assistantText,
-              modelReplies: result.modelReplies,
-              processSteps: result.processSteps,
-              toolTrace: result.toolTrace,
-              pending: Boolean(result.pendingConfirmation),
-              // Runner tidak memilihkan lokasi: pilihan staf di luar cakupan satu skenario.
-              locationPrompt:
-                result.choice?.kind === "location"
-                  ? {
-                      suggestedLocationId: result.choice.suggestedLocationId,
-                      suggestionReason: result.choice.suggestionReason,
-                    }
-                  : undefined,
-              productPrompt:
-                result.choice?.kind === "product"
-                  ? { candidateIds: result.choice.options.map((o) => o.id) }
-                  : undefined,
-              confirmOutcome: confirm.outcome,
-              confirmError: confirm.error,
-              latencyMs: result.latencyMs ?? null,
-              promptTokens: result.usage?.promptTokens ?? null,
-              completionTokens: result.usage?.completionTokens ?? null,
-              stockAfter: await snapshotStock(),
-            };
-          } catch (err) {
-            if (err instanceof GpuDeviceError) throw err;
-            observation = {
-              ...base,
-              runError: err instanceof Error ? err.message : String(err),
-              stockAfter: await snapshotStock(),
-            };
           }
-          collected.push(scoreScenario(scenario, observation, refs));
-          setRows([...collected]);
+          observation = {
+            ...base,
+            predictedRoute: result.agentType,
+            assistantText: result.assistantText,
+            modelReplies: result.modelReplies,
+            processSteps: result.processSteps,
+            toolTrace: result.toolTrace,
+            pending: Boolean(result.pendingConfirmation),
+            // Runner tidak memilihkan lokasi: pilihan staf di luar cakupan satu skenario.
+            locationPrompt:
+              result.choice?.kind === "location"
+                ? {
+                    suggestedLocationId: result.choice.suggestedLocationId,
+                    suggestionReason: result.choice.suggestionReason,
+                  }
+                : undefined,
+            productPrompt:
+              result.choice?.kind === "product"
+                ? { candidateIds: result.choice.options.map((o) => o.id) }
+                : undefined,
+            confirmOutcome: confirm.outcome,
+            confirmError: confirm.error,
+            latencyMs: result.latencyMs ?? null,
+            promptTokens: result.usage?.promptTokens ?? null,
+            completionTokens: result.usage?.completionTokens ?? null,
+            stockAfter: await snapshotStock(),
+          };
+        } catch (err) {
+          if (err instanceof GpuDeviceError) throw err;
+          observation = {
+            ...base,
+            runError: err instanceof Error ? err.message : String(err),
+            stockAfter: await snapshotStock(),
+          };
         }
+        collected.push(scoreScenario(scenario, observation, refs));
+        setRows([...collected]);
+        durations.push(performance.now() - execStart);
+        persist();
       }
-      setStatus(`Selesai: ${collected.length} eksekusi.`);
+      setProgress({
+        done: collected.length,
+        total: plan.length,
+        elapsedMs: performance.now() - segmentStart,
+        etaMs: 0,
+      });
+      setStatus(`Selesai: ${collected.length} eksekusi. JSON & CSV diunduh otomatis.`);
       if (alertsOn) {
         const ok = collected.filter((r) => r.success).length;
-        alertUser("done", "Evaluasi selesai", `${collected.length} eksekusi, ${ok} berhasil. Buka halaman untuk unduh JSON.`);
+        alertUser("done", "Evaluasi selesai", `${collected.length} eksekusi, ${ok} berhasil. JSON & CSV sudah diunduh.`);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      setStoppedReason({
+      stop = {
         kind: err instanceof GpuDeviceError ? "gpu" : "error",
         message,
         detail: err instanceof GpuDeviceError ? err.detail : undefined,
         during,
         at: new Date().toISOString(),
-      });
+      };
+      setStoppedReason(stop);
+      interruptions.push(stop);
+      setInterruptions([...interruptions]);
+      persist();
       if (err instanceof GpuDeviceError) {
         resetEngine?.();
         setStatus(
-          `Berhenti karena error GPU: ${message} Penyebab umum: Windows me-reset GPU karena satu tugas terlalu lama (TDR, LiveKernelEvent 141 di Event Viewer), halaman dimuat ulang saat berjalan (termasuk hot reload dev server karena ada file yang berubah), atau memori GPU tidak cukup untuk ${modelId}. Muat ulang halaman lalu lanjutkan dari skenario yang terputus; kalau sering terulang, kecilkan "Potongan prefill".`,
+          `Berhenti karena error GPU: ${message} Penyebab umum: Windows me-reset GPU karena satu tugas terlalu lama (TDR, LiveKernelEvent 141 di Event Viewer), halaman dimuat ulang saat berjalan (termasuk hot reload dev server karena ada file yang berubah), atau memori GPU tidak cukup untuk ${modelId}. Hasil sejauh ini tersimpan: muat ulang halaman lalu klik "Lanjutkan run"; kalau sering terulang, kecilkan "Potongan prefill".`,
         );
       } else {
-        setStatus(`Berhenti: ${message}`);
+        setStatus(`Berhenti: ${message} Hasil sejauh ini tersimpan; klik "Lanjutkan run" setelah masalahnya beres.`);
       }
       if (alertsOn) {
         alertUser(
           "error",
           err instanceof GpuDeviceError ? "Evaluasi berhenti: error GPU" : "Evaluasi berhenti karena error",
-          `${message.slice(0, 160)} — hasil yang sudah jalan tetap bisa diunduh.`,
+          `${message.slice(0, 160)} — hasil yang sudah jalan tersimpan dan sudah diunduh.`,
         );
       }
     } finally {
       releaseWake();
       setRunning(false);
+      if (collected.length > 0) {
+        const json = buildExport({
+          rows: collected,
+          startedAt: runStartedAt,
+          environment: runEnvironment,
+          stoppedReason: stop,
+          // Penghentian yang sedang terjadi sudah ada di stoppedReason.
+          interruptions: stop ? interruptions.slice(0, -1) : interruptions,
+          resumed,
+        });
+        downloadResults(json, collected, runStartedAt);
+      }
+      const finished = !stop && remainingPlan(plan, collected.map(toStoredRow)).length === 0;
+      if (finished) {
+        clearSavedRun();
+        setSavedRun(null);
+      } else {
+        setSavedRun(loadSavedRun());
+      }
+      if (!autosaveOk) setWarning("Autosave gagal (penyimpanan browser penuh/diblokir); hasil tetap ada di file yang diunduh.");
     }
   }
 
   function exportJson() {
     download(
       `eval-${startedAt ?? "run"}.json`,
-      JSON.stringify(
-        {
-          startedAt,
-          scenarioVersion: scenarioFile.version,
-          draftLabels: draftCount,
-          environment,
-          stoppedReason,
-          summaries,
-          rows: rows.map((r) => ({ ...r, scenario: r.scenario.id })),
-        },
-        null,
-        2,
-      ),
+      buildExport({
+        rows,
+        startedAt,
+        environment: savedRun?.environment ?? environment,
+        stoppedReason,
+        interruptions: stoppedReason ? interruptions.slice(0, -1) : interruptions,
+        resumed: savedRun?.resumed ?? [],
+      }),
       "application/json",
     );
   }
@@ -614,7 +743,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         <div className="flex flex-wrap items-center gap-2 sm:col-span-2 lg:col-span-4">
           <button
             className="btn btn-primary px-4 py-2"
-            onClick={run}
+            onClick={() => run()}
             disabled={running || !isEvalTenant || selected.length === 0 || (needsPin && pin.length < 6)}
           >
             {running ? "Berjalan…" : `Jalankan ${selected.length} skenario × ${modes.length} mode`}
@@ -627,6 +756,41 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
           </button>
           <span className="text-sm text-slate-600">{status}</span>
         </div>
+        {progress && (
+          <p className="text-xs text-slate-600 sm:col-span-2 lg:col-span-4">
+            Progres {progress.done}/{progress.total} eksekusi · berjalan {formatDuration(progress.elapsedMs)}
+            {progress.etaMs !== null && progress.done < progress.total && ` · perkiraan sisa ±${formatDuration(progress.etaMs)}`}
+          </p>
+        )}
+        {savedRun && !running && (
+          <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 sm:col-span-2 lg:col-span-4">
+            <p>
+              Ada run tersimpan: {savedRun.rows.length}/{savedRun.plan.length} eksekusi selesai (mulai{" "}
+              {new Date(savedRun.startedAt).toLocaleString("id-ID")}, model {savedRun.modelId}
+              {savedRun.interruptions.length > 0 && `, ${savedRun.interruptions.length}× berhenti`}). Melanjutkan memakai
+              skenario & mode yang sama dan menggabungkan hasilnya ke satu JSON. Menjalankan run baru akan menimpanya.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                className="btn btn-primary px-3 py-1.5"
+                onClick={() => run(savedRun)}
+                disabled={!isEvalTenant || (savedRunNeedsPin && pin.length < 6)}
+              >
+                Lanjutkan run
+              </button>
+              <button
+                className="btn btn-secondary px-3 py-1.5"
+                onClick={() => {
+                  clearSavedRun();
+                  setSavedRun(null);
+                }}
+              >
+                Buang run tersimpan
+              </button>
+              {savedRunNeedsPin && pin.length < 6 && <span className="self-center text-xs">Isi PIN evaluator dulu.</span>}
+            </div>
+          </div>
+        )}
       </section>
 
       {running && (
