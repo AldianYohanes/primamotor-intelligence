@@ -69,6 +69,21 @@ describe("toolResultStep", () => {
     expect(step.label).toBe("getSalesTrend: 2 bulan data");
     expect(step.detail).toBe("Radiator: total keluar 7");
   });
+
+  it("menandai tren penjualan yang barangnya ambigu", () => {
+    const step = toolResultStep("getSalesTrend", {
+      status: "product_ambiguous",
+      candidates: ["Lampu Depan Hella", "Lampu Belakang Kiri"],
+    });
+    expect(step.label).toBe("getSalesTrend: 2 barang mirip, perlu ditanyakan ke staf");
+    expect(step.detail).toBe("Lampu Depan Hella; Lampu Belakang Kiri");
+  });
+
+  it("menyebut nama barang saat mulai mengambil tren", () => {
+    expect(toolStartStep("getSalesTrend", { product: "wiper bosch" }).label).toBe(
+      'Mengambil tren penjualan "wiper bosch"…',
+    );
+  });
 });
 
 describe("mutationOutcomeStep", () => {

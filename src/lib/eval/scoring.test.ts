@@ -56,6 +56,54 @@ const correctTransferTrace = [
   },
 ];
 
+describe("getSalesTrend satu langkah", () => {
+  const trend: Scenario = {
+    id: "Q-14",
+    message: "trend jual kampas rem brembo 3 bln",
+    expected_route: "query",
+    variant: "typo",
+    expected_tools: ["getSalesTrend"],
+    expected_entity: "EVAL-004",
+    expected_action: { tool: "getSalesTrend", product: "EVAL-004", months: 3 },
+    expect_pending: false,
+    label_status: "draft",
+  };
+
+  it("sukses tanpa getStock bila kode memetakan nama barang ke produk yang benar", () => {
+    const row = scoreScenario(
+      trend,
+      observe({
+        toolTrace: [
+          {
+            name: "getSalesTrend",
+            args: { product: "kampas rem brembo", months: 3 },
+            result: { product_name: "Kampas Rem Depan Brembo", trend: [] },
+            resolvedArgs: { product_id: "p4", months: 3 },
+          },
+        ],
+      }),
+      refs,
+    );
+    expect(row.entityFound).toBe(true);
+    expect(row.paramCorrectFields).toBe(2);
+    expect(row.success).toBe(true);
+  });
+
+  it("gagal di tahap parameter bila nama dipetakan ke produk lain", () => {
+    const row = scoreScenario(
+      trend,
+      observe({
+        toolTrace: [
+          { name: "getSalesTrend", args: { product: "filter" }, result: {}, resolvedArgs: { product_id: "p6", months: 3 } },
+        ],
+      }),
+      refs,
+    );
+    expect(row.success).toBe(false);
+    expect(row.failedStage).toBe("parameter");
+  });
+});
+
 describe("scoreScenario", () => {
   it("menilai transaksi transfer yang benar sebagai sukses ETSR", () => {
     const row = scoreScenario(

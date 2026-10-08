@@ -82,12 +82,14 @@ export function entityFound(
   refs: RefMap,
 ): boolean {
   const target = refs.products[expectedPartNumber];
-  return toolTrace
-    .filter((t) => t.name === "getStock")
-    .some((t) => {
+  return toolTrace.some((t) => {
+    if (t.name === "getStock") {
       const results = asRecord(t.result).results;
       return Array.isArray(results) && results.some((r) => asRecord(r).product_id === target);
-    });
+    }
+    // getSalesTrend satu langkah: kode memetakan nama tulisan model ke produk.
+    return t.name === "getSalesTrend" && asRecord(t.resolvedArgs).product_id === target;
+  });
 }
 
 const CLAIMS_MISSING =

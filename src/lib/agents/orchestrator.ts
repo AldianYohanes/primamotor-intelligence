@@ -364,6 +364,60 @@ async function searchProducts(query: string, conversationId: string, businessId:
   return { results: res?.results ?? [], fromCache: res?.source === "offline_cache" };
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * getSalesTrend satu langkah: model menulis nama barang, kode yang mencari
+ * produknya (pola yang sama dengan alat transaksi). Run 30: model 3B tidak
+ * merangkai getStock → getSalesTrend; multi melewatkan getSalesTrend, single
+ * mengarang product_id ("wiper_bosch").
+ */
+async function runSalesTrend(
+  args: Record<string, unknown>,
+  conversationId: string,
+  businessId: string,
+): Promise<{ result: unknown; resolvedArgs?: Record<string, unknown> }> {
+  const rawMonths = Number(args.months);
+  const months = Number.isInteger(rawMonths) && rawMonths >= 1 && rawMonths <= 24 ? rawMonths : 6;
+  const given = typeof args.product_id === "string" ? args.product_id : null;
+  if (given && UUID_RE.test(given)) {
+    return {
+      result: await executeTool("getSalesTrend", { product_id: given, months }, conversationId, businessId),
+      resolvedArgs: { product_id: given, months },
+    };
+  }
+  // product_id karangan model ("mahle-filtro-oli") diperlakukan sebagai nama barang.
+  const query = String(args.product ?? args.product_name ?? given ?? "")
+    .replace(/[_-]+/g, " ")
+    .trim();
+  if (!query) return { result: { error: "Nama barang belum disebut. Tanyakan ke staf barang apa yang dimaksud." } };
+
+  const search = await searchProducts(query, conversationId, businessId);
+  if (search.fromCache) {
+    return { result: { error: "Server tidak bisa dihubungi, tren penjualan belum bisa dicek. Sampaikan ke staf untuk coba lagi." } };
+  }
+  const pick = pickProduct(search.results);
+  if (pick.status === "none") {
+    return {
+      result: { error: `Barang "${query}" tidak ditemukan di data toko. Minta staf menyebut nama lain atau nomor part.` },
+    };
+  }
+  if (pick.status === "ambiguous") {
+    return {
+      result: {
+        status: "product_ambiguous",
+        candidates: pick.candidates.map((c) => c.name),
+        note: "Ada beberapa barang yang mirip. Tanyakan ke staf barang mana yang dimaksud, jangan memilih sendiri.",
+      },
+    };
+  }
+  const productId = pick.product.product_id;
+  return {
+    result: await executeTool("getSalesTrend", { product_id: productId, months }, conversationId, businessId),
+    resolvedArgs: { product_id: productId, months },
+  };
+}
+
 async function executeMutation(
   toolName: MutationTool,
   executedArgs: Record<string, unknown>,
@@ -781,10 +835,16 @@ async function runAgentTurnInner(
         };
       }
 
-      const result = allowed
-        ? await executeTool(call.name, args, conversationId, businessId)
-        : { error: `Tool ${call.name} tidak tersedia untuk agent ini.` };
-      toolTrace.push({ name: call.name, args, result });
+      let resolvedArgs: Record<string, unknown> | undefined;
+      let result: unknown;
+      if (!allowed) {
+        result = { error: `Tool ${call.name} tidak tersedia untuk agent ini.` };
+      } else if (call.name === "getSalesTrend") {
+        ({ result, resolvedArgs } = await runSalesTrend(args, conversationId, businessId));
+      } else {
+        result = await executeTool(call.name, args, conversationId, businessId);
+      }
+      toolTrace.push({ name: call.name, args, result, ...(resolvedArgs && { resolvedArgs }) });
       rec.finish(running, { ...start, label: start.label.replace(/…$/, ""), status: "done" });
       rec.add(toolResultStep(call.name, result));
 

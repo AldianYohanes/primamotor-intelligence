@@ -68,8 +68,9 @@ export type CreateReorderSuggestionInput = z.infer<typeof createReorderSuggestio
 
 /**
  * Deskripsi tool dalam format function-calling (OpenAI-compatible, yang juga dipakai
- * WebLLM). getStock/getSalesTrend sinkron dengan Route Handler. updateStock &
- * transferStock sengaja memakai NAMA barang/lokasi (satu langkah untuk model kecil);
+ * WebLLM). getStock sinkron dengan Route Handler. updateStock, transferStock, dan
+ * getSalesTrend sengaja memakai NAMA barang/lokasi (satu langkah untuk model kecil;
+ * Run 30: model 3B tidak merangkai getStock → getSalesTrend);
  * orchestrator memetakannya ke product_id/location_id sebelum memanggil Route Handler,
  * yang tetap memvalidasi UUID lewat skema Zod di atas.
  */
@@ -134,14 +135,15 @@ export const AGENT_TOOL_DEFINITIONS = [
     type: 'function' as const,
     function: {
       name: 'getSalesTrend',
-      description: 'Ambil tren penjualan (transaksi keluar) bulanan untuk sebuah produk, N bulan terakhir.',
+      description:
+        'Ambil tren penjualan (transaksi keluar) bulanan sebuah barang, N bulan terakhir. Sistem yang mencari barangnya; tidak perlu getStock dulu.',
       parameters: {
         type: 'object',
         properties: {
-          product_id: { type: 'string' },
-          months: { type: 'number', description: 'Default 6' },
+          product: { type: 'string', description: 'Nama barang persis seperti ditulis staf (boleh singkatan/typo)' },
+          months: { type: 'number', description: 'Jumlah bulan dari pesan staf, default 6' },
         },
-        required: ['product_id'],
+        required: ['product'],
       },
     },
   },

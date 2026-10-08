@@ -47,7 +47,7 @@ export function toolStartStep(name: string, args: Record<string, unknown>): Proc
   const product = typeof args.product === "string" ? args.product : null;
   let label = `Memanggil ${name}…`;
   if (name === "getStock" && query) label = `Mencari "${query}"…`;
-  else if (name === "getSalesTrend") label = "Mengambil tren penjualan…";
+  else if (name === "getSalesTrend") label = product ? `Mengambil tren penjualan "${product}"…` : "Mengambil tren penjualan…";
   else if (name === "updateStock") label = `Mencatat ${args.direction ?? "perubahan"} ${product ?? "barang"}…`;
   else if (name === "transferStock") label = `Memindahkan ${product ?? "barang"}…`;
   return { kind: "tool", label, detail: `${name}(${formatArgs(args)})`, status: "running" };
@@ -75,6 +75,16 @@ export function toolResultStep(name: string, result: unknown): ProcessStep {
       kind: "tool",
       label: `getStock: ${results.length} hasil${source}`,
       detail: clip(results.length > 3 ? `${top}; …` : top),
+      status: "done",
+    };
+  }
+
+  if (name === "getSalesTrend" && r.status === "product_ambiguous") {
+    const names = Array.isArray(r.candidates) ? r.candidates.map(String) : [];
+    return {
+      kind: "tool",
+      label: `getSalesTrend: ${names.length} barang mirip, perlu ditanyakan ke staf`,
+      detail: clip(names.join("; ")),
       status: "done",
     };
   }
