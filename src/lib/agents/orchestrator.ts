@@ -39,6 +39,7 @@ import {
   type ProductSearchResult,
 } from "@/src/lib/agents/product-resolution";
 import { trimHistoryForContext } from "@/src/lib/agents/history-window";
+import { offTopicReply } from "@/src/lib/agents/off-topic";
 import {
   ProcessRecorder,
   answerStep,
@@ -640,12 +641,7 @@ interface NonStreamUsage {
 }
 
 /** Juga menjawab "apa yang bisa kamu lakukan?", yang oleh Router diarahkan ke OFF_TOPIC. */
-export const OFF_TOPIC_REPLY =
-  "Maaf, saya hanya bisa membantu urusan stok & suku cadang toko ini. Contohnya:\n" +
-  '- Cek stok: "stok radiator di toko berapa?"\n' +
-  '- Catat barang masuk/keluar: "masuk 10 filter oli di gudang"\n' +
-  '- Pindah barang: "pindahkan 2 busi dari gudang ke toko"\n' +
-  '- Tren penjualan: "penjualan radiator 6 bulan terakhir"';
+export { OFF_TOPIC_REPLY } from "@/src/lib/agents/off-topic";
 
 const KNOWN_TOOL_NAMES = new Set<string>(AGENT_TOOL_DEFINITIONS.map((t) => t.function.name));
 
@@ -716,7 +712,7 @@ async function runAgentTurnInner(
       rec.add(answerStep("code"));
       return {
         agentType,
-        assistantText: OFF_TOPIC_REPLY,
+        assistantText: offTopicReply(userMessage),
         toolTrace,
       };
     }
