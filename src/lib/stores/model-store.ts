@@ -235,7 +235,13 @@ export const useModelStore = create<ModelState>((set, get) => {
             get().modelId,
           ),
         )
-        .then((engine) => {
+        .then(async (engine) => {
+          if (current !== attempt) return;
+          // Pemanasan masih di fase "compiling" ("Menyiapkan GPU…"), supaya
+          // pesan pertama staf tidak menanggung inferensi pertama yang lambat.
+          set({ phase: "compiling", loadFraction: 1, secondsLeft: null });
+          const mod = await loadEngineModule();
+          await mod.warmUpEngine(engine);
           if (current !== attempt) return;
           releaseWakeLock();
           set({ status: "ready", engine, secondsLeft: null });

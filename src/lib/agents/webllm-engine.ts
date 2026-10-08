@@ -154,6 +154,24 @@ function installGPUDevicePatch(onError: (error: Error) => void) {
   };
 }
 
+/**
+ * Inferensi kecil yang tidak terlihat sesudah model dimuat. Inferensi pertama
+ * menyiapkan pipeline GPU dan jauh lebih lambat; tanpa ini pesan pertama staf
+ * yang menanggungnya (/eval melakukan hal yang sama dan tidak menilainya).
+ * Gagal pemanasan tidak menggagalkan pemuatan: pesan pertama saja yang lambat.
+ */
+export async function warmUpEngine(engine: webllm.MLCEngineInterface) {
+  try {
+    await engine.chat.completions.create({
+      messages: [{ role: "user", content: "halo" }],
+      max_tokens: 2,
+      temperature: 0,
+    });
+  } catch (err) {
+    console.warn("[webllm] pemanasan gagal, dilewati", err);
+  }
+}
+
 /** Dilempar getWebLLMEngine kalau pemuatan dihentikan lewat cancelWebLLMEngineLoad(). */
 export class ModelLoadCancelledError extends Error {
   constructor() {
