@@ -7,6 +7,7 @@ import type {
   CommitImportResponse,
 } from '../data/response'
 import type { UpdateImportItemPayload } from '../data/payload'
+import { shrinkImage } from './shrink-image'
 
 async function parseJsonOrThrow<T>(res: Response): Promise<T> {
   const body = await res.json().catch(() => null)
@@ -29,8 +30,9 @@ export async function fetchImportDetail(id: string): Promise<ImportDetailRespons
 
 export async function uploadReceipt(file: File): Promise<UploadReceiptResponse> {
   const formData = new FormData()
-  formData.append('file', file)
+  formData.append('file', await shrinkImage(file))
   const res = await fetch('/api/admin/receipt-imports', { method: 'POST', body: formData })
+  if (res.status === 413) throw new Error('Foto bon terlalu besar untuk diunggah (maks. 4,5 MB). Coba foto ulang dengan resolusi lebih kecil.')
   return parseJsonOrThrow<UploadReceiptResponse>(res)
 }
 
