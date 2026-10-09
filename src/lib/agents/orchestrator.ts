@@ -305,6 +305,7 @@ async function executeTool(
             stock_by_location: [
               {
                 location_id: c.location_id,
+                location_name: c.location_name,
                 quantity: c.quantity,
                 available_quantity: c.available_quantity,
               },

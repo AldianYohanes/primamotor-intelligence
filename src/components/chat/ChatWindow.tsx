@@ -11,7 +11,7 @@ import {
   Square,
 } from "lucide-react";
 import { createClient } from "@/src/lib/supabase/client";
-import type { Json } from "@/src/lib/db/types";
+import type { Database, Json } from "@/src/lib/db/types";
 import { useModelStore } from "@/src/lib/stores/model-store";
 import { MODEL_OPTIONS } from "@/src/lib/agents/model-options";
 import { ModelSetupPanel } from "@/src/components/model/ModelSetupPanel";
@@ -28,7 +28,6 @@ import {
 } from "@/src/lib/agents/orchestrator";
 import { liveStatusLabel } from "@/src/lib/agents/process-trace";
 import {
-  syncStockCache,
   queuePendingMessage,
   getPendingMessages,
   flushPendingMessages,
@@ -46,6 +45,8 @@ import { ConversationHistoryPanel } from "./ConversationHistoryPanel";
 import { EnableNotificationsBanner } from "./EnableNotificationsBanner";
 import { MessageBubble } from "./MessageBubble";
 import { CANCELLED_MESSAGE, PinConfirmDialog } from "./PinConfirmDialog";
+import { StockSyncIndicator } from "./StockSyncIndicator";
+import { useStockSyncStore } from "@/src/lib/stores/stock-sync-store";
 import { MutationChoiceCard } from "./MutationChoiceCard";
 import { ProcessDetails } from "./ProcessDetails";
 
@@ -60,6 +61,8 @@ interface Props {
   fullName: string;
   modules: AppModule[];
 }
+
+type AgentMessageInsert = Database["public"]["Tables"]["agent_messages"]["Insert"];
 
 const OFFLINE_HINT = "Butuh koneksi internet";
 
@@ -121,7 +124,9 @@ export function ChatWindow({
         if (!cancelled) setLoadingHistory(false);
       });
 
-    syncStockCache(supabase, businessId);
+    // Waktu sinkron terakhir dari perangkat (tetap tampil walau dibuka offline);
+    // sinkron ulangnya dijalankan effect isOnline di bawah.
+    useStockSyncStore.getState().load(businessId);
 
     // Hanya memeriksa apakah model sudah tersimpan. Kalau belum, unduhan
     // (bisa beberapa GB) baru mulai setelah staf menekan tombol di panel.
@@ -144,14 +149,17 @@ export function ChatWindow({
   // kirim ulang semua pesan yang sempat tertunda.
   useEffect(() => {
     if (!isOnline) return;
-    syncStockCache(supabase, businessId).catch((err) =>
-      console.error("Gagal sinkron cache stok:", err),
-    );
-    flushPendingMessages(supabase).catch((err) =>
+    syncStock();
+    flushPendingMessages(supabase, staffId).catch((err) =>
       console.error("Gagal sinkron pesan tertunda:", err),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOnline]);
+
+  /** Sinkron ulang cache stok offline; status & waktunya tampil di header. */
+  function syncStock() {
+    return useStockSyncStore.getState().sync(supabase, businessId);
+  }
 
   /** Balasan kode (bukan model) sesudah dialog PIN: hasil, batal, atau akun terkunci. */
   function appendSystemReply(message: string) {
@@ -166,10 +174,9 @@ export function ChatWindow({
     trace?: ProcessStep[],
   ) {
     if (!conversationId) return;
-    const row = { conversation_id: conversationId, role, content, agent_type: agentType };
-    let { error } = await supabase
-      .from("agent_messages")
-      .insert(trace ? { ...row, trace: trace as unknown as Json } : row);
+    const row: AgentMessageInsert = { conversation_id: conversationId, role, content, agent_type: agentType ?? null };
+    const withTrace: AgentMessageInsert = trace ? { ...row, trace: trace as unknown as Json } : row;
+    let { error } = await supabase.from("agent_messages").insert(withTrace);
     // Kolom trace belum ada (migrasi 0036 belum jalan): simpan pesannya tanpa trace.
     if (error && trace) ({ error } = await supabase.from("agent_messages").insert(row));
 
@@ -178,6 +185,7 @@ export function ChatWindow({
       // simpan ke antrean lokal untuk dikirim ulang otomatis saat online (lihat effect di atas).
       if (role === "user" || role === "assistant") {
         await queuePendingMessage({
+          staff_id: staffId,
           conversation_id: conversationId,
           role,
           content,
@@ -474,6 +482,7 @@ export function ChatWindow({
       <AppHeader
         title="Asisten Stok"
         subtitle={`${fullName} · ${tenantName}`}
+        meta={<StockSyncIndicator isOnline={isOnline} onSync={syncStock} />}
         actions={
           <>
             {/* Tombol disabled tidak memunculkan tooltip, jadi petunjuk offline ada di pembungkusnya. */}
@@ -623,9 +632,11 @@ export function ChatWindow({
             setPendingConfirmation(null);
             appendSystemReply(CANCELLED_MESSAGE);
           }}
-          onResolved={({ message }) => {
+          onResolved={({ ok, message }) => {
             setPendingConfirmation(null);
             appendSystemReply(message);
+            // Stok baru saja berubah di server: cache offline ikut diperbarui.
+            if (ok) syncStock();
           }}
         />
       )}
