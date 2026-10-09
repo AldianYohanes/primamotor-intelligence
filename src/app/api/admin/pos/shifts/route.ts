@@ -19,7 +19,8 @@ export async function GET(req: NextRequest) {
   if ("error" in ctx) return ctx.error;
   const { supabase, staffRow } = ctx;
 
-  const status = req.nextUrl.searchParams.get("status");
+  const statusParam = req.nextUrl.searchParams.get("status");
+  const status = statusParam === "open" || statusParam === "closed" ? statusParam : null;
   const locationId = req.nextUrl.searchParams.get("location_id");
   // `mine=true` MEMAKSA filter ke staff_id milik pemanggil, terlepas dari
   // role — dipakai widget status shift di terminal POS (§ "shift saya sedang

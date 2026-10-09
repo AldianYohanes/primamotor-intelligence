@@ -138,8 +138,9 @@ export async function GET(req: NextRequest) {
           totalOutbound: Number(totalOutboundData ?? 0),
           totalAvailable,
           minThreshold: product.min_threshold ?? 0,
-          leadTimeDays: product.lead_time_days,
-          safetyStock: product.safety_stock,
+          // Kolom NOT NULL DEFAULT 0 di DB (0031); tipe manual masih nullable.
+          leadTimeDays: product.lead_time_days ?? 0,
+          safetyStock: product.safety_stock ?? 0,
         });
 
         if (calculation.shouldReorder) {

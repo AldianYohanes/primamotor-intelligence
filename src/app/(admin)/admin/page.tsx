@@ -103,7 +103,6 @@ export default async function AdminDashboardPage({
           {(suggestions ?? []).map((s) => (
             <div key={s.id} className="flex items-center justify-between p-4">
               <div>
-                {/* @ts-expect-error -- bentuk join Supabase */}
                 <p className="text-sm font-medium text-slate-900">
                   {s.products?.name}
                 </p>

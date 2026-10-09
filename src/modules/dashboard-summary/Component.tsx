@@ -108,7 +108,7 @@ export function DashboardSummaryModule() {
                     boxShadow: "0 4px 12px -2px rgb(15 23 42 / 0.08)",
                     fontSize: 12,
                   }}
-                  formatter={(value: number) => [formatRupiah(value), "Pendapatan"]}
+                  formatter={(value) => [formatRupiah(Number(value)), "Pendapatan"]}
                 />
                 <Area
                   type="monotone"

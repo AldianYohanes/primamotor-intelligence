@@ -70,7 +70,6 @@ export async function syncStockCache(
     business_id: row.business_id,
     // @ts-expect-error -- join shape tergantung tipe generate Supabase, aman secara runtime
     product_name: row.products?.name ?? "",
-    // @ts-expect-error -- sama seperti products di atas
     location_name: row.locations?.name ?? undefined,
     quantity: row.quantity,
     available_quantity: row.available_quantity,

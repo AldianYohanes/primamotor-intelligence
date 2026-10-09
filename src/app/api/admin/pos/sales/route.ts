@@ -14,6 +14,13 @@ const requireStaff = (permission: Permission = "pos.use") => requireStaffRow(per
 const SORTABLE_COLUMNS = ["created_at", "total_amount"] as const;
 type SortableColumn = (typeof SORTABLE_COLUMNS)[number];
 
+const SALE_STATUSES = ["completed", "voided"] as const;
+const PAYMENT_METHODS = ["cash", "transfer", "qris", "card", "split", "piutang"] as const;
+
+function pickEnum<T extends string>(value: string | null, allowed: readonly T[]): T | null {
+  return allowed.includes(value as T) ? (value as T) : null;
+}
+
 export async function GET(req: NextRequest) {
   const ctx = await requireStaff();
   if ("error" in ctx) return ctx.error;
@@ -21,8 +28,9 @@ export async function GET(req: NextRequest) {
 
   const { page, pageSize, from, to } = parsePagination(req);
   const sp = req.nextUrl.searchParams;
-  const status = sp.get("status"); // 'completed' | 'voided' | null (semua)
-  const paymentMethod = sp.get("payment_method");
+  // Nilai di luar enum diabaikan (= semua), bukan diteruskan ke query.
+  const status = pickEnum(sp.get("status"), SALE_STATUSES); // null = semua
+  const paymentMethod = pickEnum(sp.get("payment_method"), PAYMENT_METHODS);
   const dateFrom = sp.get("date_from");
   const dateTo = sp.get("date_to");
   const sortByRaw = sp.get("sortBy");

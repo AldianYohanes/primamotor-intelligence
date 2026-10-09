@@ -139,7 +139,15 @@ export interface Database {
         Row: { product_id: string; car_model_id: string }
         Insert: { product_id: string; car_model_id: string }
         Update: Partial<{ product_id: string; car_model_id: string }>
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: 'product_model_compatibility_car_model_id_fkey'
+            columns: ['car_model_id']
+            isOneToOne: false
+            referencedRelation: 'car_models'
+            referencedColumns: ['id']
+          },
+        ]
       }
       product_aliases: {
         Row: { id: string; product_id: string; alias: string; source: string | null; created_at: string }
@@ -182,7 +190,15 @@ export interface Database {
           location_id: string
         }
         Update: Partial<Database['public']['Tables']['stock']['Row']>
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: 'stock_location_id_fkey'
+            columns: ['location_id']
+            isOneToOne: false
+            referencedRelation: 'locations'
+            referencedColumns: ['id']
+          },
+        ]
       }
       stock_transactions: {
         Row: {
@@ -535,7 +551,15 @@ export interface Database {
           suggested_quantity: number
         }
         Update: Partial<Database['public']['Tables']['reorder_suggestions']['Row']>
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: 'reorder_suggestions_product_id_fkey'
+            columns: ['product_id']
+            isOneToOne: false
+            referencedRelation: 'products'
+            referencedColumns: ['id']
+          },
+        ]
       }
       push_subscriptions: {
         Row: {
@@ -726,6 +750,10 @@ export interface Database {
         }
         // error: 'item_not_found' | 'already_claimed' | 'sale_voided' | 'no_warranty' | 'warranty_expired'
         Returns: { ok: boolean; error?: string }
+      }
+      get_outbound_total: {
+        Args: { p_product_id: string; p_days: number }
+        Returns: number
       }
       next_sale_number: {
         Args: { p_business_id: string }

@@ -149,7 +149,6 @@ export async function GET(req: NextRequest) {
 
   const compatByProduct = new Map<string, string[]>();
   for (const row of compatRows ?? []) {
-    // @ts-expect-error -- bentuk join Supabase, car_models adalah objek tunggal (many-to-one)
     const model = row.car_models;
     if (!model) continue;
     const yearRange =
