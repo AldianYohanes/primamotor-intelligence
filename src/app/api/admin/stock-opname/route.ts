@@ -71,12 +71,25 @@ export async function POST(req: NextRequest) {
 
   const { data: stockRow } = await supabase
     .from("stock")
-    .select("quantity")
+    .select("quantity, reserved_quantity")
     .eq("business_id", staffRow.business_id)
     .eq("product_id", body.product_id)
     .eq("location_id", body.location_id)
     .maybeSingle();
   const systemQuantity = stockRow?.quantity ?? 0;
+  const reservedQuantity = stockRow?.reserved_quantity ?? 0;
+
+  // Stok tidak boleh turun di bawah jumlah yang sedang ditahan (CHECK
+  // reserved_quantity <= quantity). Cek SEBELUM baris stock_opname ditulis,
+  // supaya riwayat opname dan ledger tidak pernah saling bertentangan.
+  if (body.counted_quantity < reservedQuantity) {
+    return NextResponse.json(
+      {
+        error: `Jumlah tidak boleh di bawah ${reservedQuantity} unit yang sedang ditahan transaksi yang menunggu konfirmasi PIN.`,
+      },
+      { status: 409 },
+    );
+  }
   const discrepancy = body.counted_quantity - systemQuantity;
 
   const { data: opnameRow, error: opnameError } = await supabase
