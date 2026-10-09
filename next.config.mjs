@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { withSerwist } from "@serwist/turbopack";
 
 /** @type {import('next').NextConfig} */
@@ -14,10 +15,9 @@ const nextConfig = {
   },
 
   turbopack: {
-    root: "C:\\Users\\aldia\\Documents\\skripsi-program\\primamotor-intelligence",
+    // Folder file ini, bukan path Windows tetap (build Vercel berjalan di Linux).
+    root: fileURLToPath(new URL(".", import.meta.url)),
   },
-
-  reactStrictMode: true,
 
   headers: async () => [
     {
