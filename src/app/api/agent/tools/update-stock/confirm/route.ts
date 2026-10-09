@@ -5,6 +5,7 @@ import { reconfirmPin } from "@/src/lib/auth/confirm-pin";
 import { pinFailureBody } from "@/src/lib/auth/lockout-messages";
 import { logger } from "@/src/lib/logging/logger";
 import { requireApi } from "@/src/lib/auth/staff-context";
+import { conversationBelongsToStaff } from "@/src/lib/agents/conversation-owner";
 
 export async function POST(req: NextRequest) {
   const parsed = updateStockConfirmSchema.safeParse(await req.json());
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
 
   const { data: auditLog } = await admin
     .from("agent_audit_log")
-    .select("id")
+    .select("id, conversation_id")
     .eq("id", audit_log_id)
     .eq("business_id", auth.tenant.id)
     .maybeSingle();
@@ -46,6 +47,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       { error: "Transaksi tidak ditemukan di toko ini" },
       { status: 404 },
+    );
+  }
+  // Hanya staf yang mengusulkan transaksi (pemilik percakapan) yang boleh mengonfirmasinya.
+  if (!(await conversationBelongsToStaff(admin, auditLog.conversation_id, staff_id, auth.tenant.id))) {
+    return NextResponse.json(
+      { error: "Transaksi ini diusulkan staf lain dan hanya bisa dikonfirmasi oleh pengusulnya" },
+      { status: 403 },
     );
   }
 

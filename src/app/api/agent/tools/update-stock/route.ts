@@ -3,6 +3,7 @@ import { createAdminClient } from "@/src/lib/supabase/admin";
 import { updateStockSchema } from "@/src/lib/agents/tool-schemas";
 import { logger } from "@/src/lib/logging/logger";
 import { requireStaffRow } from "@/src/lib/auth/staff-context";
+import { conversationBelongsToStaff } from "@/src/lib/agents/conversation-owner";
 
 /**
  * Tahap 1 dari pola HITL dua-tahap: catat niat agent ke agent_audit_log (status
@@ -29,6 +30,15 @@ export async function POST(req: NextRequest) {
   if (body.business_id !== staffRow.business_id) {
     return NextResponse.json(
       { error: "business_id tidak sesuai sesi staf yang login" },
+      { status: 403 },
+    );
+  }
+
+  // conversation_id harus percakapan milik staf yang login: pengusul transaksi
+  // ditentukan dari percakapan ini dan hanya dia yang boleh mengonfirmasinya.
+  if (!(await conversationBelongsToStaff(createAdminClient(), body.conversation_id, staffRow.id, staffRow.business_id))) {
+    return NextResponse.json(
+      { error: "conversation_id bukan percakapan staf yang login" },
       { status: 403 },
     );
   }

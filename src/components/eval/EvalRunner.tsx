@@ -50,6 +50,7 @@ import {
   getPrefillChunkPreference,
   setPrefillChunkPreference,
 } from "@/src/lib/agents/prefill-preference";
+import { isPromptPaddingOn, setPromptPadding } from "@/src/lib/agents/prompt-padding";
 
 const fixedDevicePosition = () => Promise.resolve(EVAL_DEVICE_POSITION);
 const SCENARIOS = scenarioFile.scenarios as unknown as Scenario[];
@@ -113,6 +114,8 @@ async function collectEnvironment(modelId: string) {
     gpuPreference: getGpuPreference(),
     /** Diisi setelah model dimuat; lihat prefill-preference.ts. */
     prefillChunkSize: null as { effective: number | null; modelDefault: number | null } | null,
+    /** Ablasi: prompt agent spesialis diisi sampai sepanjang prompt single-agent; lihat prompt-padding.ts. */
+    promptPadding: isPromptPaddingOn(),
   };
 }
 
@@ -143,6 +146,9 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   const [notifPermission, setNotifPermission] = useState<ReturnType<typeof notificationPermission>>("default");
   const [liveSteps, setLiveSteps] = useState<ProcessStep[]>([]);
   const [prefillChunk, setPrefillChunk] = useState<number | null>(null);
+  const [padPrompt, setPadPrompt] = useState(false);
+  // Opsi ablasi selalu mulai mati di setiap kunjungan halaman.
+  useEffect(() => setPromptPadding(false), []);
   const [gpuProbes, setGpuProbes] = useState<GpuProbe[] | null>(null);
   const [gpuPref, setGpuPref] = useState<GpuPowerPreference | null>(null);
   // Ganti GPU baru berlaku untuk engine baru; engine yang sudah dimuat tetap di GPU lama.
@@ -669,6 +675,24 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             <option value="multi_agent">Multi-agent saja</option>
             <option value="single_agent">Baseline single-agent saja</option>
           </select>
+        </label>
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={padPrompt}
+            onChange={(e) => {
+              setPadPrompt(e.target.checked);
+              setPromptPadding(e.target.checked);
+            }}
+            disabled={running}
+          />
+          <span>
+            <span className="font-medium text-slate-700">Ablasi: samakan panjang prompt multi-agent dengan single-agent</span>
+            <span className="block text-xs text-slate-500">
+              Hanya memengaruhi mode multi-agent; tercatat di lingkungan run. Pakai hanya untuk run ablasi.
+            </span>
+          </span>
         </label>
         <label className="space-y-1 text-sm">
           <span className="font-medium text-slate-700">Filter ID (awalan)</span>
