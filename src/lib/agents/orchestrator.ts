@@ -39,6 +39,7 @@ import {
 } from "@/src/lib/agents/product-resolution";
 import { trimHistoryForContext } from "@/src/lib/agents/history-window";
 import { offTopicReply } from "@/src/lib/agents/off-topic";
+import { cacheNoteFor, isOfflineNoMatch, offlineNoMatchReply } from "@/src/lib/agents/offline-answers";
 import {
   ProcessRecorder,
   answerStep,
@@ -689,6 +690,9 @@ export { OFF_TOPIC_REPLY } from "@/src/lib/agents/off-topic";
 
 const KNOWN_TOOL_NAMES = new Set<string>(AGENT_TOOL_DEFINITIONS.map((t) => t.function.name));
 
+export const UNBACKED_STOCK_REPLY =
+  "Maaf, stoknya belum bisa saya cek. Coba sebutkan lagi nama barangnya, misalnya \"stok filter oli di toko\".";
+
 export const UNAVAILABLE_TOOL_REPLY =
   "Maaf, permintaan itu di luar kemampuan saya. Saya hanya bisa cek stok, melihat tren penjualan, " +
   "dan mencatat barang masuk/keluar/pindah lokasi (dengan konfirmasi PIN).";
@@ -771,6 +775,15 @@ async function runAgentTurnInner(
       };
     }
 
+    // Transaksi butuh server (verifikasi PIN); saat offline dijawab kode tanpa
+    // memanggil model (uji M4 9 Okt: model gagal menulis tool call 3× lalu
+    // jawaban cadangan yang tidak menjelaskan alasannya).
+    if (agentType === "transaction" && typeof navigator !== "undefined" && !navigator.onLine) {
+      rec.add({ kind: "action", label: "Sedang offline, transaksi tidak dikirim", status: "failed" });
+      rec.add(answerStep("code"));
+      return { agentType, assistantText: OFFLINE_MUTATION_MESSAGE, toolTrace };
+    }
+
     systemPrompt =
       agentType === "query"
         ? QUERY_AGENT_SYSTEM_PROMPT
@@ -797,6 +810,7 @@ async function runAgentTurnInner(
   ];
 
   let nudgedMissingCall = false;
+  let nudgedUnbacked = false;
   // Teks model sebelum diingatkan; dipakai bila balasan sesudahnya kosong.
   let textBeforeNudge = "";
   const rejectedTools = new Set<string>();
@@ -833,14 +847,35 @@ async function runAgentTurnInner(
       rec.add(retryStep("missing_call"));
       continue;
     }
+    // Query Agent menyebut angka tanpa pernah membaca data (uji M4 9 Okt: stok
+    // "busi bosch" dikarang lengkap dengan klaim "dari cache"). Diingatkan sekali;
+    // kalau tetap tanpa alat, jawabannya diganti kode (lihat di bawah).
+    const readsData = toolTrace.some((t) => t.name === "getStock" || t.name === "getSalesTrend");
+    const unbackedNumbers =
+      reply.calls.length === 0 && mode === "multi_agent" && agentType === "query" && !readsData && /\d/.test(reply.text);
+    if (unbackedNumbers && !nudgedUnbacked && i < MAX_TOOL_ITERATIONS - 1) {
+      nudgedUnbacked = true;
+      messages.push({ role: "assistant", content });
+      messages.push({ role: "user", content: MISSING_TOOL_CALL_FEEDBACK });
+      rec.add(retryStep("unbacked_numbers"));
+      continue;
+    }
+    if (unbackedNumbers) {
+      rec.add(answerStep("unbacked"));
+      return { agentType, assistantText: UNBACKED_STOCK_REPLY, toolTrace };
+    }
     if (reply.calls.length === 0) {
       // Balasan kosong (Run 19, S-03 single: model diam sesudah diingatkan) tidak
       // boleh sampai ke staf sebagai pesan kosong.
       const modelText = (reply.text || (reply.malformed ? "" : content)).trim() || textBeforeNudge;
-      rec.add(answerStep(modelText ? "model" : "code"));
+      rec.add(answerStep(!modelText ? "code" : toolTrace.length > 0 ? "model" : "model_no_tool"));
+      // Jawaban dari cache offline selalu diberi keterangan oleh kode (model sering lupa).
+      const cacheNote = modelText ? cacheNoteFor(toolTrace) : null;
       return {
         agentType,
-        assistantText: modelText || "Maaf, saya kurang mengerti maksudnya. Bisa diulang?",
+        assistantText: cacheNote
+          ? `${modelText}\n\n${cacheNote}`
+          : modelText || "Maaf, saya kurang mengerti maksudnya. Bisa diulang?",
         toolTrace,
       };
     }
@@ -899,6 +934,13 @@ async function runAgentTurnInner(
       toolTrace.push({ name: call.name, args, result, ...(resolvedArgs && { resolvedArgs }) });
       rec.finish(running, { ...start, label: start.label.replace(/…$/, ""), status: "done" });
       rec.add(toolResultStep(call.name, result));
+
+      // Offline dan barangnya tidak ada di cache: jawaban disusun kode supaya tidak
+      // terbaca "stok kosong" (uji M4 9 Okt, model menjawab "tidak tersedia").
+      if (call.name === "getStock" && isOfflineNoMatch(result)) {
+        rec.add(answerStep("code"));
+        return { agentType, assistantText: offlineNoMatchReply(String(args.query ?? "")), toolTrace };
+      }
 
       // Alat yang tidak ada sama sekali, atau alat agent lain yang diulang
       // setelah ditolak: model tidak akan berubah pikiran, jadi giliran diakhiri

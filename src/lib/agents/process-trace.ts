@@ -150,21 +150,23 @@ export function mutationOutcomeStep(result: Record<string, unknown>): ProcessSte
   }
 }
 
-export function retryStep(reason: "malformed" | "missing_call"): ProcessStep {
-  return {
-    kind: "retry",
-    label:
-      reason === "malformed"
-        ? "Format pemanggilan alat rusak, model diminta menulis ulang"
-        : "Model menyebut akan memanggil alat tapi belum memanggil, diingatkan",
-    status: "done",
-  };
+export function retryStep(reason: "malformed" | "missing_call" | "unbacked_numbers"): ProcessStep {
+  const label = {
+    malformed: "Format pemanggilan alat rusak, model diminta menulis ulang",
+    missing_call: "Model menyebut akan memanggil alat tapi belum memanggil, diingatkan",
+    unbacked_numbers: "Model menjawab angka tanpa memanggil alat, diminta memanggil getStock dulu",
+  }[reason];
+  return { kind: "retry", label, status: "done" };
 }
 
-export function answerStep(source: "model" | "code" | "fallback"): ProcessStep {
+export function answerStep(
+  source: "model" | "model_no_tool" | "code" | "unbacked" | "fallback",
+): ProcessStep {
   const label = {
     model: "Jawaban ditulis model dari hasil di atas",
+    model_no_tool: "Jawaban ditulis model tanpa memanggil alat",
     code: "Jawaban disusun kode (deterministik, tanpa model)",
+    unbacked: "Jawaban berisi angka tanpa data dari alat, diganti jawaban kode",
     fallback: "Batas langkah tercapai, jawaban cadangan dipakai",
   }[source];
   return { kind: "answer", label, status: "done" };
