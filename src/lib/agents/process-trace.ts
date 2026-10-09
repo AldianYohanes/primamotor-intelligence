@@ -38,8 +38,15 @@ const AGENT_LABEL: Record<"query" | "transaction" | "off_topic", string> = {
   off_topic: "Router menilai pesan di luar urusan stok",
 };
 
-export function routeStep(agentType: "query" | "transaction" | "off_topic"): ProcessStep {
-  return { kind: "route", label: AGENT_LABEL[agentType], status: "done" };
+/** rawReply = keluaran mentah Router, ditampilkan untuk melacak salah routing. */
+export function routeStep(agentType: "query" | "transaction" | "off_topic", rawReply?: string): ProcessStep {
+  const raw = rawReply?.trim();
+  return {
+    kind: "route",
+    label: AGENT_LABEL[agentType],
+    ...(raw && { detail: `Router menjawab: ${clip(raw, 80)}` }),
+    status: "done",
+  };
 }
 
 export function toolStartStep(name: string, args: Record<string, unknown>): ProcessStep {

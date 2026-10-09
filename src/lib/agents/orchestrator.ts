@@ -39,6 +39,7 @@ import {
 } from "@/src/lib/agents/product-resolution";
 import { trimHistoryForContext } from "@/src/lib/agents/history-window";
 import { offTopicReply } from "@/src/lib/agents/off-topic";
+import { routerContext } from "@/src/lib/agents/router-context";
 import { cacheNoteFor, isOfflineNoMatch, offlineNoMatchReply } from "@/src/lib/agents/offline-answers";
 import {
   ProcessRecorder,
@@ -707,7 +708,8 @@ async function routeMessage(
   text: string;
   usage: NonStreamUsage | null;
 }> {
-  const lastAssistant = history.findLast((m) => m.role === "assistant")?.content;
+  // Balasan kode (off-topic, butuh koneksi, dst.) tidak ikut jadi konteks Router.
+  const lastAssistant = routerContext(history, [UNAVAILABLE_TOOL_REPLY, UNBACKED_STOCK_REPLY, OFFLINE_MUTATION_MESSAGE]);
   if (signal?.aborted) throw new TurnStoppedError();
   const stopListening = interruptOnAbort(engine, signal);
   let completion: Awaited<ReturnType<typeof engine.chat.completions.create>>;
@@ -758,7 +760,7 @@ async function runAgentTurnInner(
     const routing = rec.add({ kind: "route", label: "Router menentukan agent…", status: "running" });
     const routed = await routeMessage(engine, userMessage, history, signal);
     agentType = routed.agentType;
-    rec.finish(routing, routeStep(agentType));
+    rec.finish(routing, routeStep(agentType, routed.text));
     modelReplies.push(`[router] ${routed.text}`);
     if (routed.usage) {
       usageAcc.hasUsage = true;
