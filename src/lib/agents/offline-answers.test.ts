@@ -1,5 +1,43 @@
 import { describe, it, expect } from "vitest";
-import { cacheNoteFor, isOfflineNoMatch, offlineNoMatchReply } from "@/src/lib/agents/offline-answers";
+import {
+  cacheNoteFor,
+  isOfflineNoMatch,
+  looksUnbacked,
+  mentionsStockMovement,
+  offlineNoMatchReply,
+} from "@/src/lib/agents/offline-answers";
+
+describe("mentionsStockMovement", () => {
+  it.each<[string]>([
+    ["masuk 1 filter oli mahle ke toko"],
+    ["msk 6 v-belt ke gudng"],
+    ["klr 1 timing belt dr toko"],
+    ["Pindahin 5 filter oli dari gudang ke toko"],
+    ["tadi kejual 2 radiator"],
+    ["Kurangin stok lampu"],
+  ])("mengenali pergerakan barang: %s", (text: string) => {
+    expect(mentionsStockMovement(text)).toBe(true);
+  });
+
+  it.each<[string]>([["stok busi bosch?"], ["filter oli mahle ada berapa"], ["penjualan radiator 6 bulan"]])(
+    "pertanyaan stok bukan pergerakan: %s",
+    (text: string) => {
+      expect(mentionsStockMovement(text)).toBe(false);
+    },
+  );
+});
+
+describe("looksUnbacked", () => {
+  it("angka atau menyuruh memakai alat", () => {
+    expect(looksUnbacked("Busi Bosch ada 15 di toko")).toBe(true);
+    expect(looksUnbacked("Hubungi alat untuk mendapatkan informasi stok filter oli Mahle.")).toBe(true);
+    expect(looksUnbacked("Silakan panggil getStock dulu")).toBe(true);
+  });
+
+  it("jawaban biasa tanpa angka lolos", () => {
+    expect(looksUnbacked("Boleh sebutkan nama barangnya?")).toBe(false);
+  });
+});
 
 describe("isOfflineNoMatch", () => {
   it("hanya untuk hasil cache offline yang kosong", () => {

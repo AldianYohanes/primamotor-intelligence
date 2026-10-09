@@ -12,6 +12,27 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 }
 
+/**
+ * Pesan menyebut pergerakan barang (dipakai saat offline: Router kadang menilai
+ * "stok busi bosch?" sebagai transaksi; tanpa kata pergerakan, pesan dibaca
+ * sebagai cek stok). Termasuk singkatan chat yang umum (msk, klr).
+ */
+const MOVEMENT_RE =
+  /(^|[^a-z])(masuk|msk|keluar|klr|kejual|terjual|jual|pindah\w*|transfer|transfr|kurang\w*|tambah\w*|catat|catet|retur)([^a-z]|$)/i;
+
+export function mentionsStockMovement(message: string): boolean {
+  return MOVEMENT_RE.test(message);
+}
+
+/**
+ * Jawaban Query Agent yang tidak boleh lolos tanpa membaca data: berisi angka
+ * (stok karangan) atau menyuruh staf memakai alat ("Hubungi alat untuk…",
+ * uji M4 9 Okt).
+ */
+export function looksUnbacked(text: string): boolean {
+  return /\d/.test(text) || /(^|[^a-z])(alat|tool|getstock|getsalestrend|updatestock|transferstock)([^a-z]|$)/i.test(text);
+}
+
 /** Hasil getStock offline yang tidak menemukan barang di cache perangkat. */
 export function isOfflineNoMatch(result: unknown): boolean {
   const r = asRecord(result);

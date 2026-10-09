@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { routerContext } from "@/src/lib/agents/router-context";
+import { agentHistory, routerContext } from "@/src/lib/agents/router-context";
 import { OFF_TOPIC_AUTOMOTIVE_REPLY, OFF_TOPIC_REPLY } from "@/src/lib/agents/off-topic";
 import type { ChatMessage } from "@/src/lib/agents/orchestrator";
 
@@ -30,5 +30,28 @@ describe("routerContext", () => {
 
   it("tanpa riwayat tidak ada konteks", () => {
     expect(routerContext([])).toBeUndefined();
+  });
+});
+
+describe("agentHistory", () => {
+  const noMatch =
+    "Stok busi bosch belum bisa dicek: sedang offline dan barang ini tidak ada di data yang tersimpan di perangkat. Ini bukan berarti stoknya kosong. Coba lagi setelah tersambung.";
+
+  it("membuang balasan kode beserta pertanyaan pemicunya (uji M4 9 Okt)", () => {
+    const history = [user("stok busi bosch?"), bot(noMatch), user("stok busi bosch?"), bot(noMatch)];
+    expect(agentHistory(history)).toEqual([]);
+  });
+
+  it("mempertahankan percakapan model dan membuang catatan cache", () => {
+    const history = [
+      user("stok filter oli mahle?"),
+      bot("Filter oli Mahle 25 di toko dan 60 di gudang.\n\n(Data dari cache perangkat, tersinkron 5 mnt lalu; bisa berbeda dari stok terkini.)"),
+      user("halo"),
+      bot(OFF_TOPIC_REPLY),
+    ];
+    expect(agentHistory(history)).toEqual([
+      user("stok filter oli mahle?"),
+      bot("Filter oli Mahle 25 di toko dan 60 di gudang."),
+    ]);
   });
 });

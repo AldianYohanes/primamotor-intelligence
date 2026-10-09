@@ -39,8 +39,14 @@ import {
 } from "@/src/lib/agents/product-resolution";
 import { trimHistoryForContext } from "@/src/lib/agents/history-window";
 import { offTopicReply } from "@/src/lib/agents/off-topic";
-import { routerContext } from "@/src/lib/agents/router-context";
-import { cacheNoteFor, isOfflineNoMatch, offlineNoMatchReply } from "@/src/lib/agents/offline-answers";
+import { agentHistory, routerContext } from "@/src/lib/agents/router-context";
+import {
+  cacheNoteFor,
+  isOfflineNoMatch,
+  looksUnbacked,
+  mentionsStockMovement,
+  offlineNoMatchReply,
+} from "@/src/lib/agents/offline-answers";
 import {
   ProcessRecorder,
   answerStep,
@@ -698,6 +704,9 @@ export const UNAVAILABLE_TOOL_REPLY =
   "Maaf, permintaan itu di luar kemampuan saya. Saya hanya bisa cek stok, melihat tren penjualan, " +
   "dan mencatat barang masuk/keluar/pindah lokasi (dengan konfirmasi PIN).";
 
+/** Balasan kode milik orchestrator; tidak dipakai sebagai konteks Router maupun agent. */
+const CODE_REPLIES = [UNAVAILABLE_TOOL_REPLY, UNBACKED_STOCK_REPLY, OFFLINE_MUTATION_MESSAGE];
+
 async function routeMessage(
   engine: MLCEngineInterface,
   userMessage: string,
@@ -709,7 +718,7 @@ async function routeMessage(
   usage: NonStreamUsage | null;
 }> {
   // Balasan kode (off-topic, butuh koneksi, dst.) tidak ikut jadi konteks Router.
-  const lastAssistant = routerContext(history, [UNAVAILABLE_TOOL_REPLY, UNBACKED_STOCK_REPLY, OFFLINE_MUTATION_MESSAGE]);
+  const lastAssistant = routerContext(history, CODE_REPLIES);
   if (signal?.aborted) throw new TurnStoppedError();
   const stopListening = interruptOnAbort(engine, signal);
   let completion: Awaited<ReturnType<typeof engine.chat.completions.create>>;
@@ -781,9 +790,15 @@ async function runAgentTurnInner(
     // memanggil model (uji M4 9 Okt: model gagal menulis tool call 3× lalu
     // jawaban cadangan yang tidak menjelaskan alasannya).
     if (agentType === "transaction" && typeof navigator !== "undefined" && !navigator.onLine) {
-      rec.add({ kind: "action", label: "Sedang offline, transaksi tidak dikirim", status: "failed" });
-      rec.add(answerStep("code"));
-      return { agentType, assistantText: OFFLINE_MUTATION_MESSAGE, toolTrace };
+      if (mentionsStockMovement(userMessage)) {
+        rec.add({ kind: "action", label: "Sedang offline, transaksi tidak dikirim", status: "failed" });
+        rec.add(answerStep("code"));
+        return { agentType, assistantText: OFFLINE_MUTATION_MESSAGE, toolTrace };
+      }
+      // Pertanyaan tanpa kata pergerakan barang ("stok busi bosch?") yang dinilai
+      // transaksi: saat offline dibaca sebagai cek stok dari cache, bukan ditolak.
+      agentType = "query";
+      rec.add({ kind: "action", label: "Offline dan pesan tidak menyebut pergerakan barang, dibaca sebagai cek stok", status: "done" });
     }
 
     systemPrompt =
@@ -807,7 +822,8 @@ async function runAgentTurnInner(
       content: `${systemPrompt}\n\n${buildToolInstructions(tools)}`,
     },
     // Hanya role & content: pesan di UI bisa membawa field lain (mis. trace).
-    ...trimHistoryForContext(history).map(({ role, content }) => ({ role, content })),
+    // Tanpa balasan kode (model cenderung menyalinnya, uji M4 9 Okt).
+    ...trimHistoryForContext(agentHistory(history, CODE_REPLIES)).map(({ role, content }) => ({ role, content })),
     { role: "user", content: userMessage },
   ];
 
@@ -854,7 +870,7 @@ async function runAgentTurnInner(
     // kalau tetap tanpa alat, jawabannya diganti kode (lihat di bawah).
     const readsData = toolTrace.some((t) => t.name === "getStock" || t.name === "getSalesTrend");
     const unbackedNumbers =
-      reply.calls.length === 0 && mode === "multi_agent" && agentType === "query" && !readsData && /\d/.test(reply.text);
+      reply.calls.length === 0 && mode === "multi_agent" && agentType === "query" && !readsData && looksUnbacked(reply.text);
     if (unbackedNumbers && !nudgedUnbacked && i < MAX_TOOL_ITERATIONS - 1) {
       nudgedUnbacked = true;
       messages.push({ role: "assistant", content });
