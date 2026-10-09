@@ -33,15 +33,15 @@ export async function GET(req: NextRequest) {
   const lowOnly = params.get("low_only") === "true";
 
   try {
-    let locQuery = supabase
+    const { data: locData, error: locError } = await supabase
       .from("locations")
       .select("id, name, type")
       .eq("business_id", businessId)
       .order("name");
-    if (locationId) locQuery = locQuery.eq("id", locationId);
-    const { data: locData, error: locError } = await locQuery;
     if (locError) throw locError;
-    const locations: LocationInput[] = (locData ?? []).map((l) => ({ id: l.id, name: l.name, type: l.type }));
+    // allLocations untuk pilihan filter; locations = kolom yang ditampilkan.
+    const allLocations: LocationInput[] = (locData ?? []).map((l) => ({ id: l.id, name: l.name, type: l.type }));
+    const locations = locationId ? allLocations.filter((l) => l.id === locationId) : allLocations;
 
     const baseProducts = () => {
       let query = supabase
@@ -85,7 +85,8 @@ export async function GET(req: NextRequest) {
       const rows = buildStockLevelRows(list, locations, stock);
       return NextResponse.json({
         ...buildPaginatedResponse(rows, count, page, pageSize),
-        locations,
+        locations: allLocations,
+        columns: locations,
       });
     }
 
@@ -102,7 +103,8 @@ export async function GET(req: NextRequest) {
     const low = buildStockLevelRows(allProducts, locations, stock).filter((r) => r.is_low);
     return NextResponse.json({
       ...buildPaginatedResponse(low.slice(from, to + 1), low.length, page, pageSize),
-      locations,
+      locations: allLocations,
+      columns: locations,
     });
   } catch (error) {
     logger.error("Gagal memuat stok per lokasi", {

@@ -12,6 +12,7 @@ export function useGetStockLevels(params: StockLevelListParams) {
   return {
     rows: data?.data ?? [],
     locations: data?.locations ?? [],
+    columns: data?.columns ?? [],
     pageInfo: data ? { page: data.page, pageSize: data.pageSize, total: data.total, totalPages: data.totalPages } : null,
     isLoading,
     error: error as Error | undefined,

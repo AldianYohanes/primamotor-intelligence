@@ -34,7 +34,10 @@ export interface StockLevelLocationColumn {
 
 export interface StockLevelListResponse {
   data: StockLevelRow[]
+  /** Semua lokasi tenant (pilihan filter). */
   locations: StockLevelLocationColumn[]
+  /** Lokasi yang ditampilkan sebagai kolom (sesudah filter lokasi). */
+  columns: StockLevelLocationColumn[]
   page: number
   pageSize: number
   total: number

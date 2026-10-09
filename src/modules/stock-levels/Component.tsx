@@ -7,7 +7,6 @@ import type { SortingState } from "@tanstack/react-table";
 import { DataTable } from "@/src/components/ui/DataTable";
 import { useGetStockLevels } from "./hooks/use-get-stock-levels";
 import { createStockLevelColumns, type EditTarget } from "./data/coldef";
-import type { StockLevelLocationColumn } from "./data/response";
 import { AdjustStockDialog } from "./AdjustStockDialog";
 
 const PAGE_SIZE = 20;
@@ -21,7 +20,6 @@ export function StockLevelsModule() {
   const [lowOnly, setLowOnly] = useState(false);
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [allLocations, setAllLocations] = useState<StockLevelLocationColumn[]>([]);
 
   // Debounce pencarian supaya tidak refetch di setiap ketikan.
   useEffect(() => {
@@ -38,7 +36,7 @@ export function StockLevelsModule() {
     return () => clearTimeout(t);
   }, [notice]);
 
-  const { rows, locations, pageInfo, isLoading, error, refresh } =
+  const { rows, locations, columns: shownLocations, pageInfo, isLoading, error, refresh } =
     useGetStockLevels({
       page,
       pageSize: PAGE_SIZE,
@@ -47,15 +45,9 @@ export function StockLevelsModule() {
       lowOnly,
     });
 
-  // Daftar opsi filter diambil dari respons tanpa filter lokasi, supaya opsi
-  // tidak hilang setelah satu lokasi dipilih.
-  useEffect(() => {
-    if (!locationId && locations.length > 0) setAllLocations(locations);
-  }, [locations, locationId]);
-
   const columns = useMemo(
-    () => createStockLevelColumns(locations, setEditTarget),
-    [locations],
+    () => createStockLevelColumns(shownLocations, setEditTarget),
+    [shownLocations],
   );
 
   return (
@@ -85,7 +77,7 @@ export function StockLevelsModule() {
           className="field-input"
         >
           <option value="">Semua lokasi</option>
-          {allLocations.map((l) => (
+          {locations.map((l) => (
             <option key={l.id} value={l.id}>
               {l.name}
             </option>
