@@ -59,6 +59,8 @@ interface Props {
   modules: AppModule[];
 }
 
+const OFFLINE_HINT = "Butuh koneksi internet";
+
 export function ChatWindow({
   businessId,
   businessSlug,
@@ -411,7 +413,8 @@ export function ChatWindow({
             <select
               id="model-switch"
               value={modelId}
-              disabled={switchingModel}
+              disabled={switchingModel || !isOnline}
+              title={isOnline ? undefined : OFFLINE_HINT}
               onChange={async (e) => {
                 setSwitchingModel(true);
                 await setModelId(e.target.value).catch(() => {});
@@ -426,9 +429,11 @@ export function ChatWindow({
               ))}
             </select>
             <p className="mt-1 text-[11px] text-slate-400">
-              {switchingModel
-                ? "Menyiapkan model baru…"
-                : "Model baru perlu diunduh (~1–5 GB) sebelum bisa dipakai."}
+              {!isOnline
+                ? "Ganti model butuh koneksi internet untuk mengunduh model."
+                : switchingModel
+                  ? "Menyiapkan model baru…"
+                  : "Model baru perlu diunduh (~1–5 GB) sebelum bisa dipakai."}
             </p>
           </div>
         </div>
@@ -443,24 +448,29 @@ export function ChatWindow({
         subtitle={`${fullName} · ${tenantName}`}
         actions={
           <>
-            <button
-              onClick={() => setHistoryOpen(true)}
-              disabled={isThinking || loadingHistory}
-              className="btn btn-secondary rounded-full !text-xs !py-1.5 !px-3"
-              title="Riwayat percakapan"
-            >
-              <History size={13} />
-              <span className="hidden sm:inline">Riwayat</span>
-            </button>
-            <button
-              onClick={handleNewConversation}
-              disabled={isThinking || !engine}
-              className="btn btn-secondary rounded-full !text-xs !py-1.5 !px-3"
-              title="Percakapan baru"
-            >
-              <Plus size={13} />
-              <span className="hidden sm:inline">Percakapan Baru</span>
-            </button>
+            {/* Tombol disabled tidak memunculkan tooltip, jadi petunjuk offline ada di pembungkusnya. */}
+            <span title={isOnline ? undefined : OFFLINE_HINT} className="inline-flex">
+              <button
+                onClick={() => setHistoryOpen(true)}
+                disabled={isThinking || loadingHistory || !isOnline}
+                className="btn btn-secondary rounded-full !text-xs !py-1.5 !px-3"
+                title={isOnline ? "Riwayat percakapan" : undefined}
+              >
+                <History size={13} />
+                <span className="hidden sm:inline">Riwayat</span>
+              </button>
+            </span>
+            <span title={isOnline ? undefined : OFFLINE_HINT} className="inline-flex">
+              <button
+                onClick={handleNewConversation}
+                disabled={isThinking || !engine || !isOnline}
+                className="btn btn-secondary rounded-full !text-xs !py-1.5 !px-3"
+                title={isOnline ? "Percakapan baru" : undefined}
+              >
+                <Plus size={13} />
+                <span className="hidden sm:inline">Percakapan Baru</span>
+              </button>
+            </span>
           </>
         }
       />
@@ -473,8 +483,9 @@ export function ChatWindow({
           <span>
             Sedang offline — cari stok masih bisa pakai data terakhir yang
             tersimpan, tapi catat barang masuk/keluar/transfer butuh koneksi
-            untuk verifikasi PIN. Pesan tetap tersimpan dan otomatis terkirim
-            begitu sinyal kembali.
+            untuk verifikasi PIN. Riwayat dan percakapan baru juga menunggu
+            koneksi. Pesan tetap tersimpan dan otomatis terkirim begitu sinyal
+            kembali.
           </span>
         </div>
       )}
