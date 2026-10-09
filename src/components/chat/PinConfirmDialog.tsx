@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { ShieldCheck, AlertCircle } from "lucide-react";
 import type { PendingConfirmation } from "@/src/lib/agents/orchestrator";
+import { unlockTimeHint } from "@/src/lib/auth/lockout-messages";
+
+export const CANCELLED_MESSAGE = "Transaksi dibatalkan. Stok tidak berubah.";
 
 interface Props {
   pending: PendingConfirmation;
@@ -32,8 +35,7 @@ export function PinConfirmDialog({
   // Tetap tutup dialog meski reject gagal (mis. jaringan putus) — jangan sampai
   // staf terjebak tidak bisa membatalkan; expire_stale_pending_reservations
   // jadi jaring pengaman kalau reject-nya sendiri gagal.
-  async function handleCancel() {
-    setCancelling(true);
+  async function rejectPending() {
     try {
       await fetch("/api/agent/tools/reject", {
         method: "POST",
@@ -42,9 +44,13 @@ export function PinConfirmDialog({
       });
     } catch {
       // sengaja diabaikan — lihat komentar di atas
-    } finally {
-      onCancel();
     }
+  }
+
+  async function handleCancel() {
+    setCancelling(true);
+    await rejectPending();
+    onCancel();
   }
 
   async function handleConfirm() {
@@ -69,7 +75,15 @@ export function PinConfirmDialog({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Gagal mengonfirmasi");
+        const reason = `${data.error ?? "Gagal mengonfirmasi"}${unlockTimeHint(data.locked_until)}`;
+        // Terkunci: PIN tidak bisa dicoba lagi sekarang, jadi transaksi dibatalkan
+        // (reservasi stok dilepas) dan alasannya masuk ke chat, bukan dialog yang macet.
+        if (res.status === 423) {
+          await rejectPending();
+          onResolved({ ok: false, message: `${reason} ${CANCELLED_MESSAGE}` });
+          return;
+        }
+        setError(reason);
         setSubmitting(false);
         return;
       }

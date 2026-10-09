@@ -3,12 +3,10 @@ import {
   toSyntheticEmail,
   isValidPin,
   LOCKOUT_MAX_ATTEMPTS,
-  LOCKOUT_DURATION_MS,
 } from "@/src/lib/auth/synthetic-email";
+import { lockedFailure, wrongPinFailure, type PinFailure } from "@/src/lib/auth/lockout-messages";
 
-type ConfirmResult =
-  | { ok: true }
-  | { ok: false; status: number; error: string };
+type ConfirmResult = { ok: true } | ({ ok: false } & PinFailure);
 
 /**
  * Re-verifikasi PIN sebelum eksekusi aksi berisiko (updateStock/transferStock).
@@ -58,11 +56,7 @@ export async function reconfirmPin(
     };
   }
   if (staffRow.locked_until && new Date(staffRow.locked_until) > new Date()) {
-    return {
-      ok: false,
-      status: 423,
-      error: "Akun terkunci sementara akibat percobaan PIN gagal",
-    };
+    return { ok: false, ...lockedFailure(staffRow.locked_until) };
   }
 
   const email = toSyntheticEmail(businessSlug, username);
@@ -73,17 +67,15 @@ export async function reconfirmPin(
 
   if (error) {
     const attempts = staffRow.failed_login_attempts + 1;
-    const locked = attempts >= LOCKOUT_MAX_ATTEMPTS;
+    const failure = wrongPinFailure(attempts);
     await admin
       .from("staff")
       .update({
         failed_login_attempts: attempts,
-        locked_until: locked
-          ? new Date(Date.now() + LOCKOUT_DURATION_MS).toISOString()
-          : null,
+        locked_until: attempts >= LOCKOUT_MAX_ATTEMPTS ? (failure.lockedUntil ?? null) : null,
       })
       .eq("id", staffRow.id);
-    return { ok: false, status: 401, error: "PIN salah" };
+    return { ok: false, ...failure };
   }
 
   await admin

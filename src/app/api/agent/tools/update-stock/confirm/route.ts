@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/src/lib/supabase/admin";
 import { updateStockConfirmSchema } from "@/src/lib/agents/tool-schemas";
 import { reconfirmPin } from "@/src/lib/auth/confirm-pin";
+import { pinFailureBody } from "@/src/lib/auth/lockout-messages";
 import { logger } from "@/src/lib/logging/logger";
 import { requireApi } from "@/src/lib/auth/staff-context";
 
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
   const pinResult = await reconfirmPin(business_slug, auth.staff.username, pin);
   if (!pinResult.ok)
     return NextResponse.json(
-      { error: pinResult.error },
+      pinFailureBody(pinResult),
       { status: pinResult.status },
     );
 

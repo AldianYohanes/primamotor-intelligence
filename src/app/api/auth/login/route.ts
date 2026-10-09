@@ -6,8 +6,8 @@ import {
   toSyntheticEmail,
   isValidPin,
   LOCKOUT_MAX_ATTEMPTS,
-  LOCKOUT_DURATION_MS,
 } from "@/src/lib/auth/synthetic-email";
+import { lockedFailure, pinFailureBody, wrongPinFailure } from "@/src/lib/auth/lockout-messages";
 import { logger } from "@/src/lib/logging/logger";
 
 const loginSchema = z.object({
@@ -76,15 +76,8 @@ export async function POST(req: NextRequest) {
     );
   }
   if (staffRow.locked_until && new Date(staffRow.locked_until) > new Date()) {
-    const minutesLeft = Math.ceil(
-      (new Date(staffRow.locked_until).getTime() - Date.now()) / 60000,
-    );
-    return NextResponse.json(
-      {
-        error: `Akun terkunci sementara, coba lagi dalam ${minutesLeft} menit`,
-      },
-      { status: 423 },
-    );
+    const failure = lockedFailure(staffRow.locked_until);
+    return NextResponse.json(pinFailureBody(failure), { status: failure.status });
   }
 
   // 3. Coba login pakai synthetic email lewat client server (supaya cookie sesi langsung terpasang)
@@ -97,14 +90,12 @@ export async function POST(req: NextRequest) {
 
   if (error) {
     const attempts = staffRow.failed_login_attempts + 1;
-    const locked = attempts >= LOCKOUT_MAX_ATTEMPTS;
+    const failure = wrongPinFailure(attempts, Date.now(), "Username atau PIN");
     const { error: lockoutUpdateError } = await admin
       .from("staff")
       .update({
         failed_login_attempts: attempts,
-        locked_until: locked
-          ? new Date(Date.now() + LOCKOUT_DURATION_MS).toISOString()
-          : null,
+        locked_until: attempts >= LOCKOUT_MAX_ATTEMPTS ? (failure.lockedUntil ?? null) : null,
       })
       .eq("id", staffRow.id);
     if (lockoutUpdateError) {
@@ -124,14 +115,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json(
-      {
-        error: locked
-          ? "Username atau PIN salah. Akun dikunci 15 menit setelah 5x percobaan gagal."
-          : `Username atau PIN salah (percobaan ke-${attempts} dari ${LOCKOUT_MAX_ATTEMPTS})`,
-      },
-      { status: 401 },
-    );
+    return NextResponse.json(pinFailureBody(failure), { status: failure.status });
   }
 
   const { error: resetError } = await admin

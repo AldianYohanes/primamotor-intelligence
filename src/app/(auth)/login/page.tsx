@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { AlertCircle } from 'lucide-react'
 import { HOME_PATH, safeRedirect } from '@/src/lib/auth/rbac'
 import { createClient } from '@/src/lib/supabase/client'
+import { unlockTimeHint } from '@/src/lib/auth/lockout-messages'
 
 // Dikirim requirePage() saat sesi masih ada tapi akunnya tidak boleh masuk.
 const SESSION_ERRORS: Record<string, string> = {
@@ -55,7 +56,7 @@ function LoginForm() {
     const data = await res.json()
 
     if (!res.ok) {
-      setError(data.error ?? 'Gagal masuk')
+      setError((data.error ?? 'Gagal masuk') + unlockTimeHint(data.locked_until))
       setLoading(false)
       return
     }

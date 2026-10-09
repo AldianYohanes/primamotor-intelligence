@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireApi } from "@/src/lib/auth/staff-context";
 import { reconfirmPin } from "@/src/lib/auth/confirm-pin";
+import { pinFailureBody } from "@/src/lib/auth/lockout-messages";
 import { isValidPin } from "@/src/lib/auth/synthetic-email";
 import { createAdminClient } from "@/src/lib/supabase/admin";
 import { logger } from "@/src/lib/logging/logger";
@@ -32,8 +33,10 @@ export async function POST(req: NextRequest) {
 
   const check = await reconfirmPin(auth.ownBusiness.slug, auth.staff.username, current_pin);
   if (!check.ok) {
+    // "PIN salah. Sisa N percobaan…" → "PIN lama salah. Sisa N percobaan…"
+    const body = pinFailureBody(check);
     return NextResponse.json(
-      { error: check.status === 401 ? "PIN lama salah" : check.error },
+      { ...body, error: body.error.replace(/^PIN salah/, "PIN lama salah") },
       { status: check.status },
     );
   }

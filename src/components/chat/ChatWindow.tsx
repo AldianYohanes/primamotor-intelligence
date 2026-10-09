@@ -43,7 +43,7 @@ import {
 import { ConversationHistoryPanel } from "./ConversationHistoryPanel";
 import { EnableNotificationsBanner } from "./EnableNotificationsBanner";
 import { MessageBubble } from "./MessageBubble";
-import { PinConfirmDialog } from "./PinConfirmDialog";
+import { CANCELLED_MESSAGE, PinConfirmDialog } from "./PinConfirmDialog";
 import { MutationChoiceCard } from "./MutationChoiceCard";
 import { ProcessDetails } from "./ProcessDetails";
 
@@ -147,6 +147,12 @@ export function ChatWindow({
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOnline]);
+
+  /** Balasan kode (bukan model) sesudah dialog PIN: hasil, batal, atau akun terkunci. */
+  function appendSystemReply(message: string) {
+    setMessages((prev) => [...prev, { role: "assistant", content: message }]);
+    persistMessage("assistant", message);
+  }
 
   async function persistMessage(
     role: "user" | "assistant",
@@ -563,14 +569,13 @@ export function ChatWindow({
           businessSlug={businessSlug}
           username={username}
           staffId={staffId}
-          onCancel={() => setPendingConfirmation(null)}
+          onCancel={() => {
+            setPendingConfirmation(null);
+            appendSystemReply(CANCELLED_MESSAGE);
+          }}
           onResolved={({ message }) => {
             setPendingConfirmation(null);
-            setMessages((prev) => [
-              ...prev,
-              { role: "assistant", content: message },
-            ]);
-            persistMessage("assistant", message);
+            appendSystemReply(message);
           }}
         />
       )}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/src/lib/supabase/admin";
 import { reconfirmPin } from "@/src/lib/auth/confirm-pin";
+import { pinFailureBody } from "@/src/lib/auth/lockout-messages";
 import { logger } from "@/src/lib/logging/logger";
 import { requireStaffRow } from "@/src/lib/auth/staff-context";
 import type { Permission } from "@/src/lib/auth/rbac";
@@ -69,7 +70,7 @@ export async function POST(
   );
   if (!pinResult.ok) {
     return NextResponse.json(
-      { error: pinResult.error },
+      pinFailureBody(pinResult),
       { status: pinResult.status },
     );
   }
