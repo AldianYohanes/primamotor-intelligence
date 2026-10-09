@@ -13,7 +13,7 @@ export const RUN_STORE_KEY = "eval-run-autosave";
 export type StoredRow = Omit<ScoredRow, "scenario"> & { scenario: string };
 
 export interface Interruption {
-  kind: "gpu" | "error";
+  kind: "gpu" | "error" | "stopped";
   message: string;
   detail?: string;
   during: string;

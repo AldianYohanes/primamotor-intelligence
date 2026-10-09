@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { MLCEngineInterface } from "@mlc-ai/web-llm";
 import { createClient } from "@/src/lib/supabase/client";
 import { isWebGPUAvailable } from "@/src/lib/agents/webgpu-support";
@@ -92,6 +92,10 @@ function download(filename: string, content: string, type: string) {
 type GpuInfo = GpuAdapterSummary;
 
 /** Adapter yang benar-benar dipakai engine: sesuai preferensi GPU tersimpan. */
+function isStopped(err: unknown) {
+  return err instanceof Error && err.name === "TurnStoppedError";
+}
+
 async function readGpuInfo(): Promise<GpuInfo | null> {
   const probes = await probeGpus();
   const pref = getGpuPreference() ?? "high-performance";
@@ -118,6 +122,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   const [idFilter, setIdFilter] = useState("");
   const [pin, setPin] = useState("");
   const [running, setRunning] = useState(false);
+  const stopRef = useRef<AbortController | null>(null);
   const [status, setStatus] = useState("Belum dijalankan.");
   const [warning, setWarning] = useState<string | null>(null);
   const [rows, setRows] = useState<ScoredRow[]>([]);
@@ -125,7 +130,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   const [startedAt, setStartedAt] = useState<string | null>(null);
   // Ikut diekspor supaya run yang berhenti di tengah bisa ditelusuri dari JSON saja.
   const [stoppedReason, setStoppedReason] = useState<{
-    kind: "gpu" | "error";
+    kind: "gpu" | "error" | "stopped";
     message: string;
     /** Keterangan asli browser untuk error GPU (alasan device lost dsb.). */
     detail?: string;
@@ -320,6 +325,16 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
     download(`eval-${at ?? "run"}.csv`, toCsv(csvRows), "text/csv");
   }
 
+  // Esc menghentikan run yang sedang berjalan.
+  useEffect(() => {
+    if (!running) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") stopRef.current?.abort();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [running]);
+
   async function run(resume?: SavedRun) {
     if (!isEvalTenant) return;
     if (resume && resume.modelId !== modelId) {
@@ -333,6 +348,8 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
     if (alertsOn) enableAlerts();
     let resetEngine: (() => void) | undefined;
     const releaseWake = holdWakeLock();
+    const controller = new AbortController();
+    stopRef.current = controller;
     const runStartedAt = resume?.startedAt ?? new Date().toISOString();
     const plan = resume?.plan ?? buildPlan(selected.map((s) => s.id), modes);
     const collected: ScoredRow[] = resume ? fromStoredRows(resume.rows, SCENARIOS) : [];
@@ -418,6 +435,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
       const segmentStart = performance.now();
       // Mode diselang-seling per skenario supaya kondisi perangkat (suhu, beban) setara di kedua konfigurasi.
       for (const { scenarioId, mode } of todo) {
+        if (controller.signal.aborted) throw Object.assign(new Error("Dihentikan oleh pengguna."), { name: "TurnStoppedError" });
         const scenario = SCENARIOS.find((s) => s.id === scenarioId);
         if (!scenario) continue;
         const execStart = performance.now();
@@ -453,6 +471,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
               mode,
               getDevicePosition: fixedDevicePosition,
               onStep: setLiveSteps,
+              signal: controller.signal,
             }),
           );
           let confirm: { outcome: ConfirmOutcome; error?: string } = { outcome: "none" };
@@ -491,7 +510,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             stockAfter: await snapshotStock(),
           };
         } catch (err) {
-          if (err instanceof GpuDeviceError) throw err;
+          if (err instanceof GpuDeviceError || isStopped(err)) throw err;
           observation = {
             ...base,
             runError: err instanceof Error ? err.message : String(err),
@@ -516,8 +535,9 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      const stoppedByUser = isStopped(err);
       stop = {
-        kind: err instanceof GpuDeviceError ? "gpu" : "error",
+        kind: err instanceof GpuDeviceError ? "gpu" : stoppedByUser ? "stopped" : "error",
         message,
         detail: err instanceof GpuDeviceError ? err.detail : undefined,
         during,
@@ -527,7 +547,9 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
       interruptions.push(stop);
       setInterruptions([...interruptions]);
       persist();
-      if (err instanceof GpuDeviceError) {
+      if (stoppedByUser) {
+        setStatus('Dihentikan. Eksekusi yang sedang jalan tidak dihitung; hasil sebelumnya tersimpan, klik "Lanjutkan run" untuk meneruskan.');
+      } else if (err instanceof GpuDeviceError) {
         resetEngine?.();
         setStatus(
           `Berhenti karena error GPU: ${message} Penyebab umum: Windows me-reset GPU karena satu tugas terlalu lama (TDR, LiveKernelEvent 141 di Event Viewer), halaman dimuat ulang saat berjalan (termasuk hot reload dev server karena ada file yang berubah), atau memori GPU tidak cukup untuk ${modelId}. Hasil sejauh ini tersimpan: muat ulang halaman lalu klik "Lanjutkan run"; kalau sering terulang, kecilkan "Potongan prefill".`,
@@ -535,7 +557,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
       } else {
         setStatus(`Berhenti: ${message} Hasil sejauh ini tersimpan; klik "Lanjutkan run" setelah masalahnya beres.`);
       }
-      if (alertsOn) {
+      if (alertsOn && !stoppedByUser) {
         alertUser(
           "error",
           err instanceof GpuDeviceError ? "Evaluasi berhenti: error GPU" : "Evaluasi berhenti karena error",
@@ -543,6 +565,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         );
       }
     } finally {
+      stopRef.current = null;
       releaseWake();
       setRunning(false);
       if (collected.length > 0) {
@@ -748,6 +771,11 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
           >
             {running ? "Berjalan…" : `Jalankan ${selected.length} skenario × ${modes.length} mode`}
           </button>
+          {running && (
+            <button className="btn btn-secondary px-4 py-2" onClick={() => stopRef.current?.abort()} title="Hentikan (Esc)">
+              Hentikan
+            </button>
+          )}
           <button className="btn btn-secondary px-4 py-2" onClick={() => download(`eval-${startedAt ?? "run"}.csv`, toCsv(rows), "text/csv")} disabled={rows.length === 0}>
             Unduh CSV
           </button>

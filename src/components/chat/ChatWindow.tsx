@@ -8,6 +8,7 @@ import {
   Plus,
   History,
   WifiOff,
+  Square,
 } from "lucide-react";
 import { createClient } from "@/src/lib/supabase/client";
 import type { Json } from "@/src/lib/db/types";
@@ -18,6 +19,7 @@ import { AppHeader } from "@/src/components/nav/AppHeader";
 import type { AppModule } from "@/src/lib/auth/rbac";
 import {
   runAgentTurn,
+  TurnStoppedError,
   submitMutationChoice,
   type ChatMessage,
   type MutationChoice,
@@ -97,6 +99,7 @@ export function ChatWindow({
   const [resuming, setResuming] = useState(false);
   const isOnline = useOnlineStatus();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const stopRef = useRef<AbortController | null>(null);
 
   // Inisialisasi: ambil/buat percakapan aktif + muat riwayatnya, cek model, sync cache offline
   useEffect(() => {
@@ -185,6 +188,20 @@ export function ChatWindow({
     }
   }
 
+  function handleStop() {
+    stopRef.current?.abort();
+  }
+
+  // Esc menghentikan balasan hanya saat asisten sedang berpikir.
+  useEffect(() => {
+    if (!isThinking) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") stopRef.current?.abort();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isThinking]);
+
   async function handleSend() {
     const text = input.trim();
     if (!text || !engine || !conversationId || isThinking) return;
@@ -197,6 +214,8 @@ export function ChatWindow({
     persistMessage("user", text);
     setIsThinking(true);
     const releaseWake = holdWakeLock();
+    const controller = new AbortController();
+    stopRef.current = controller;
     setDraftText("");
     setLiveSteps([]);
     // Salinan terakhir dari onStep, dipakai bila giliran gagal di tengah jalan.
@@ -211,6 +230,7 @@ export function ChatWindow({
         businessId,
         setDraftText,
         {
+          signal: controller.signal,
           onStep: (steps) => {
             lastSteps = steps;
             setLiveSteps(steps);
@@ -233,6 +253,13 @@ export function ChatWindow({
         setMutationChoice(result.choice);
       }
     } catch (err) {
+      if (err instanceof TurnStoppedError) {
+        const partial = err.partialText.trim();
+        const content = partial ? `${partial}\n\n(dihentikan)` : "Dihentikan.";
+        setMessages((prev) => [...prev, { role: "assistant", content, trace: lastSteps }]);
+        persistMessage("assistant", content, undefined, lastSteps);
+        return;
+      }
       console.error(err);
       setMessages((prev) => [
         ...prev,
@@ -244,6 +271,7 @@ export function ChatWindow({
         },
       ]);
     } finally {
+      stopRef.current = null;
       releaseWake();
       setIsThinking(false);
       setDraftText("");
@@ -553,14 +581,25 @@ export function ChatWindow({
             disabled={!engine}
             className="field-input flex-1 rounded-full"
           />
-          <button
-            onClick={handleSend}
-            disabled={isThinking || !engine}
-            className="btn btn-primary rounded-full px-5"
-          >
-            <Send size={14} />
-            Kirim
-          </button>
+          {isThinking ? (
+            <button
+              onClick={handleStop}
+              className="btn btn-secondary rounded-full px-5"
+              title="Hentikan (Esc)"
+            >
+              <Square size={14} />
+              Stop
+            </button>
+          ) : (
+            <button
+              onClick={handleSend}
+              disabled={!engine}
+              className="btn btn-primary rounded-full px-5"
+            >
+              <Send size={14} />
+              Kirim
+            </button>
+          )}
         </div>
       </div>
 

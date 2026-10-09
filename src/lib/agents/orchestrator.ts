@@ -112,6 +112,24 @@ export function inferAgentTypeFromTrace(
 
 const MAX_TOOL_ITERATIONS = 4;
 
+/** Giliran dihentikan staf; `partialText` = bagian balasan yang sempat tampil. */
+export class TurnStoppedError extends Error {
+  constructor(public readonly partialText = "") {
+    super("Dihentikan");
+    this.name = "TurnStoppedError";
+  }
+}
+
+/** Menghentikan generasi model begitu `signal` dibatalkan; kembalikan fungsi pembersih. */
+function interruptOnAbort(engine: MLCEngineInterface, signal?: AbortSignal): () => void {
+  if (!signal) return () => {};
+  const onAbort = () => {
+    Promise.resolve(engine.interruptGenerate()).catch(() => {});
+  };
+  signal.addEventListener("abort", onAbort, { once: true });
+  return () => signal.removeEventListener("abort", onAbort);
+}
+
 const AGENT_TOOLS_BY_TYPE: Record<"query" | "transaction" | "off_topic", string[]> = {
   query: ["getStock", "getSalesTrend"],
   transaction: ["getStock", "updateStock", "transferStock"],
@@ -153,6 +171,25 @@ async function streamChatCompletion(
   engine: MLCEngineInterface,
   messages: ChatMessage[],
   onToken?: (partialText: string) => void,
+  signal?: AbortSignal,
+): Promise<{
+  content: string;
+  usage: StreamChunkUsage | null;
+}> {
+  if (signal?.aborted) throw new TurnStoppedError();
+  const stopListening = interruptOnAbort(engine, signal);
+  try {
+    return await consumeStream(engine, messages, onToken, signal);
+  } finally {
+    stopListening();
+  }
+}
+
+async function consumeStream(
+  engine: MLCEngineInterface,
+  messages: ChatMessage[],
+  onToken?: (partialText: string) => void,
+  signal?: AbortSignal,
 ): Promise<{
   content: string;
   usage: StreamChunkUsage | null;
@@ -176,6 +213,7 @@ async function streamChatCompletion(
   let usage: StreamChunkUsage | null = null;
 
   for await (const chunk of stream) {
+    if (signal?.aborted) throw new TurnStoppedError(visibleStreamText(content));
     if (chunk.usage) usage = chunk.usage;
 
     const delta = chunk.choices[0]?.delta;
@@ -184,6 +222,8 @@ async function streamChatCompletion(
       onToken?.(visibleStreamText(content));
     }
   }
+
+  if (signal?.aborted) throw new TurnStoppedError(visibleStreamText(content));
 
   // Teks yang disimpan web-llm (stop string dipotong). Streaming tidak menahan
   // potongan stop string yang terdiri dari beberapa token, jadi `content` bisa
@@ -656,19 +696,28 @@ async function routeMessage(
   engine: MLCEngineInterface,
   userMessage: string,
   history: ChatMessage[],
+  signal?: AbortSignal,
 ): Promise<{
   agentType: "query" | "transaction" | "off_topic";
   text: string;
   usage: NonStreamUsage | null;
 }> {
   const lastAssistant = history.findLast((m) => m.role === "assistant")?.content;
-  const completion = await engine.chat.completions.create({
-    messages: [
-      { role: "system", content: ROUTER_SYSTEM_PROMPT },
-      { role: "user", content: buildRouterInput(userMessage, lastAssistant) },
-    ],
-    temperature: 0,
-  });
+  if (signal?.aborted) throw new TurnStoppedError();
+  const stopListening = interruptOnAbort(engine, signal);
+  let completion: Awaited<ReturnType<typeof engine.chat.completions.create>>;
+  try {
+    completion = await engine.chat.completions.create({
+      messages: [
+        { role: "system", content: ROUTER_SYSTEM_PROMPT },
+        { role: "user", content: buildRouterInput(userMessage, lastAssistant) },
+      ],
+      temperature: 0,
+    });
+  } finally {
+    stopListening();
+  }
+  if (signal?.aborted) throw new TurnStoppedError();
   const text = completion.choices[0]?.message?.content ?? "";
   const usage = (completion as unknown as { usage?: NonStreamUsage }).usage ?? null;
   return { agentType: parseRouterReply(text), text, usage };
@@ -693,6 +742,7 @@ async function runAgentTurnInner(
   getDevicePosition: () => Promise<GeoPoint | null>,
   rec: ProcessRecorder,
   onToken?: (partialText: string) => void,
+  signal?: AbortSignal,
 ): Promise<AgentTurnResult> {
   const toolTrace: AgentTurnResult["toolTrace"] = [];
   // Mode single_agent: nilai ini placeholder, diganti inferAgentTypeFromTrace di runAgentTurn.
@@ -701,7 +751,7 @@ async function runAgentTurnInner(
 
   if (mode === "multi_agent") {
     const routing = rec.add({ kind: "route", label: "Router menentukan agent…", status: "running" });
-    const routed = await routeMessage(engine, userMessage, history);
+    const routed = await routeMessage(engine, userMessage, history, signal);
     agentType = routed.agentType;
     rec.finish(routing, routeStep(agentType));
     modelReplies.push(`[router] ${routed.text}`);
@@ -750,7 +800,7 @@ async function runAgentTurnInner(
   let textBeforeNudge = "";
   const rejectedTools = new Set<string>();
   for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-    const { content, usage } = await streamChatCompletion(engine, messages, onToken);
+    const { content, usage } = await streamChatCompletion(engine, messages, onToken, signal);
     if (usage) {
       usageAcc.hasUsage = true;
       usageAcc.promptTokens += usage.prompt_tokens ?? 0;
@@ -798,6 +848,8 @@ async function runAgentTurnInner(
     const responses: string[] = [];
 
     for (const call of reply.calls) {
+      // Sesudah stop, tidak ada alat yang boleh dijalankan lagi.
+      if (signal?.aborted) throw new TurnStoppedError();
       const args = call.arguments;
       const allowed = allowedTools.has(call.name);
 
@@ -902,6 +954,8 @@ export async function runAgentTurn(
     getDevicePosition?: () => Promise<GeoPoint | null>;
     /** Langkah "Lihat proses" secara live; hasil akhirnya juga ada di processSteps. */
     onStep?: (steps: ProcessStep[]) => void;
+    /** Batalkan untuk menghentikan giliran; runAgentTurn melempar TurnStoppedError. */
+    signal?: AbortSignal;
   } = {},
 ): Promise<AgentTurnResult> {
   const mode = options.mode ?? "multi_agent";
@@ -931,6 +985,7 @@ export async function runAgentTurn(
       options.getDevicePosition ?? readDevicePosition,
       rec,
       onToken,
+      options.signal,
     );
     const latencyMs = Math.round(performance.now() - startedAt);
     const result: AgentTurnResult = {
