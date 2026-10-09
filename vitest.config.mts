@@ -1,5 +1,5 @@
 import { defineConfig } from 'vitest/config'
-import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 /**
  * Sengaja environment 'node' (bukan jsdom) — cakupan awal automated testing ini
@@ -15,7 +15,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, '.'),
+      '@': fileURLToPath(new URL('.', import.meta.url)),
     },
   },
 })
