@@ -351,6 +351,12 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
       setStatus(`Run tersimpan memakai skenario versi ${resume.scenarioVersion}, sekarang ${scenarioFile.version}. Tidak bisa dilanjutkan.`);
       return;
     }
+    // Muat ulang halaman mereset opsi ablasi; pulihkan dari run tersimpan supaya seluruh run
+    // memakai konfigurasi yang sama (run 10 Okt 2026 kehilangan padding setelah resume kedua).
+    if (resume && typeof resume.promptPadding === "boolean" && resume.promptPadding !== isPromptPaddingOn()) {
+      setPadPrompt(resume.promptPadding);
+      setPromptPadding(resume.promptPadding);
+    }
     if (alertsOn) enableAlerts();
     let resetEngine: (() => void) | undefined;
     const releaseWake = holdWakeLock();
@@ -362,6 +368,8 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
     const interruptions: Interruption[] = resume?.interruptions ?? [];
     const resumed: SavedRun["resumed"] = resume?.resumed ?? [];
     let runEnvironment: unknown = resume?.environment ?? null;
+    // Dikunci di awal run: nilai awal dipertahankan sepanjang run, juga lintas resume.
+    const runPadding = typeof resume?.promptPadding === "boolean" ? resume.promptPadding : isPromptPaddingOn();
     let autosaveOk = true;
     const persist = () => {
       autosaveOk = saveRun({
@@ -370,6 +378,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         modelId,
         plan,
         environment: runEnvironment,
+        promptPadding: runPadding,
         rows: collected.map(toStoredRow),
         interruptions,
         resumed,
@@ -467,6 +476,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
           latencyMs: null,
           promptTokens: null,
           completionTokens: null,
+          promptPadding: isPromptPaddingOn(),
         };
         let observation: Observation;
         setLiveSteps([]);

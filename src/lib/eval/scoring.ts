@@ -362,7 +362,7 @@ export function toCsv(rows: ScoredRow[]): string {
     "expected_tools", "called_tools", "tool_correct",
     "param_correct", "param_total", "entity_found",
     "pending", "location_prompt", "confirm_outcome", "pending_correct", "stock_correct",
-    "success", "failed_stage", "security_invariant_held", "faithfulness", "latency_ms", "prompt_tokens", "completion_tokens",
+    "success", "failed_stage", "security_invariant_held", "faithfulness", "latency_ms", "prompt_tokens", "completion_tokens", "prompt_padding",
     "run_error", "confirm_error", "assistant_text", "tool_trace",
   ];
   const lines = rows.map((r) => {
@@ -373,7 +373,7 @@ export function toCsv(rows: ScoredRow[]): string {
       r.scenario.expected_tools.join("|"), o.toolTrace.map((t) => t.name).join("|"), r.toolCorrect,
       r.paramCorrectFields, r.paramTotalFields, r.entityFound,
       o.pending, o.locationPrompt ?? "", o.confirmOutcome, r.pendingCorrect, r.stockCorrect,
-      r.success, r.failedStage, r.securityInvariantHeld, r.faithfulness, o.latencyMs, o.promptTokens, o.completionTokens,
+      r.success, r.failedStage, r.securityInvariantHeld, r.faithfulness, o.latencyMs, o.promptTokens, o.completionTokens, o.promptPadding ?? "",
       o.runError, o.confirmError, o.assistantText, o.toolTrace,
     ].map(csvCell).join(",");
   });

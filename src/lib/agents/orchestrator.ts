@@ -5,7 +5,7 @@ import { ROUTER_SYSTEM_PROMPT, buildRouterInput, parseRouterReply } from "@/src/
 import { QUERY_AGENT_SYSTEM_PROMPT } from "@/src/lib/agents/prompts/query-agent";
 import { TRANSACTION_AGENT_SYSTEM_PROMPT } from "@/src/lib/agents/prompts/transaction-agent";
 import { SINGLE_AGENT_SYSTEM_PROMPT } from "@/src/lib/agents/prompts/single-agent";
-import { buildNeutralPadding, isPromptPaddingOn } from "@/src/lib/agents/prompt-padding";
+import { buildNeutralPadding, isPromptPaddingOn, paddingLength } from "@/src/lib/agents/prompt-padding";
 import { AGENT_TOOL_DEFINITIONS } from "@/src/lib/agents/tool-schemas";
 import {
   MALFORMED_TOOL_CALL_FEEDBACK,
@@ -821,7 +821,7 @@ async function runAgentTurnInner(
   if (mode === "multi_agent" && isPromptPaddingOn()) {
     // Ablasi /eval: samakan panjang prompt spesialis dengan prompt single-agent.
     const singleLength = `${SINGLE_AGENT_SYSTEM_PROMPT}\n\n${buildToolInstructions(AGENT_TOOL_DEFINITIONS)}`.length;
-    const padding = buildNeutralPadding(singleLength - systemContent.length - 2);
+    const padding = buildNeutralPadding(paddingLength(singleLength - systemContent.length - 2));
     if (padding) systemContent = `${systemContent}\n\n${padding}`;
   }
   const messages: ChatMessage[] = [

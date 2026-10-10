@@ -27,6 +27,8 @@ export interface SavedRun {
   /** Urutan eksekusi asli: skenario terpilih × mode, diselang-seling per skenario. */
   plan: { scenarioId: string; mode: AgentMode }[];
   environment: unknown;
+  /** Opsi ablasi padding saat run dimulai; dipulihkan saat run dilanjutkan sesudah muat ulang halaman. */
+  promptPadding?: boolean;
   rows: StoredRow[];
   /** Penghentian sebelumnya (run dilanjutkan sesudahnya). */
   interruptions: Interruption[];

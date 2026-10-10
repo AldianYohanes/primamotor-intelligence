@@ -79,6 +79,8 @@ export interface Observation {
   latencyMs: number | null;
   promptTokens: number | null;
   completionTokens: number | null;
+  /** Opsi ablasi panjang prompt aktif saat eksekusi ini (lihat prompt-padding.ts). */
+  promptPadding?: boolean;
   runError?: string;
 }
 
