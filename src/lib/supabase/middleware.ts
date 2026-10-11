@@ -49,6 +49,10 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/signup") ||
     request.nextUrl.pathname.startsWith("/auth") ||
     request.nextUrl.pathname.startsWith("/api/auth") ||
+    // Vercel Cron tidak membawa sesi login, hanya header Authorization. Tanpa
+    // pengecualian ini cron di-redirect ke /login dan monitoring tidak pernah
+    // jalan. Otorisasinya ada di route itu sendiri (CRON_SECRET, fail-closed).
+    request.nextUrl.pathname.startsWith("/api/cron/") ||
     request.nextUrl.pathname === "/manifest.json" ||
     request.nextUrl.pathname === "/sw.js" ||
     request.nextUrl.pathname.startsWith("/serwist/") ||
