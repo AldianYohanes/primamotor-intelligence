@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from("sales")
     .select(
-      "id, sale_number, location_id, staff_id, customer_name, subtotal, discount_amount, tax_amount, total_amount, payment_method, amount_paid, change_amount, status, created_at, locations(name), staff(full_name)",
+      "id, sale_number, location_id, staff_id, customer_name, subtotal, discount_amount, tax_amount, total_amount, payment_method, amount_paid, change_amount, status, created_at, locations(name), staff!sales_staff_id_fkey(full_name)",
       { count: "exact" },
     )
     .order(sortBy, { ascending: sortDir === "asc" })
