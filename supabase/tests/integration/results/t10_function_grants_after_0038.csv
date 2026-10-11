@@ -1,0 +1,24 @@
+proname,args,security_definer,anon_execute,authenticated_execute,service_role_execute
+approve_business_signup,p_business_id uuid,t,f,t,t
+auth_business_id,"",t,t,t,t
+claim_warranty_return,"p_business_id uuid, p_sale_item_id uuid, p_staff_id uuid, p_reason text, p_resolution text",t,f,f,t
+confirm_transfer_stock,"p_audit_log_id uuid, p_staff_id uuid",f,f,f,t
+confirm_update_stock,"p_audit_log_id uuid, p_staff_id uuid",f,f,f,t
+expire_stale_pending_reservations,"p_business_id uuid, p_older_than_minutes integer",f,f,f,t
+get_outbound_total,"p_product_id uuid, p_days integer",f,f,f,t
+get_sales_trend,"p_product_id uuid, p_months integer",f,t,t,t
+increment_ocr_rate_limit,"p_business_id uuid, p_window_minutes integer, p_max_requests integer",f,t,t,t
+is_full_access,"",t,t,t,t
+is_super_admin,"",t,t,t,t
+next_sale_number,p_business_id uuid,t,f,f,t
+record_customer_payment,"p_business_id uuid, p_customer_id uuid, p_staff_id uuid, p_amount numeric, p_payment_method text, p_notes text",t,f,f,t
+record_sale,"p_business_id uuid, p_location_id uuid, p_staff_id uuid, p_items jsonb, p_payment_method text, p_amount_paid numeric, p_discount_amount numeric, p_tax_amount numeric, p_customer_name text, p_customer_phone text, p_notes text, p_idempotency_key text",t,f,f,t
+record_sale,"p_business_id uuid, p_location_id uuid, p_staff_id uuid, p_items jsonb, p_payment_method text, p_payments jsonb, p_customer_id uuid, p_discount_amount numeric, p_tax_amount numeric, p_customer_name text, p_customer_phone text, p_notes text, p_idempotency_key text",t,f,f,t
+record_stock_transaction,"p_business_id uuid, p_product_id uuid, p_location_id uuid, p_type transaction_type, p_quantity integer, p_staff_id uuid, p_unit_price numeric, p_supplier_id uuid, p_idempotency_key text, p_audit_log_id uuid, p_notes text",f,f,f,t
+reject_business_signup,"p_business_id uuid, p_reason text",t,f,t,t
+release_reservation,"p_product_id uuid, p_location_id uuid, p_quantity integer",f,f,f,t
+reserve_stock,"p_product_id uuid, p_location_id uuid, p_quantity integer",f,f,f,t
+search_products,"p_business_id uuid, p_query text, p_limit integer",f,t,t,t
+transfer_stock,"p_business_id uuid, p_product_id uuid, p_quantity integer, p_from_location_id uuid, p_to_location_id uuid, p_staff_id uuid, p_audit_log_id uuid, p_idempotency_key text",f,f,f,t
+void_sale,"p_sale_id uuid, p_staff_id uuid, p_reason text",t,f,f,t
+void_sale,"p_sale_id uuid, p_staff_id uuid, p_staff_role text, p_reason text",t,f,f,t

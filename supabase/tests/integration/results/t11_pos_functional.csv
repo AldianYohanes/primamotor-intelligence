@@ -1,0 +1,11 @@
+test,operasi,diharapkan,aktual,verdict
+"T11","record_sale 2 unit (service_role)","ok=true; stok -2","http=200 ok=true; stok 6->4","LULUS"
+"T11","total_value terisi otomatis","quantity*unit_price","{""quantity"":2,""unit_price"":480000,""total_value"":960000}","LULUS"
+"T11","void_sale (service_role)","ok=true; stok +2 (kembali ke awal)","http=200 ok=true; stok 4->6","LULUS"
+"T11","claim_warranty_return replaced (service_role)","ok=true; stok +1","http=200 ok=true {""ok"":true}; stok 5->6","LULUS"
+"T11","record_sale LINTAS TENANT oleh authenticated","ditolak (permission denied); stok B tidak berubah","http=403 {""code"":""42501"",""details"":null,""hint"":null,""message"":""permission denie; stok B 11->11","LULUS"
+"T11","next_sale_number tenant B oleh authenticated","ditolak","http=403","LULUS"
+"T11","record_sale LINTAS TENANT oleh anon","ditolak (permission denied); stok B tidak berubah","http=401 {""code"":""42501"",""details"":null,""hint"":null,""message"":""permission denie; stok B 11->11","LULUS"
+"T11","next_sale_number tenant B oleh anon","ditolak","http=401","LULUS"
+"T11","PATCH sale_counters oleh authenticated","ditolak/tak berubah","http=403; counter=1","LULUS"
+"T11","PATCH sale_counters oleh anon","ditolak/tak berubah","http=401; counter=1","LULUS"

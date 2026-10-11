@@ -1,0 +1,10 @@
+test,operasi,diharapkan,aktual,verdict
+"T4","konfirmasi pertama lalu replay audit yang sama","200 lalu 409; 1 transaksi; stok +3","200 lalu 409; txn=1; stok 14->17","LULUS"
+"T5","10 konfirmasi paralel atas satu audit","tepat 1x 200; 1 transaksi; stok +2","200=1, lainnya=[409,409,409,409,409,409,409,409,409]; txn=1; stok 17->19","LULUS"
+"T6a","usulan keluar melebihi stok","422; tanpa audit baru; stok/reservasi sama","422; audit 10->10; 19/0 -> 19/0","LULUS"
+"T6b","kegagalan disuntikkan saat pencatatan (reservasi 1 sudah diambil)","audit failed; reservasi dilepas; stok & transaksi tidak berubah","http=422; audit=failed; sebelum-konfirmasi=19/1; sesudah=19/0; txn=0","LULUS"
+"T7","owner mengonfirmasi usulan evaluator","403; audit tetap pending; stok sama","403; audit=pending; stok 19/0->19/0","LULUS"
+"T8a","cron tanpa sesi, tanpa secret","ditolak (bukan 200)","401","LULUS"
+"T8a","cron tanpa sesi, secret BENAR (perilaku Vercel Cron)","200","200","LULUS"
+"T8b","route cron (dengan sesi): tanpa/salah/kosong secret","401, 401, 401","401, 401, 401","LULUS"
+"T8b","route cron (dengan sesi): secret benar","200","200","LULUS"
