@@ -17,22 +17,33 @@ export const OFF_TOPIC_AUTOMOTIVE_REPLY =
   "Untuk hal seperti cara servis, ulasan mobil, atau harga di toko lain, coba cari di internet atau tanya asisten AI lain.\n" +
   "Saya bisa bantu cek stok, catat barang masuk/keluar/pindah lokasi, dan lihat tren penjualan barang di toko ini.";
 
-const AUTOMOTIVE_TERMS = [
+// Kata umum kendaraan/bengkel; bukan nama barang yang bisa dicek stoknya.
+const VEHICLE_TERMS = [
   "mobil", "motor", "kendaraan", "volvo", "mesin", "servis", "service", "bengkel", "montir",
   "part", "sparepart", "spare part", "suku cadang", "onderdil",
+];
+
+// Nama suku cadang.
+const PART_TERMS = [
   "oli", "rem", "kampas", "ban", "velg", "aki", "busi", "radiator", "karbu", "karburator", "filter",
   "saringan", "timing belt", "v-belt", "vbelt", "sabuk", "kopling", "gardan", "transmisi", "persneling",
   "lampu", "wiper", "knalpot", "shock", "sokbreker", "bushing", "gril", "grill", "bumper", "spion",
   "alternator", "dinamo", "starter", "kompresor", "injektor", "piston", "gasket", "packing", "bearing",
 ];
 
-const AUTOMOTIVE_RE = new RegExp(
-  `(^|[^a-z])(${AUTOMOTIVE_TERMS.map((t) => t.replace(/[-\s]/g, "[-\\s]?")).join("|")})([^a-z]|$)`,
-  "i",
-);
+const termRe = (terms: string[]) =>
+  new RegExp(`(^|[^a-z])(${terms.map((t) => t.replace(/[-\s]/g, "[-\\s]?")).join("|")})([^a-z]|$)`, "i");
+
+const AUTOMOTIVE_RE = termRe([...VEHICLE_TERMS, ...PART_TERMS]);
+const PART_RE = termRe(PART_TERMS);
 
 export function mentionsVehicleOrPart(message: string): boolean {
   return AUTOMOTIVE_RE.test(message);
+}
+
+/** Menyebut nama suku cadang (oli, kampas, radiator, ...), bukan sekadar mobil atau bengkel. */
+export function mentionsSparePart(message: string): boolean {
+  return PART_RE.test(message);
 }
 
 export function offTopicReply(message: string): string {

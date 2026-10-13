@@ -57,3 +57,52 @@ describe("terhadap skenario /eval", () => {
     expect(wrong).toEqual([]);
   });
 });
+
+describe("guardRoute: jaring pengaman OFF_TOPIC", () => {
+  const scenarios = scenarioFile.scenarios as { id: string; message: string; expected_route: string }[];
+
+  it("pesan off_topic di /eval (kategori O) tidak pernah dialihkan", () => {
+    const rerouted = scenarios
+      .filter((s) => s.expected_route === "off_topic")
+      .filter((s) => guardRoute("off_topic", s.message).agentType !== "off_topic")
+      .map((s) => s.id);
+    expect(rerouted).toEqual([]);
+  });
+
+  it.each<[string, "query" | "transaction"]>([
+    ["Cek stok kampas rem depan brembo dong, di gudang masih ada?", "query"],
+    ["Radiator Volvo 240 ada stoknya?", "query"],
+    ["stok wipr bosch brp", "query"],
+    ["Ada customer nanya karbu 240, kita masih pegang gak?", "query"],
+    ["Tail lamp kiri kosong ya di depan? sisa lampu berapa", "query"],
+    ["Wiper bosch lagi rame gak belakangan ini?", "query"],
+    ["Filter oli mahle penjualannya 6 bulan terakhir gimana?", "query"],
+    ["Kurangin stok lampu", "transaction"],
+    ["klr 1 timng belt 240 dr toko", "transaction"],
+    ["Tadi kejual 1 radiator 240 di toko, tolong dikurangin", "transaction"],
+  ])("pesan stok yang salah dibuang ke off_topic dipulihkan: %s", (message, expected) => {
+    const r = guardRoute("off_topic", message);
+    expect(r.agentType).toBe(expected);
+    expect(r.reason).toBeTruthy();
+  });
+
+  it.each<[string]>([
+    ["Siapa presiden Indonesia sekarang?"],
+    ["Halo, selamat pagi"],
+    ["Cara ganti busi yang benar gimana?"],
+    ["Harga aki di toko sebelah berapa?"],
+    ["Cara ganti timing belt volvo 240 gimana urutannya?"],
+    ["Kamu bisa cek stok nggak?"],
+    ["Apa saja kemampuanmu?"],
+    ["Volvo 240 itu bagus gak buat mobil harian?"],
+    ["Rekomendasi oli mesin yang bagus buat volvo"],
+    ["Hitungin 125 ribu kali 7 dong"],
+  ])("tetap off_topic: %s", (message) => {
+    expect(guardRoute("off_topic", message)).toEqual({ agentType: "off_topic", reason: null });
+  });
+
+  it("query dan transaction yang tidak ada pergerakan jelas tidak diubah", () => {
+    expect(guardRoute("query", "Cek stok kampas rem").agentType).toBe("query");
+    expect(guardRoute("transaction", "Kurangin stok lampu").agentType).toBe("transaction");
+  });
+});
