@@ -1,14 +1,17 @@
 import { describe, it, expect } from "vitest";
+import scenarioFile from "@/src/lib/eval/scenarios.json";
 import {
   buildLocationChoice,
   formatDistance,
   haversineMeters,
   locationChoiceMessage,
   mentionedLocations,
+  mentionedTwoStoreLocations,
   nearestLocation,
   resolveLocationRef,
   resolveTransferLocations,
   resolveUpdateLocation,
+  twoLocationsFeedback,
   type TenantLocation,
 } from "@/src/lib/agents/location-choice";
 
@@ -174,5 +177,48 @@ describe("formatDistance", () => {
   it("meter di bawah 1 km, kilometer dengan koma di atasnya", () => {
     expect(formatDistance(120)).toBe("±120 m");
     expect(formatDistance(2480)).toBe("±2,5 km");
+  });
+});
+
+describe("mentionedTwoStoreLocations", () => {
+  it.each<[string]>([
+    ["Toko butuh 2 lampu belakang kiri, ambil dari gudang ya"],
+    ["Gudang kirim 3 filter udara ke toko"],
+    ["pindahin 4 wiper dr toko ke gdg"],
+    ["Stok toko kurang, tarik 2 oli gardan dari gudang"],
+  ])("dua lokasi toko disebut: %s", (message) => {
+    expect(mentionedTwoStoreLocations(message, locations)).toEqual(["Toko", "Gudang"]);
+  });
+
+  it.each<[string]>([
+    ["Masuk 5 bilah wiper bosch dari supplier ke toko"],
+    ["Keluar 2 kampas rem depan brembo dari toko, laku ke bengkel"],
+    ["Kiriman supplier dateng, bushing arm depan 20 biji taruh gudang"],
+    ["Masuk 5 filter udara"],
+  ])("satu lokasi atau tempat lain tidak memicu: %s", (message) => {
+    expect(mentionedTwoStoreLocations(message, locations)).toBeNull();
+  });
+
+  it("dua lokasi sejenis (dua toko) tidak dihitung", () => {
+    const toko2: TenantLocation = { id: "lt2", name: "Toko Cabang", type: "toko", latitude: null, longitude: null };
+    expect(mentionedTwoStoreLocations("keluar 2 busi dari toko", [toko, toko2, gudang])).toBeNull();
+  });
+
+  it("tidak memicu pada skenario updateStock di /eval", () => {
+    const wrong = scenarioFile.scenarios
+      .filter((s) => (s as { expected_action?: { tool: string } }).expected_action?.tool === "updateStock")
+      .filter((s) => mentionedTwoStoreLocations(s.message, locations) !== null)
+      .map((s) => s.id);
+    expect(wrong).toEqual([]);
+  });
+});
+
+describe("twoLocationsFeedback", () => {
+  it("menyebut transferStock dan kedua lokasi", () => {
+    const text = twoLocationsFeedback(["Toko", "Gudang"]);
+    expect(text).toContain("transferStock");
+    expect(text).toContain("Toko");
+    expect(text).toContain("Gudang");
+    expect(text.startsWith("<tool_response>")).toBe(true);
   });
 });

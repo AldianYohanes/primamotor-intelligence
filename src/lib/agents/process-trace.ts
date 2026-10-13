@@ -157,8 +157,9 @@ export function mutationOutcomeStep(result: Record<string, unknown>): ProcessSte
   }
 }
 
-export function retryStep(reason: "malformed" | "missing_call" | "unbacked_numbers"): ProcessStep {
+export function retryStep(reason: "malformed" | "missing_call" | "unbacked_numbers" | "two_locations"): ProcessStep {
   const label = {
+    two_locations: "Pesan menyebut dua lokasi toko, model diminta menimbang transferStock",
     malformed: "Format pemanggilan alat rusak, model diminta menulis ulang",
     missing_call: "Model menyebut akan memanggil alat tapi belum memanggil, diingatkan",
     unbacked_numbers: "Model menjawab angka tanpa memanggil alat, diminta memanggil getStock dulu",

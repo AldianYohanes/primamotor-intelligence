@@ -242,3 +242,28 @@ export function readDevicePosition(timeoutMs = 8000): Promise<GeoPoint | null> {
     );
   });
 }
+
+/**
+ * Pesan staf menyebut toko dan gudang sekaligus ("ambil dari gudang" + "toko
+ * butuh"). Dua lokasi dari jenis yang sama (dua toko) tidak dihitung, dan tempat
+ * di luar daftar lokasi terdaftar ("supplier", "bengkel") tidak pernah cocok.
+ * Mengembalikan nama kedua lokasi, atau null.
+ */
+export function mentionedTwoStoreLocations(
+  message: string,
+  locations: TenantLocation[],
+): [string, string] | null {
+  const mentioned = mentionedLocations(message, locations);
+  const toko = mentioned.find((l) => l.type === "toko");
+  const gudang = mentioned.find((l) => l.type === "gudang");
+  return toko && gudang ? [toko.name, gudang.name] : null;
+}
+
+/** Umpan balik ke model (bentuk tool_response) saat updateStock dipanggil padahal pesan menyebut dua lokasi. */
+export function twoLocationsFeedback(names: [string, string]): string {
+  const error =
+    `Pesan staf menyebut dua lokasi (${names[0]} dan ${names[1]}). updateStock hanya mencatat perubahan di SATU lokasi. ` +
+    "Kalau maksudnya memindahkan barang dari satu lokasi ke lokasi lain, panggil transferStock dengan from_location dan to_location. " +
+    "Kalau memang hanya barang masuk atau keluar di satu lokasi, panggil updateStock lagi dengan lokasi yang benar.";
+  return `<tool_response>\n${JSON.stringify({ error })}\n</tool_response>`;
+}

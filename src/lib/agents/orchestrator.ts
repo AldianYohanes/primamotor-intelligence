@@ -23,10 +23,12 @@ import type { AgentExecutionMetricPayload } from "@/src/lib/agents/metrics-schem
 import {
   buildLocationChoice,
   locationChoiceMessage,
+  mentionedTwoStoreLocations,
   readDevicePosition,
   resolveLocationRef,
   resolveTransferLocations,
   resolveUpdateLocation,
+  twoLocationsFeedback,
   type GeoPoint,
   type LocationChoice,
   type TenantLocation,
@@ -858,6 +860,7 @@ async function runAgentTurnInner(
   let nudgedMissingCall = false;
   let nudgedUnbacked = false;
   let sawMalformed = false;
+  let checkedTwoLocations = false;
   // Teks model sebelum diingatkan; dipakai bila balasan sesudahnya kosong.
   let textBeforeNudge = "";
   const rejectedTools = new Set<string>();
@@ -954,6 +957,26 @@ async function runAgentTurnInner(
       if (signal?.aborted) throw new TurnStoppedError();
       const args = call.arguments;
       const allowed = allowedTools.has(call.name);
+
+      // T-07: "Toko butuh 2 …, ambil dari gudang" dicatat model sebagai updateStock
+      // keluar di gudang. Bila pesan menyebut toko dan gudang sekaligus, model diberi
+      // satu kali umpan balik (bukan ditolak); kalau tetap updateStock, dijalankan.
+      if (
+        allowed &&
+        call.name === "updateStock" &&
+        mode === "multi_agent" &&
+        !checkedTwoLocations &&
+        i < MAX_TOOL_ITERATIONS - 1
+      ) {
+        checkedTwoLocations = true;
+        const locations = await fetchTenantLocations();
+        const two = locations ? mentionedTwoStoreLocations(userMessage, locations) : null;
+        if (two) {
+          rec.add(retryStep("two_locations"));
+          responses.push(twoLocationsFeedback(two));
+          continue;
+        }
+      }
 
       // Mutasi mengakhiri giliran: sisa alur (produk, lokasi, validasi, PIN)
       // deterministik, model tidak perlu merangkai langkah berikutnya.
