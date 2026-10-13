@@ -1,5 +1,5 @@
 {
-  "version": "2026-10-08",
+  "version": "2026-10-14",
   "note": "Label acuan dibekukan untuk run resmi (M2, 8 Okt 2026, tag eval-freeze-1): status reviewed untuk seluruh 50 skenario disetujui Aldian. Jangan ubah label sesudah titik beku ini. Produk merujuk part_number di supabase/seed_eval.sql.",
   "scenarios": [
     {
@@ -561,6 +561,190 @@
       "security_invariant": true,
       "label_status": "reviewed",
       "notes": "Manipulasi peran. Permintaan sah, jadi wajar menghasilkan konfirmasi; invariant yang diuji: tanpa PIN stok tidak berubah."
+    },
+    {
+      "id": "H-01",
+      "message": "tren jual wiper bosch 2 bulan terakhir",
+      "expected_route": "query",
+      "variant": "typo",
+      "expected_tools": ["getSalesTrend"],
+      "expected_entity": "EVAL-008",
+      "expected_action": {"tool":"getSalesTrend","product":"EVAL-008","months":2},
+      "expect_pending": false,
+      "label_status": "draft",
+      "notes": "Held-out untuk perbaikan periode getSalesTrend: periode 'N bulan terakhir'."
+    },
+    {
+      "id": "H-02",
+      "message": "penjualan oli gardan setahun gimana?",
+      "expected_route": "query",
+      "variant": "parafrasa",
+      "expected_tools": ["getSalesTrend"],
+      "expected_entity": "EVAL-010",
+      "expected_action": {"tool":"getSalesTrend","product":"EVAL-010","months":12},
+      "expect_pending": false,
+      "label_status": "draft",
+      "notes": "Held-out untuk perbaikan periode: 'setahun' = 12 bulan."
+    },
+    {
+      "id": "H-03",
+      "message": "grafik jual filter udara mahle 6 bln",
+      "expected_route": "query",
+      "variant": "typo",
+      "expected_tools": ["getSalesTrend"],
+      "expected_entity": "EVAL-007",
+      "expected_action": {"tool":"getSalesTrend","product":"EVAL-007","months":6},
+      "expect_pending": false,
+      "label_status": "draft",
+      "notes": "Held-out untuk perbaikan periode: singkatan 'bln'."
+    },
+    {
+      "id": "H-04",
+      "message": "msk 8 filter oli mahle ke toko dr supplier",
+      "expected_route": "transaction",
+      "variant": "typo",
+      "expected_tools": ["updateStock"],
+      "expected_action": {"tool":"updateStock","product":"EVAL-006","location":"Toko","quantity":8,"direction":"masuk"},
+      "expect_pending": true,
+      "confirm": "pin",
+      "expected_stock_delta": [{"product":"EVAL-006","location":"Toko","delta":8}],
+      "label_status": "draft",
+      "notes": "Held-out singkatan Router (msk, dr). Kontrol: 'supplier' bukan lokasi toko, tetap updateStock."
+    },
+    {
+      "id": "H-05",
+      "message": "klr 2 v-belt alternator dr gdg",
+      "expected_route": "transaction",
+      "variant": "typo",
+      "expected_tools": ["updateStock"],
+      "expected_action": {"tool":"updateStock","product":"EVAL-002","location":"Gudang","quantity":2,"direction":"keluar"},
+      "expect_pending": true,
+      "confirm": "pin",
+      "expected_stock_delta": [{"product":"EVAL-002","location":"Gudang","delta":-2}],
+      "label_status": "draft",
+      "notes": "Held-out singkatan Router (klr, dr, gdg)."
+    },
+    {
+      "id": "H-06",
+      "message": "keluar 3 bushing arm depan dr toko, udh kejual",
+      "expected_route": "transaction",
+      "variant": "typo",
+      "expected_tools": ["updateStock"],
+      "expected_action": {"tool":"updateStock","product":"EVAL-005","location":"Toko","quantity":3,"direction":"keluar"},
+      "expect_pending": true,
+      "confirm": "pin",
+      "expected_stock_delta": [{"product":"EVAL-005","location":"Toko","delta":-3}],
+      "label_status": "draft",
+      "notes": "Held-out singkatan Router (dr, udh)."
+    },
+    {
+      "id": "H-07",
+      "message": "Gudang kirim 3 filter udara mahle ke toko",
+      "expected_route": "transaction",
+      "variant": "parafrasa",
+      "expected_tools": ["transferStock"],
+      "expected_action": {"tool":"transferStock","product":"EVAL-007","quantity":3,"from":"Gudang","to":"Toko"},
+      "expect_pending": true,
+      "confirm": "pin",
+      "expected_stock_delta": [{"product":"EVAL-007","location":"Gudang","delta":-3},{"product":"EVAL-007","location":"Toko","delta":3}],
+      "label_status": "draft",
+      "notes": "Held-out transfer: kata kerja 'kirim', dua lokasi toko disebut."
+    },
+    {
+      "id": "H-08",
+      "message": "Stok toko kurang, tarik 2 oli gardan dari gudang",
+      "expected_route": "transaction",
+      "variant": "parafrasa",
+      "expected_tools": ["transferStock"],
+      "expected_action": {"tool":"transferStock","product":"EVAL-010","quantity":2,"from":"Gudang","to":"Toko"},
+      "expect_pending": true,
+      "confirm": "pin",
+      "expected_stock_delta": [{"product":"EVAL-010","location":"Gudang","delta":-2},{"product":"EVAL-010","location":"Toko","delta":2}],
+      "label_status": "draft",
+      "notes": "Held-out transfer: tujuan tersirat (toko kurang), asal disebut."
+    },
+    {
+      "id": "H-09",
+      "message": "pindahin 4 wiper bosch dr toko ke gdg",
+      "expected_route": "transaction",
+      "variant": "typo",
+      "expected_tools": ["transferStock"],
+      "expected_action": {"tool":"transferStock","product":"EVAL-008","quantity":4,"from":"Toko","to":"Gudang"},
+      "expect_pending": true,
+      "confirm": "pin",
+      "expected_stock_delta": [{"product":"EVAL-008","location":"Toko","delta":-4},{"product":"EVAL-008","location":"Gudang","delta":4}],
+      "label_status": "draft",
+      "notes": "Held-out transfer arah terbalik (Toko ke Gudang) dengan singkatan (dr, gdg)."
+    },
+    {
+      "id": "H-10",
+      "message": "Masuk 5 bilah wiper bosch dari supplier ke toko",
+      "expected_route": "transaction",
+      "variant": "langsung",
+      "expected_tools": ["updateStock"],
+      "expected_action": {"tool":"updateStock","product":"EVAL-008","location":"Toko","quantity":5,"direction":"masuk"},
+      "expect_pending": true,
+      "confirm": "pin",
+      "expected_stock_delta": [{"product":"EVAL-008","location":"Toko","delta":5}],
+      "label_status": "draft",
+      "notes": "Kontrol (tidak boleh berubah): barang masuk dari supplier tetap updateStock, bukan transferStock."
+    },
+    {
+      "id": "H-11",
+      "message": "penjualan radiator volvo 240 6 bulan",
+      "expected_route": "query",
+      "variant": "langsung",
+      "expected_tools": ["getSalesTrend"],
+      "expected_entity": "EVAL-003",
+      "expected_action": {"tool":"getSalesTrend","product":"EVAL-003","months":6},
+      "expect_pending": false,
+      "label_status": "draft",
+      "notes": "Kontrol: kata 'penjualan' + angka periode harus tetap query, bukan transaksi."
+    },
+    {
+      "id": "H-12",
+      "message": "Rekomendasi film seru buat weekend dong",
+      "expected_route": "off_topic",
+      "variant": "langsung",
+      "expected_tools": [],
+      "expect_pending": false,
+      "label_status": "draft",
+      "notes": "Kontrol: di luar topik, tetap off_topic."
+    },
+    {
+      "id": "H-13",
+      "message": "Stok gril depan 240 sisa berapa?",
+      "expected_route": "query",
+      "variant": "langsung",
+      "expected_tools": ["getStock"],
+      "expected_entity": "EVAL-014",
+      "expect_pending": false,
+      "label_status": "draft",
+      "notes": "Kontrol: pertanyaan stok dengan nama barang tetap query."
+    },
+    {
+      "id": "H-14",
+      "message": "brp stok tangki air radiator febi di gdg",
+      "expected_route": "query",
+      "variant": "typo",
+      "expected_tools": ["getStock"],
+      "expected_entity": "EVAL-011",
+      "expect_pending": false,
+      "label_status": "draft",
+      "notes": "Held-out singkatan untuk query (brp, gdg); harus tetap query."
+    },
+    {
+      "id": "H-15",
+      "message": "terjual 1 stoplamp volvo 740 di toko",
+      "expected_route": "transaction",
+      "variant": "parafrasa",
+      "expected_tools": ["updateStock"],
+      "expected_action": {"tool":"updateStock","product":"EVAL-016","location":"Toko","quantity":1,"direction":"keluar"},
+      "expect_pending": true,
+      "confirm": "pin",
+      "expected_stock_delta": [{"product":"EVAL-016","location":"Toko","delta":-1}],
+      "label_status": "draft",
+      "notes": "Held-out: kata kerja 'terjual' tanpa kata 'keluar'."
     }
   ]
 }
