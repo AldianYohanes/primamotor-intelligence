@@ -95,11 +95,7 @@ function normalizeCall(value: unknown): ParsedToolCall | null {
   return { name: fn.name, arguments: args as Record<string, unknown> };
 }
 
-function parseJsonCalls(raw: string): ParsedToolCall[] | null {
-  const body = raw
-    .trim()
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/, "");
+function callsFromJson(body: string): ParsedToolCall[] | null {
   try {
     const parsed: unknown = JSON.parse(body);
     const items = Array.isArray(parsed) ? parsed : [parsed];
@@ -108,6 +104,64 @@ function parseJsonCalls(raw: string): ParsedToolCall[] | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Perbaikan sintaks JSON yang ringan, hanya untuk kesalahan tulis yang sering
+ * muncul di model kecil (Q-03: `{"query: "kampas"}`, kutip penutup kunci hilang):
+ * kutip penutup kunci, koma sebelum } atau ], kutip tunggal, dan kurung penutup
+ * di ujung. Isi tidak pernah ditambah atau ditebak; string yang belum ditutup
+ * dianggap tidak bisa diperbaiki. Mengembalikan null bila tidak ada yang berubah.
+ */
+export function repairJson(body: string): string | null {
+  let text = body;
+  // Kutip penutup kunci hilang: {"query: "x"} -> {"query": "x"}
+  text = text.replace(/([{,]\s*)"([A-Za-z_][A-Za-z0-9_]*)\s*:\s*"/g, '$1"$2": "');
+  // Kutip tunggal hanya bila tidak ada kutip ganda sama sekali (tidak ambigu).
+  if (!text.includes('"') && text.includes("'") && (text.match(/'/g)?.length ?? 0) % 2 === 0) {
+    text = text.replace(/'/g, '"');
+  }
+
+  let out = "";
+  const stack: string[] = [];
+  let inString = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      out += ch;
+      if (ch === "\\") {
+        i++;
+        if (i < text.length) out += text[i];
+      } else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{") stack.push("}");
+    else if (ch === "[") stack.push("]");
+    else if (ch === "}" || ch === "]") {
+      if (stack.pop() !== ch) return null;
+    } else if (ch === ",") {
+      // Koma sebelum penutup (atau di ujung teks) dibuang.
+      const next = text.slice(i + 1).trimStart()[0];
+      if (next === undefined || next === "}" || next === "]") continue;
+    }
+    out += ch;
+  }
+  if (inString) return null;
+  out += stack.reverse().join("");
+  return out === body ? null : out;
+}
+
+function parseJsonCalls(raw: string, lenient = false): ParsedToolCall[] | null {
+  const body = raw
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "");
+  // Jalur ketat selalu dicoba dulu; perbaikan hanya untuk isi blok <tool_call>.
+  const strict = callsFromJson(body);
+  if (strict || !lenient) return strict;
+  const repaired = repairJson(body);
+  return repaired ? callsFromJson(repaired) : null;
 }
 
 export function parseModelReply(content: string): ParsedReply {
@@ -127,7 +181,7 @@ export function parseModelReply(content: string): ParsedReply {
     const end = content.indexOf(CLOSE, bodyStart);
     // Tag penutup boleh hilang (model berhenti di stop sequence atau kehabisan token).
     const body = content.slice(bodyStart, end === -1 ? undefined : end);
-    const parsed = parseJsonCalls(body);
+    const parsed = parseJsonCalls(body, true);
     if (parsed) calls.push(...parsed);
     else malformed = true;
     if (end === -1) break;

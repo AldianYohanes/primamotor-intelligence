@@ -4,6 +4,7 @@ import {
   buildToolInstructions,
   formatToolResponse,
   parseModelReply,
+  repairJson,
   visibleStreamText,
 } from "@/src/lib/agents/tool-protocol";
 
@@ -116,5 +117,56 @@ describe("format", () => {
     expect(formatToolResponse("getStock", { results: [] })).toBe(
       '<tool_response>\n{"name":"getStock","content":{"results":[]}}\n</tool_response>',
     );
+  });
+});
+
+describe("parseModelReply: perbaikan JSON ringan", () => {
+  const wrap = (body: string) => `<tool_call>\n${body}`;
+
+  it("memperbaiki kutip penutup kunci yang hilang (Q-03)", () => {
+    const r = parseModelReply(wrap('{"name": "getStock", "arguments": {"query: "kampas rem brembo gudang"}}'));
+    expect(r.malformed).toBe(false);
+    expect(r.calls).toEqual([{ name: "getStock", arguments: { query: "kampas rem brembo gudang" } }]);
+  });
+
+  it("membuang koma berlebih sebelum } dan ]", () => {
+    const r = parseModelReply(wrap('{"name": "getStock", "arguments": {"query": "busi",},}\n</tool_call>'));
+    expect(r.malformed).toBe(false);
+    expect(r.calls[0].arguments).toEqual({ query: "busi" });
+  });
+
+  it("menambah kurung penutup yang hilang di ujung", () => {
+    const r = parseModelReply(wrap('{"name": "getStock", "arguments": {"query": "busi"'));
+    expect(r.calls).toEqual([{ name: "getStock", arguments: { query: "busi" } }]);
+  });
+
+  it("membaca kutip tunggal bila tidak ada kutip ganda", () => {
+    const r = parseModelReply(wrap("{'name': 'getStock', 'arguments': {'query': 'busi'}}"));
+    expect(r.calls).toEqual([{ name: "getStock", arguments: { query: "busi" } }]);
+  });
+
+  it("tidak menebak isi: string belum ditutup tetap rusak", () => {
+    const r = parseModelReply(wrap('{"name": "getStock", "arguments": {"query": "busi'));
+    expect(r.calls).toEqual([]);
+    expect(r.malformed).toBe(true);
+  });
+
+  it("kurung berlebih atau tidak seimbang tetap rusak", () => {
+    expect(parseModelReply(wrap('{"name": "getStock", "arguments": {"query": "x"}}}}')).malformed).toBe(true);
+    expect(parseModelReply(wrap("bukan json sama sekali")).malformed).toBe(true);
+  });
+
+  it("jalur ketat tetap dipakai lebih dulu untuk JSON valid", () => {
+    const r = parseModelReply(wrap('{"name": "getStock", "arguments": {"query": "kunci, \\"pas\\": 10"}}'));
+    expect(r.calls[0].arguments).toEqual({ query: 'kunci, "pas": 10' });
+  });
+});
+
+describe("repairJson", () => {
+  it("mengembalikan null bila tidak ada yang perlu diperbaiki", () => {
+    expect(repairJson('{"a": 1}')).toBeNull();
+  });
+  it("koma di dalam string tidak disentuh", () => {
+    expect(repairJson('{"a": "x,}"')).toBe('{"a": "x,}"}');
   });
 });

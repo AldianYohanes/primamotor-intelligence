@@ -837,6 +837,7 @@ async function runAgentTurnInner(
 
   let nudgedMissingCall = false;
   let nudgedUnbacked = false;
+  let sawMalformed = false;
   // Teks model sebelum diingatkan; dipakai bila balasan sesudahnya kosong.
   let textBeforeNudge = "";
   const rejectedTools = new Set<string>();
@@ -856,6 +857,25 @@ async function runAgentTurnInner(
       messages.push({ role: "assistant", content });
       messages.push({ role: "user", content: MALFORMED_TOOL_CALL_FEEDBACK });
       rec.add(retryStep("malformed"));
+      sawMalformed = true;
+      continue;
+    }
+    // Q-03: sesudah blok rusak, model minta maaf dengan teks tanpa memanggil alat
+    // dan Query Agent belum membaca data apa pun. Diingatkan sekali (pakai penanda
+    // nudgedMissingCall yang sama, jadi total iterasi tetap dibatasi MAX_TOOL_ITERATIONS).
+    if (
+      reply.calls.length === 0 &&
+      sawMalformed &&
+      !nudgedMissingCall &&
+      agentType === "query" &&
+      toolTrace.length === 0 &&
+      i < MAX_TOOL_ITERATIONS - 1
+    ) {
+      nudgedMissingCall = true;
+      textBeforeNudge = (reply.text || content).trim();
+      messages.push({ role: "assistant", content });
+      messages.push({ role: "user", content: MISSING_TOOL_CALL_FEEDBACK });
+      rec.add(retryStep("missing_call"));
       continue;
     }
     // Sama seperti di atas untuk "Saya akan panggil alat…" tanpa blok tool call.
