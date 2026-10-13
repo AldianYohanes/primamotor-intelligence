@@ -40,6 +40,7 @@ import {
 } from "@/src/lib/agents/product-resolution";
 import { trimHistoryForContext } from "@/src/lib/agents/history-window";
 import { offTopicReply } from "@/src/lib/agents/off-topic";
+import { MAX_TREND_MONTHS, parseSalesPeriod, stripSalesPeriod } from "@/src/lib/agents/sales-period";
 import { agentHistory, routerContext } from "@/src/lib/agents/router-context";
 import {
   cacheNoteFor,
@@ -430,9 +431,16 @@ async function runSalesTrend(
   args: Record<string, unknown>,
   conversationId: string,
   businessId: string,
+  userMessage = "",
 ): Promise<{ result: unknown; resolvedArgs?: Record<string, unknown> }> {
   const rawMonths = Number(args.months);
-  const months = Number.isInteger(rawMonths) && rawMonths >= 1 && rawMonths <= 24 ? rawMonths : 6;
+  const rawProduct = String(args.product ?? args.product_name ?? "");
+  // Q-14: model menaruh "3 bln" di nama barang dan mengosongkan months. Bila months
+  // tidak valid, dibaca dari nama barang lalu dari pesan staf; baru default 6.
+  const months =
+    Number.isInteger(rawMonths) && rawMonths >= 1 && rawMonths <= MAX_TREND_MONTHS
+      ? rawMonths
+      : (parseSalesPeriod(rawProduct)?.months ?? parseSalesPeriod(userMessage)?.months ?? 6);
   const given = typeof args.product_id === "string" ? args.product_id : null;
   if (given && UUID_RE.test(given)) {
     return {
@@ -441,9 +449,11 @@ async function runSalesTrend(
     };
   }
   // product_id karangan model ("mahle-filtro-oli") diperlakukan sebagai nama barang.
-  const query = String(args.product ?? args.product_name ?? given ?? "")
-    .replace(/[_-]+/g, " ")
-    .trim();
+  const query = stripSalesPeriod(
+    String(args.product ?? args.product_name ?? given ?? "")
+      .replace(/[_-]+/g, " ")
+      .trim(),
+  );
   if (!query) return { result: { error: "Nama barang belum disebut. Tanyakan ke staf barang apa yang dimaksud." } };
 
   const search = await searchProducts(query, conversationId, businessId);
@@ -973,7 +983,7 @@ async function runAgentTurnInner(
       if (!allowed) {
         result = { error: `Tool ${call.name} tidak tersedia untuk agent ini.` };
       } else if (call.name === "getSalesTrend") {
-        ({ result, resolvedArgs } = await runSalesTrend(args, conversationId, businessId));
+        ({ result, resolvedArgs } = await runSalesTrend(args, conversationId, businessId, userMessage));
       } else {
         result = await executeTool(call.name, args, conversationId, businessId);
       }
