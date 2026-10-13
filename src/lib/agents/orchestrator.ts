@@ -40,6 +40,8 @@ import {
 } from "@/src/lib/agents/product-resolution";
 import { trimHistoryForContext } from "@/src/lib/agents/history-window";
 import { offTopicReply } from "@/src/lib/agents/off-topic";
+import { normalizeShorthand } from "@/src/lib/agents/normalize-shorthand";
+import { guardRoute } from "@/src/lib/agents/route-guard";
 import { MAX_TREND_MONTHS, parseSalesPeriod, stripSalesPeriod } from "@/src/lib/agents/sales-period";
 import { agentHistory, routerContext } from "@/src/lib/agents/router-context";
 import {
@@ -737,7 +739,8 @@ async function routeMessage(
     completion = await engine.chat.completions.create({
       messages: [
         { role: "system", content: ROUTER_SYSTEM_PROMPT },
-        { role: "user", content: buildRouterInput(userMessage, lastAssistant) },
+        // Singkatan diluruskan hanya untuk Router; agent dan riwayat tetap teks asli.
+        { role: "user", content: buildRouterInput(normalizeShorthand(userMessage), lastAssistant) },
       ],
       temperature: 0,
     });
@@ -781,6 +784,13 @@ async function runAgentTurnInner(
     const routed = await routeMessage(engine, userMessage, history, signal);
     agentType = routed.agentType;
     rec.finish(routing, routeStep(agentType, routed.text));
+    // Pengaman kode: pesan yang jelas berisi pencatatan barang tidak boleh berhenti
+    // di Query Agent karena Router salah menebak (T-10).
+    const guarded = guardRoute(agentType, userMessage);
+    if (guarded.reason) {
+      agentType = guarded.agentType;
+      rec.add({ kind: "route", label: guarded.reason, status: "done" });
+    }
     modelReplies.push(`[router] ${routed.text}`);
     if (routed.usage) {
       usageAcc.hasUsage = true;
