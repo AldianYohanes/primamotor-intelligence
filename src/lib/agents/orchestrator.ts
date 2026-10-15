@@ -10,6 +10,8 @@ import { AGENT_TOOL_DEFINITIONS } from "@/src/lib/agents/tool-schemas";
 import {
   MALFORMED_TOOL_CALL_FEEDBACK,
   MISSING_TOOL_CALL_FEEDBACK,
+  missingToolCallFeedback,
+  type ToolSuggestion,
   TOOL_STOP_SEQUENCES,
   announcesToolCall,
   buildToolInstructions,
@@ -29,6 +31,7 @@ import {
   resolveTransferLocations,
   resolveUpdateLocation,
   twoLocationsFeedback,
+  twoLocationsSuggestion,
   type GeoPoint,
   type LocationChoice,
   type TenantLocation,
@@ -865,6 +868,8 @@ async function runAgentTurnInner(
   let nudgedReadOnlyPin = false;
   let sawMalformed = false;
   let checkedTwoLocations = false;
+  // Alat yang disarankan umpan balik pengaman sebelumnya; dipakai sebagai contoh di pengingat.
+  let suggestedNext: ToolSuggestion | null = null;
   // Teks model sebelum diingatkan; dipakai bila balasan sesudahnya kosong.
   let textBeforeNudge = "";
   const rejectedTools = new Set<string>();
@@ -916,7 +921,7 @@ async function runAgentTurnInner(
       nudgedMissingCall = true;
       textBeforeNudge = (reply.text || content).trim();
       messages.push({ role: "assistant", content });
-      messages.push({ role: "user", content: MISSING_TOOL_CALL_FEEDBACK });
+      messages.push({ role: "user", content: missingToolCallFeedback(suggestedNext) });
       rec.add(retryStep("missing_call"));
       continue;
     }
@@ -995,6 +1000,7 @@ async function runAgentTurnInner(
         const locations = await fetchTenantLocations();
         const two = locations ? mentionedTwoStoreLocations(agentMessage, locations) : null;
         if (two) {
+          suggestedNext = twoLocationsSuggestion(args, two);
           rec.add(retryStep("two_locations"));
           responses.push(twoLocationsFeedback(two));
           continue;
