@@ -5,7 +5,13 @@
  * model tetap bertentangan, jawaban diganti kalimat dari kode.
  */
 
-export type TrendDirection = "naik" | "turun" | "stabil" | "tidak_ada_penjualan" | "tidak_cukup_data";
+export type TrendDirection =
+  | "naik"
+  | "turun"
+  | "stabil"
+  | "naik_turun"
+  | "tidak_ada_penjualan"
+  | "tidak_cukup_data";
 
 export interface TrendPoint {
   label: string;
@@ -20,8 +26,10 @@ export interface TrendSummary {
   peak: TrendPoint | null;
 }
 
-// Perubahan total (garis tren dari bulan pertama ke terakhir) di bawah 15% rata-rata dianggap stabil.
+// Perubahan total (garis tren dari bulan pertama ke terakhir) di bawah 15% rata-rata dianggap datar.
 const STABLE_THRESHOLD = 0.15;
+// Garis datar tapi selisih bulan tertinggi dan terendah lebih dari 50% rata-rata: naik-turun, bukan stabil.
+const FLUCTUATION_THRESHOLD = 0.5;
 
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 
@@ -63,12 +71,20 @@ export function summarizeTrend(result: unknown): TrendSummary | null {
   });
   const change = (num / den) * (n - 1);
   const relative = change / mean;
+  const quantities = points.map((p) => p.quantity);
+  const spread = (Math.max(...quantities) - Math.min(...quantities)) / mean;
   const direction: TrendDirection =
-    Math.abs(relative) < STABLE_THRESHOLD ? "stabil" : relative > 0 ? "naik" : "turun";
+    Math.abs(relative) < STABLE_THRESHOLD
+      ? spread > FLUCTUATION_THRESHOLD
+        ? "naik_turun"
+        : "stabil"
+      : relative > 0
+        ? "naik"
+        : "turun";
 
   let peak: TrendPoint | null = null;
   if (direction !== "stabil") {
-    const max = Math.max(...points.map((p) => p.quantity));
+    const max = Math.max(...quantities);
     const tops = points.filter((p) => p.quantity === max);
     peak = tops.length === 1 ? tops[0] : null;
   }
@@ -87,6 +103,8 @@ function directionText(s: TrendSummary): string {
       return "turun";
     case "stabil":
       return "stabil (hampir tidak berubah)";
+    case "naik_turun":
+      return "naik-turun (berfluktuasi, tidak searah)";
     case "tidak_ada_penjualan":
       return "tidak ada penjualan";
     case "tidak_cukup_data":
@@ -118,14 +136,38 @@ export function trendReply(s: TrendSummary, productName: string): string {
 const UP_RE = /\b(naik|meningkat|bertambah|menanjak|melonjak)\b/i;
 const DOWN_RE = /\b(turun|menurun|berkurang|merosot|anjlok)\b/i;
 const FLAT_RE = /\b(stabil|tetap|konsisten)\b/i;
+const FLUCTUATING_RE = /\b(naik[\s-]+turun|turun[\s-]+naik|fluktuasi|fluktuatif|berfluktuasi|tidak\s+(?:menentu|searah|stabil)|bergejolak)\b/i;
 const PEAK_CUE_RE = /(tertinggi|terbanyak|paling\s+(?:laku|banyak|tinggi)|puncak)/i;
-const MONTH_RE =
-  /\b(jan(?:uari)?|feb(?:ruari)?|mar(?:et)?|apr(?:il)?|mei|jun(?:i)?|jul(?:i)?|agu(?:stus)?|ags|sep(?:tember)?|okt(?:ober)?|nov(?:ember)?|des(?:ember)?)\b/gi;
+const MONTH_PATTERN =
+  "jan(?:uari)?|feb(?:ruari)?|mar(?:et)?|apr(?:il)?|mei|jun(?:i)?|jul(?:i)?|agu(?:stus)?|ags|sep(?:tember)?|okt(?:ober)?|nov(?:ember)?|des(?:ember)?";
+const MONTH_YEAR_RE = new RegExp(`(?<![\\p{L}\\p{N}])(${MONTH_PATTERN})(?![\\p{L}\\p{N}])(?:\\s+(\\d{4}))?`, "giu");
+// Bulan pembanding ("naik dari Januari", "dibanding Februari") bukan klaim bulan tertinggi.
+const COMPARISON_BEFORE_RE = /(?:dari|sejak|setelah|sebelum|dibanding(?:kan)?(?:\s+dengan)?|daripada|ketimbang)\s+(?:bulan\s+)?$/i;
 const MONTH_INDEX = ["jan", "feb", "mar", "apr", "mei", "jun", "jul", "ag", "sep", "okt", "nov", "des"];
 
 function monthIndexOf(token: string): number {
   const t = token.toLowerCase();
   return MONTH_INDEX.findIndex((m) => t.startsWith(m));
+}
+
+/**
+ * Klaim "bulan tertinggi" di jawaban dicek per anak kalimat: bulan yang disebut
+ * sebagai pembanding diabaikan, dan tahun (kalau disebut) harus cocok.
+ */
+function contradictsPeak(text: string, peak: TrendPoint): boolean {
+  const peakMonth = MONTH_SHORT.indexOf(peak.label.slice(0, 3));
+  const peakYear = Number(peak.label.slice(4));
+  for (const clause of text.split(/[.;!?,\n]+/)) {
+    if (!PEAK_CUE_RE.test(clause)) continue;
+    const claimed: { month: number; year: number | null }[] = [];
+    for (const m of clause.matchAll(MONTH_YEAR_RE)) {
+      if (COMPARISON_BEFORE_RE.test(clause.slice(0, m.index))) continue;
+      claimed.push({ month: monthIndexOf(m[1]), year: m[2] ? Number(m[2]) : null });
+    }
+    if (claimed.length === 0) continue;
+    if (!claimed.some((c) => c.month === peakMonth && (c.year === null || c.year === peakYear))) return true;
+  }
+  return false;
 }
 
 /** Jawaban model bertentangan dengan arah atau bulan tertinggi hasil hitung kode. */
@@ -141,15 +183,18 @@ export function contradictsTrend(text: string, s: TrendSummary): boolean {
       if ((down || flat) && !up) return true;
       break;
     case "stabil":
+      // "stabil, tidak naik maupun turun" dan "turun di Feb lalu naik lagi" bukan salah arah.
+      if (up !== down && !flat) return true;
+      break;
+    case "naik_turun":
+      // Harus menyebut kedua arah atau kata naik-turun; satu arah saja atau "stabil" menyesatkan.
+      if (!(up && down) && !FLUCTUATING_RE.test(text)) return true;
+      break;
     case "tidak_ada_penjualan":
     case "tidak_cukup_data":
       if (up || down) return true;
       break;
   }
-  if (s.peak && PEAK_CUE_RE.test(text)) {
-    const mentioned = [...text.matchAll(MONTH_RE)].map((m) => monthIndexOf(m[1]));
-    const peakMonth = MONTH_SHORT.indexOf(s.peak.label.slice(0, 3));
-    if (mentioned.length > 0 && !mentioned.includes(peakMonth)) return true;
-  }
+  if (s.peak && contradictsPeak(text, s.peak)) return true;
   return false;
 }

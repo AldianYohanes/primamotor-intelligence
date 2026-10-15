@@ -37,6 +37,13 @@ describe("summarizeTrend", () => {
     expect(s?.peak).toBeNull();
   });
 
+  it("data naik-turun (10, 2, 10) bukan stabil", () => {
+    const s = summarizeTrend(result([10, 2, 10]));
+    expect(s?.direction).toBe("naik_turun");
+    expect(s?.peak).toBeNull();
+    expect(trendReply(s!, "Wiper Bosch")).toMatch(/naik-turun/);
+  });
+
   it("urutan data diacak tetap dibaca menurut bulan", () => {
     const r = result([11, 6, 4]);
     r.trend.reverse();
@@ -98,6 +105,31 @@ describe("contradictsTrend", () => {
 
   it("jawaban yang cocok dengan data lolos", () => {
     expect(contradictsTrend("Penjualan turun, paling banyak di Agu 2026 (11).", turun)).toBe(false);
+  });
+
+  it("data naik-turun: jawaban yang menyebut kedua arah lolos, satu arah atau 'stabil' tidak", () => {
+    const zigzag = summarizeTrend(result([10, 2, 10]))!;
+    expect(contradictsTrend("Turun di September lalu naik lagi di Oktober.", zigzag)).toBe(false);
+    expect(contradictsTrend("Penjualannya berfluktuasi.", zigzag)).toBe(false);
+    expect(contradictsTrend("Penjualan turun terus.", zigzag)).toBe(true);
+    expect(contradictsTrend("Penjualan stabil.", zigzag)).toBe(true);
+  });
+
+  it("data stabil: jawaban 'tidak naik maupun turun' dan 'stabil, sedikit naik' lolos, 'naik' saja tidak", () => {
+    const flat = summarizeTrend(result([10, 10, 10]))!;
+    expect(contradictsTrend("Stabil, tidak naik maupun turun.", flat)).toBe(false);
+    expect(contradictsTrend("Cenderung stabil, hanya sedikit naik.", flat)).toBe(false);
+    expect(contradictsTrend("Penjualan naik.", flat)).toBe(true);
+  });
+
+  it("bulan tertinggi: bulan pembanding tidak dihitung, tahun yang salah ketahuan", () => {
+    const naikPuncakJan = summarizeTrend(result([9, 5, 2], "2026-01-01"))!; // turun, puncak Jan 2026
+    expect(naikPuncakJan.peak?.label).toBe("Jan 2026");
+    // Maret disebut sebagai puncak padahal puncaknya Januari.
+    expect(contradictsTrend("Paling banyak terjual di Maret, turun dari Januari.", naikPuncakJan)).toBe(true);
+    // Puncak yang disebut benar (Januari): lolos.
+    expect(contradictsTrend("Paling banyak di Januari, turun sesudahnya.", naikPuncakJan)).toBe(false);
+    expect(contradictsTrend("Penjualan turun dari Januari, paling banyak di Januari 2025.", naikPuncakJan)).toBe(true);
   });
 
   it("jawaban tanpa klaim arah lolos", () => {
