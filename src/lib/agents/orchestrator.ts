@@ -45,7 +45,12 @@ import {
 } from "@/src/lib/agents/product-resolution";
 import { trimHistoryForContext } from "@/src/lib/agents/history-window";
 import { offTopicReply } from "@/src/lib/agents/off-topic";
-import { dropPinSentences, mentionsPinConfirmation, READ_ONLY_PIN_FEEDBACK } from "@/src/lib/agents/read-only-reply";
+import {
+  dropPinSentences,
+  mentionsPinConfirmation,
+  READ_ONLY_PIN_FEEDBACK,
+  staffMentionsPin,
+} from "@/src/lib/agents/read-only-reply";
 import { agentInputMessage, normalizeShorthand } from "@/src/lib/agents/normalize-shorthand";
 import { guardRoute } from "@/src/lib/agents/route-guard";
 import { MAX_TREND_MONTHS, parseSalesPeriod, stripSalesPeriod } from "@/src/lib/agents/sales-period";
@@ -946,9 +951,17 @@ async function runAgentTurnInner(
     }
     // H-14: agent hanya memanggil alat baca (mutasi mengakhiri giliran, jadi jejak
     // berisi alat baca saja) lalu menulis "konfirmasi dengan PIN". Tidak ada PIN
-    // yang diminta sistem: diperlakukan sebagai jawaban query.
+    // yang diminta sistem: diperlakukan sebagai jawaban query. Dilewati kalau staf
+    // sendiri menyebut PIN (mis. "tidak perlu PIN"): jawaban soal PIN itu sah.
+    // Nama barang yang memuat kata "pin" (pin piston) dari hasil getStock tidak dihitung.
+    const pinProductNames = toolTrace
+      .filter((t) => t.name === "getStock")
+      .flatMap((t) => summarizeStock(t.result)?.products.map((p) => p.name) ?? []);
     const readOnlyPin =
-      reply.calls.length === 0 && toolTrace.length > 0 && mentionsPinConfirmation(reply.text || content);
+      reply.calls.length === 0 &&
+      toolTrace.length > 0 &&
+      !staffMentionsPin(userMessage) &&
+      mentionsPinConfirmation(reply.text || content, pinProductNames);
     if (readOnlyPin && !nudgedReadOnlyPin && i < MAX_TOOL_ITERATIONS - 1) {
       nudgedReadOnlyPin = true;
       messages.push({ role: "assistant", content });
@@ -966,7 +979,7 @@ async function runAgentTurnInner(
       // Balasan kosong (Run 19, S-03 single: model diam sesudah diingatkan) tidak
       // boleh sampai ke staf sebagai pesan kosong.
       const rawText = (reply.text || (reply.malformed ? "" : content)).trim();
-      const modelText = (readOnlyPin ? dropPinSentences(rawText) : rawText) || textBeforeNudge;
+      const modelText = (readOnlyPin ? dropPinSentences(rawText, pinProductNames) : rawText) || textBeforeNudge;
       // Jawaban dari cache offline selalu diberi keterangan oleh kode (model sering lupa).
       const cacheNote = modelText ? cacheNoteFor(toolTrace) : null;
       // Q-13: jawaban tren yang bertentangan dengan hitungan kode diganti kalimat dari kode.
