@@ -414,6 +414,8 @@ export interface ProductChoice {
   /** Argumen dari model; product_id diisi dari pilihan staf. */
   args: Record<string, unknown>;
   userMessage: string;
+  /** Pesan asli staf untuk audit log; kosong = sama dengan userMessage. */
+  originalMessage?: string;
   options: { id: string; name: string; detail: string }[];
 }
 
@@ -555,6 +557,8 @@ async function advanceMutation(
   getDevicePosition: () => Promise<GeoPoint | null>,
   /** Tindakan kode untuk "Lihat proses" (mis. "Lokasi diisi: Gudang"). */
   note: (text: string) => void = () => {},
+  /** Pesan asli staf (sebelum singkatan diluruskan); disimpan sebagai alasan di audit log. */
+  originalMessage: string = userMessage,
 ): Promise<MutationOutcome> {
   if (!navigator.onLine) return { message: OFFLINE_MUTATION_MESSAGE, result: { status: "offline" } };
 
@@ -591,6 +595,7 @@ async function advanceMutation(
           toolName,
           args,
           userMessage,
+          originalMessage,
           options: pick.candidates.map((c) => ({ id: c.product_id, name: c.name, detail: describeStock(c) })),
         },
         result: { status: "product_choice_required", candidates: pick.candidates.map((c) => c.product_id) },
@@ -605,7 +610,7 @@ async function advanceMutation(
   const name = productName ?? "barang ini";
 
   const quantity = Number(args.quantity);
-  const reasoning = String(args.reasoning ?? "").trim() || userMessage;
+  const reasoning = String(args.reasoning ?? "").trim() || originalMessage;
   const resolvedArgs: Record<string, unknown> =
     toolName === "updateStock"
       ? {
@@ -717,6 +722,7 @@ export async function submitMutationChoice(
           businessId,
           readDevicePosition,
           (text) => rec.add({ kind: "action", label: text, status: "done" }),
+          choice.originalMessage ?? choice.userMessage,
         );
   rec.add(mutationOutcomeStep(outcome.result));
   rec.add(answerStep("code"));
@@ -1077,6 +1083,7 @@ ${cacheNote}` : reply, toolTrace };
           businessId,
           getDevicePosition,
           (text) => rec.add({ kind: "action", label: text, status: "done" }),
+          userMessage,
         );
         rec.finish(running, { ...start, label: `Model memanggil ${call.name}`, status: "done" });
         rec.add(mutationOutcomeStep(outcome.result));
