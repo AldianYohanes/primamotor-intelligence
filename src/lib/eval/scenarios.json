@@ -1,6 +1,6 @@
 {
-  "version": "2026-10-14",
-  "note": "Label acuan dibekukan untuk run resmi (M2, 8 Okt 2026, tag eval-freeze-1): status reviewed untuk seluruh 50 skenario disetujui Aldian. Jangan ubah label sesudah titik beku ini. Produk merujuk part_number di supabase/seed_eval.sql.",
+  "version": "2026-10-15",
+  "note": "Label acuan dibekukan untuk run resmi (M2, 8 Okt 2026, tag eval-freeze-1): status reviewed untuk seluruh 50 skenario disetujui Aldian. Jangan ubah label sesudah titik beku ini. Catatan 15 Okt 2026 (putaran perbaikan 2): H-05 dan H-14 dipakai untuk menemukan dan menyetel perbaikan (normalisasi singkatan ke agent, jawaban stok tanpa PIN), jadi bukan held-out lagi; held-out pengganti: H-16 sampai H-18. Produk merujuk part_number di supabase/seed_eval.sql.",
   "scenarios": [
     {
       "id": "Q-01",
@@ -622,7 +622,7 @@
       "confirm": "pin",
       "expected_stock_delta": [{"product":"EVAL-002","location":"Gudang","delta":-2}],
       "label_status": "draft",
-      "notes": "Held-out singkatan Router (klr, dr, gdg)."
+      "notes": "DIPAKAI UNTUK PERBAIKAN (putaran 2, 15 Okt 2026), bukan held-out lagi. Awalnya held-out singkatan Router (klr, dr, gdg); kegagalannya di Run 33 jadi dasar normalisasi singkatan ke agent."
     },
     {
       "id": "H-06",
@@ -731,7 +731,7 @@
       "expected_entity": "EVAL-011",
       "expect_pending": false,
       "label_status": "draft",
-      "notes": "Held-out singkatan untuk query (brp, gdg); harus tetap query."
+      "notes": "DIPAKAI UNTUK PERBAIKAN (putaran 2, 15 Okt 2026), bukan held-out lagi. Awalnya held-out singkatan untuk query (brp, gdg); kegagalannya di Run 33 jadi dasar penanganan jawaban stok yang menyebut PIN."
     },
     {
       "id": "H-15",
@@ -745,6 +745,41 @@
       "expected_stock_delta": [{"product":"EVAL-016","location":"Toko","delta":-1}],
       "label_status": "draft",
       "notes": "Held-out: kata kerja 'terjual' tanpa kata 'keluar'."
+    },
+    {
+      "id": "H-16",
+      "message": "trf 3 filter udara mahle dr gdg ke toko",
+      "expected_route": "transaction",
+      "variant": "typo",
+      "expected_tools": ["transferStock"],
+      "expected_action": {"tool":"transferStock","product":"EVAL-007","quantity":3,"from":"Gudang","to":"Toko"},
+      "expect_pending": true,
+      "confirm": "pin",
+      "expected_stock_delta": [{"product":"EVAL-007","location":"Gudang","delta":-3},{"product":"EVAL-007","location":"Toko","delta":3}],
+      "label_status": "draft",
+      "notes": "Held-out pengganti H-05 (15 Okt 2026): singkatan lain (trf, dr, gdg) untuk transfer Gudang ke Toko. Kode tidak boleh disetel ke skenario ini."
+    },
+    {
+      "id": "H-17",
+      "message": "msh ada brp filter oli mahle di gdg?",
+      "expected_route": "query",
+      "variant": "typo",
+      "expected_tools": ["getStock"],
+      "expected_entity": "EVAL-006",
+      "expect_pending": false,
+      "label_status": "draft",
+      "notes": "Held-out pengganti H-14 (15 Okt 2026): pertanyaan stok bersingkatan (msh, brp, gdg); harus tetap query dan tanpa PIN. Kode tidak boleh disetel ke skenario ini."
+    },
+    {
+      "id": "H-18",
+      "message": "blm abis kan, tinggal brp bushing arm depan di toko?",
+      "expected_route": "query",
+      "variant": "typo",
+      "expected_tools": ["getStock"],
+      "expected_entity": "EVAL-005",
+      "expect_pending": false,
+      "label_status": "draft",
+      "notes": "Held-out pengganti H-14 (15 Okt 2026): pertanyaan stok bersingkatan (blm, brp) tanpa kata gudang; harus tetap query dan tanpa PIN. Kode tidak boleh disetel ke skenario ini."
     }
   ]
 }
