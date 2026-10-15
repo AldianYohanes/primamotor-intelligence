@@ -53,6 +53,7 @@ import {
   mentionsStockMovement,
   offlineNoMatchReply,
 } from "@/src/lib/agents/offline-answers";
+import { claimsRecorded, contradictsStock, stockReply, summarizeStock } from "@/src/lib/agents/stock-summary";
 import { contradictsTrend, summarizeTrend, trendFactsText, trendReply } from "@/src/lib/agents/trend-summary";
 import {
   ProcessRecorder,
@@ -947,6 +948,17 @@ async function runAgentTurnInner(
         rec.add(answerStep("code"));
         const productName = String((trendTrace?.result as { product_name?: unknown })?.product_name ?? "");
         return { agentType, assistantText: trendReply(trendSummary, productName), toolTrace };
+      }
+      // Q-07: jawaban pembacaan stok yang bertentangan dengan getStock (mis. "kosong di
+      // semua lokasi" saat Gudang 2, atau mengaku "sudah dicatat") diganti kalimat dari kode.
+      const stockTrace = [...toolTrace].reverse().find((t) => t.name === "getStock");
+      const stockSummary = stockTrace && !trendTrace ? summarizeStock(stockTrace.result) : null;
+      if (modelText && stockSummary && contradictsStock(modelText, stockSummary)) {
+        rec.add(answerStep("code"));
+        const reply = stockReply(stockSummary, { notRecorded: claimsRecorded(modelText) });
+        return { agentType, assistantText: cacheNote ? `${reply}
+
+${cacheNote}` : reply, toolTrace };
       }
       rec.add(answerStep(!modelText ? "code" : toolTrace.length > 0 ? "model" : "model_no_tool"));
       return {
