@@ -164,3 +164,71 @@ describe("contradictsTrend", () => {
     expect(contradictsTrend("Totalnya 21 buah dalam 3 bulan.", turun)).toBe(false);
   });
 });
+
+describe("pola puncak atau lembah di tengah periode", () => {
+  const MAY = "2026-05-01";
+  const NOW_OKT = new Date("2026-10-15T00:00:00Z");
+
+  it("puncak di tengah lalu turun = naik_turun, dengan puncak dan jumlah bulan sesudahnya", () => {
+    const s = summarize(result([3, 5, 9, 11, 6, 4], MAY));
+    expect(s?.direction).toBe("naik_turun");
+    expect(s?.turning).toEqual({ kind: "puncak", point: { label: "Agu 2026", quantity: 11 }, monthsAfter: 2 });
+    expect(s?.peak?.label).toBe("Agu 2026");
+  });
+
+  it("bulan berjalan tidak dihitung: bulan sesudah puncak hanya bulan penuh", () => {
+    const s = summarize(result([3, 5, 9, 11, 6, 4], MAY), NOW_OKT);
+    expect(s?.direction).toBe("naik_turun");
+    expect(s?.turning?.monthsAfter).toBe(1);
+    expect(s?.points[5].partial).toBe(true);
+  });
+
+  it("lembah di tengah lalu naik = naik_turun (kebalikannya)", () => {
+    const s = summarize(result([9, 5, 2, 3, 8], MAY));
+    expect(s?.direction).toBe("naik_turun");
+    expect(s?.turning).toEqual({ kind: "lembah", point: { label: "Jul 2026", quantity: 2 }, monthsAfter: 2 });
+  });
+
+  it("naik terus, turun terus, datar tetap seperti biasa", () => {
+    expect(summarize(result([2, 5, 9, 12], MAY))?.direction).toBe("naik");
+    expect(summarize(result([11, 6, 4], MAY))?.direction).toBe("turun");
+    expect(summarize(result([10, 10, 10], MAY))?.direction).toBe("stabil");
+    expect(summarize(result([2, 5, 9, 12], MAY))?.turning).toBeUndefined();
+  });
+
+  it("puncak di tengah tapi turunnya kecil tetap naik", () => {
+    // 18, 22, 20, 25, 24: puncak 25 di tengah, turun 1 saja (< 25% rata-rata).
+    const s = summarize(result([18, 22, 20, 25, 24], MAY));
+    expect(s?.direction).toBe("naik");
+    expect(s?.turning).toBeUndefined();
+  });
+
+  it("data pendek: satu atau dua bulan tidak punya titik tengah", () => {
+    expect(summarize(result([7], MAY))?.direction).toBe("tidak_cukup_data");
+    expect(summarize(result([3, 9], MAY))?.direction).toBe("naik");
+    expect(summarize(result([9, 3], MAY))?.direction).toBe("turun");
+  });
+
+  it("fakta dan kalimat jawaban menyebut puncak lalu arah bulan-bulan terakhir", () => {
+    const s = summarize(result([3, 5, 9, 11, 6, 4], MAY))!;
+    expect(trendFactsText(s)).toContain("sempat naik sampai puncak di Agu 2026, lalu turun dalam 2 bulan terakhir");
+    expect(trendReply(s, "Wiper Bosch")).toContain("sempat naik sampai puncak di Agu 2026, lalu turun");
+    const v = summarize(result([9, 5, 2, 3, 8], MAY))!;
+    expect(trendFactsText(v)).toContain("sempat turun sampai titik terendah di Jul 2026, lalu naik dalam 2 bulan terakhir");
+  });
+
+  it("jawaban model 'turun' untuk puncak di tengah tidak ditimpa, 'naik' saja atau 'stabil' ditimpa", () => {
+    const s = summarize(result([3, 5, 9, 11, 6, 4], MAY))!;
+    expect(contradictsTrend("Penjualan turun dalam beberapa bulan terakhir.", s)).toBe(false);
+    expect(contradictsTrend("Sempat naik sampai Agu 2026, lalu turun.", s)).toBe(false);
+    expect(contradictsTrend("Penjualan naik.", s)).toBe(true);
+    expect(contradictsTrend("Penjualan stabil.", s)).toBe(true);
+    expect(contradictsTrend("Paling banyak di Agu 2026, lalu menurun.", s)).toBe(false);
+  });
+
+  it("lembah di tengah: 'naik' tidak ditimpa, 'turun' saja ditimpa", () => {
+    const v = summarize(result([9, 5, 2, 3, 8], MAY))!;
+    expect(contradictsTrend("Penjualan naik lagi belakangan ini.", v)).toBe(false);
+    expect(contradictsTrend("Penjualan turun terus.", v)).toBe(true);
+  });
+});

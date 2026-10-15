@@ -26,12 +26,39 @@ export interface TrendSummary {
   direction: TrendDirection;
   /** Bulan tertinggi; null bila tren stabil, tidak ada penjualan, atau ada bulan yang sama tinggi. */
   peak: TrendPoint | null;
+  /**
+   * Puncak (atau lembah) di tengah periode: bulan penuh pertama/terakhir bukan titik
+   * tertinggi/terendah, dan kedua sisinya cukup besar. monthsAfter = jumlah bulan penuh
+   * sesudahnya, yaitu "beberapa bulan terakhir" yang menunjukkan arah terkini.
+   */
+  turning?: { kind: "puncak" | "lembah"; point: TrendPoint; monthsAfter: number };
 }
 
 // Perubahan total (garis tren dari bulan pertama ke terakhir) di bawah 15% rata-rata dianggap datar.
 const STABLE_THRESHOLD = 0.15;
 // Garis datar tapi selisih bulan tertinggi dan terendah lebih dari 50% rata-rata: naik-turun, bukan stabil.
 const FLUCTUATION_THRESHOLD = 0.5;
+// Puncak/lembah di tengah dihitung bila selisihnya ke bulan penuh pertama dan terakhir masing-masing >= 25% rata-rata.
+const TURN_LEG_THRESHOLD = 0.25;
+
+/** Titik tertinggi (lalu terendah) yang unik, bukan di ujung, dengan dua sisi yang sama-sama berarti. */
+function findTurning(full: TrendPoint[], mean: number): TrendSummary["turning"] {
+  const q = full.map((p) => p.quantity);
+  const last = q.length - 1;
+  for (const [kind, target] of [
+    ["puncak", Math.max(...q)],
+    ["lembah", Math.min(...q)],
+  ] as const) {
+    const hits = q.flatMap((v, i) => (v === target ? [i] : []));
+    if (hits.length !== 1) continue;
+    const i = hits[0];
+    if (i === 0 || i === last) continue;
+    if (Math.abs(target - q[0]) >= TURN_LEG_THRESHOLD * mean && Math.abs(target - q[last]) >= TURN_LEG_THRESHOLD * mean) {
+      return { kind, point: full[i], monthsAfter: last - i };
+    }
+  }
+  return undefined;
+}
 
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 
@@ -87,8 +114,12 @@ export function summarizeTrend(result: unknown, now: Date = new Date()): TrendSu
   const relative = change / mean;
   const quantities = full.map((p) => p.quantity);
   const spread = (Math.max(...quantities) - Math.min(...quantities)) / mean;
-  const direction: TrendDirection =
-    Math.abs(relative) < STABLE_THRESHOLD
+  // Puncak/lembah di tengah menang atas garis lurus: 3, 5, 9, 11, 6 "naik" menurut garis,
+  // tetapi arah terkininya turun, jadi disebut naik-turun lengkap dengan puncaknya.
+  const turning = findTurning(full, mean);
+  const direction: TrendDirection = turning
+    ? "naik_turun"
+    : Math.abs(relative) < STABLE_THRESHOLD
       ? spread > FLUCTUATION_THRESHOLD
         ? "naik_turun"
         : "stabil"
@@ -102,7 +133,7 @@ export function summarizeTrend(result: unknown, now: Date = new Date()): TrendSu
     const tops = full.filter((p) => p.quantity === max);
     peak = tops.length === 1 ? tops[0] : null;
   }
-  return { points, total, direction, peak };
+  return { points, total, direction, peak, ...(turning && { turning }) };
 }
 
 function perMonth(s: TrendSummary): string {
@@ -117,8 +148,13 @@ function directionText(s: TrendSummary): string {
       return "turun";
     case "stabil":
       return "stabil (hampir tidak berubah)";
-    case "naik_turun":
-      return "naik-turun (berfluktuasi, tidak searah)";
+    case "naik_turun": {
+      const t = s.turning;
+      if (!t) return "naik-turun (berfluktuasi, tidak searah)";
+      return t.kind === "puncak"
+        ? `naik-turun: sempat naik sampai puncak di ${t.point.label}, lalu turun dalam ${t.monthsAfter} bulan terakhir`
+        : `naik-turun: sempat turun sampai titik terendah di ${t.point.label}, lalu naik dalam ${t.monthsAfter} bulan terakhir`;
+    }
     case "tidak_ada_penjualan":
       return "tidak ada penjualan";
     case "tidak_cukup_data":
@@ -143,7 +179,9 @@ export function trendReply(s: TrendSummary, productName: string): string {
   const lead =
     s.direction === "tidak_cukup_data"
       ? `Penjualan ${name}: belum ada dua bulan penuh, belum cukup untuk menilai tren.`
-      : `Penjualan ${name} ${directionText(s)} dalam ${s.points.length} bulan terakhir.`;
+      : s.turning
+        ? `Penjualan ${name} ${directionText(s)}.`
+        : `Penjualan ${name} ${directionText(s)} dalam ${s.points.length} bulan terakhir.`;
   const peak = s.peak ? ` Paling banyak terjual di ${s.peak.label} (${s.peak.quantity}).` : "";
   return `${lead} Total ${s.total} buah (${perMonth(s)}).${peak}`;
 }
@@ -202,8 +240,13 @@ export function contradictsTrend(text: string, s: TrendSummary): boolean {
       if (up !== down && !flat) return true;
       break;
     case "naik_turun":
-      // Harus menyebut kedua arah atau kata naik-turun; satu arah saja atau "stabil" menyesatkan.
-      if (!(up && down) && !FLUCTUATING_RE.test(text)) return true;
+      // Puncak di tengah: arah terkini turun, jadi menyebut "turun" cukup; lembah: "naik" cukup.
+      // Tanpa titik balik, harus menyebut kedua arah atau kata naik-turun. "Stabil" atau satu
+      // arah yang salah menyesatkan.
+      if (FLUCTUATING_RE.test(text)) break;
+      if (s.turning) {
+        if (!(s.turning.kind === "puncak" ? down : up)) return true;
+      } else if (!(up && down)) return true;
       break;
     case "tidak_ada_penjualan":
     case "tidak_cukup_data":
