@@ -501,6 +501,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
           observation = {
             ...base,
             predictedRoute: result.agentType,
+            routerPredictedRoute: result.routerAgentType ?? null,
             assistantText: result.assistantText,
             modelReplies: result.modelReplies,
             processSteps: result.processSteps,
@@ -873,6 +874,12 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
           </h2>
           <div className="grid gap-3 text-sm sm:grid-cols-4">
             <div>Macro F1 routing: <strong>{s.routing.macroF1.toFixed(3)}</strong></div>
+            <div>
+              Akurasi rute: <strong>{pct(s.routing.accuracy.correct, s.routing.accuracy.total)}</strong>
+              {s.routing.routerAccuracy.total > 0 && (
+                <> (Router saja {pct(s.routing.routerAccuracy.correct, s.routing.routerAccuracy.total)})</>
+              )}
+            </div>
             <div>Akurasi tool: <strong>{pct(s.toolAccuracy.correct, s.toolAccuracy.total)}</strong></div>
             <div>Akurasi parameter: <strong>{pct(s.parameterAccuracy.correct, s.parameterAccuracy.total)}</strong></div>
             <div>ETSR: <strong>{pct(s.etsr.success, s.etsr.total)}</strong> ({s.etsr.success}/{s.etsr.total})</div>
@@ -947,7 +954,13 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
                   <td className="pr-3 font-mono">{r.scenario.id}</td>
                   <td className="pr-3">{r.observation.mode === "multi_agent" ? "multi" : "single"}</td>
                   <td className="pr-3">{r.scenario.expected_route}</td>
-                  <td className="pr-3">{r.observation.predictedRoute ?? "–"}</td>
+                  <td className="pr-3">
+                    {r.observation.predictedRoute ?? "–"}
+                    {r.observation.routerPredictedRoute &&
+                      r.observation.routerPredictedRoute !== r.observation.predictedRoute && (
+                        <span className="text-slate-400"> (Router: {r.observation.routerPredictedRoute})</span>
+                      )}
+                  </td>
                   <td className="pr-3">{r.observation.toolTrace.map((t) => t.name).join(", ") || "–"}</td>
                   <td className="pr-3">
                     {r.observation.locationPrompt

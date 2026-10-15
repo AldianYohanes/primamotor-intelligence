@@ -96,7 +96,17 @@ export interface PendingConfirmation {
 }
 
 export interface AgentTurnResult {
+  /**
+   * Kelas akhir giliran: keluaran Router, dikoreksi pengaman kode (guardRoute,
+   * giliran transaksi yang ternyata cuma membaca stok jadi "query"). Mode single:
+   * disimpulkan dari jejak alat.
+   */
   agentType: "query" | "transaction" | "off_topic";
+  /**
+   * Tebakan asli Router sebelum koreksi kode apa pun; dasar akurasi "Router saja"
+   * di /eval. Kosong di mode single_agent (tidak ada Router).
+   */
+  routerAgentType?: "query" | "transaction" | "off_topic";
   assistantText: string;
   pendingConfirmation?: PendingConfirmation;
   /** Transaksi ditahan sampai staf memilih produk atau lokasi. */
@@ -784,6 +794,7 @@ async function runAgentTurnInner(
   modelReplies: string[],
   getDevicePosition: () => Promise<GeoPoint | null>,
   rec: ProcessRecorder,
+  meta: { routerAgentType?: AgentTurnResult["agentType"] },
   onToken?: (partialText: string) => void,
   signal?: AbortSignal,
 ): Promise<AgentTurnResult> {
@@ -798,6 +809,7 @@ async function runAgentTurnInner(
     const routing = rec.add({ kind: "route", label: "Router menentukan agent…", status: "running" });
     const routed = await routeMessage(engine, userMessage, history, signal);
     agentType = routed.agentType;
+    meta.routerAgentType = routed.agentType;
     rec.finish(routing, routeStep(agentType, routed.text));
     // Pengaman kode: pesan yang jelas berisi pencatatan barang tidak boleh berhenti
     // di Query Agent karena Router salah menebak (T-10).
@@ -873,6 +885,8 @@ async function runAgentTurnInner(
   let nudgedMissingCall = false;
   let nudgedUnbacked = false;
   let nudgedReadOnlyPin = false;
+  // Pernah terlihat jawaban "konfirmasi PIN" padahal agent hanya membaca stok (H-14).
+  let readOnlyPinSeen = false;
   let sawMalformed = false;
   let checkedTwoLocations = false;
   // Alat yang disarankan umpan balik pengaman sebelumnya; dipakai sebagai contoh di pengingat.
@@ -962,6 +976,7 @@ async function runAgentTurnInner(
       toolTrace.length > 0 &&
       !staffMentionsPin(userMessage) &&
       mentionsPinConfirmation(reply.text || content, pinProductNames);
+    if (readOnlyPin) readOnlyPinSeen = true;
     if (readOnlyPin && !nudgedReadOnlyPin && i < MAX_TOOL_ITERATIONS - 1) {
       nudgedReadOnlyPin = true;
       messages.push({ role: "assistant", content });
@@ -969,13 +984,14 @@ async function runAgentTurnInner(
       rec.add(retryStep("read_only_pin"));
       continue;
     }
-    if (readOnlyPin) {
-      if (agentType === "transaction") {
-        agentType = "query";
-        rec.add({ kind: "route", label: "Tidak ada pencatatan stok, jawaban dibaca sebagai pertanyaan stok (Query Agent)", status: "done" });
-      }
-    }
     if (reply.calls.length === 0) {
+      // Giliran transaksi yang ternyata hanya membaca stok dilabeli "query", baik
+      // model menurut sesudah diingatkan maupun tetap menyebut PIN. Tebakan asli
+      // Router tetap tersimpan di routerAgentType (akurasi "Router saja").
+      if (readOnlyPinSeen && agentType === "transaction") {
+        agentType = "query";
+        rec.add({ kind: "route", label: "Tidak ada pencatatan stok, giliran dibaca sebagai pertanyaan stok (Query Agent)", status: "done" });
+      }
       // Balasan kosong (Run 19, S-03 single: model diam sesudah diingatkan) tidak
       // boleh sampai ke staf sebagai pesan kosong.
       const rawText = (reply.text || (reply.malformed ? "" : content)).trim();
@@ -1176,6 +1192,7 @@ export async function runAgentTurn(
   const usageAcc = { promptTokens: 0, completionTokens: 0, hasUsage: false };
   const modelReplies: string[] = [];
   const rec = new ProcessRecorder(options.onStep);
+  const meta: { routerAgentType?: AgentTurnResult["agentType"] } = {};
 
   try {
     const inner = await runAgentTurnInner(
@@ -1189,6 +1206,7 @@ export async function runAgentTurn(
       modelReplies,
       options.getDevicePosition ?? readDevicePosition,
       rec,
+      meta,
       onToken,
       options.signal,
     );
@@ -1200,6 +1218,7 @@ export async function runAgentTurn(
         mode === "single_agent"
           ? inferAgentTypeFromTrace(inner.toolTrace)
           : inner.agentType,
+      ...(mode === "multi_agent" && meta.routerAgentType && { routerAgentType: meta.routerAgentType }),
       latencyMs,
       processSteps: rec.steps,
       usage: usageAcc.hasUsage

@@ -151,6 +151,10 @@ export function stockMatches(s: Scenario, o: Observation, refs: RefMap): boolean
 export function scoreScenario(s: Scenario, o: Observation, refs: RefMap): ScoredRow {
   const called = new Set(o.toolTrace.map((t) => t.name));
   const routeCorrect = o.predictedRoute === s.expected_route;
+  const routerRouteCorrect =
+    o.routerPredictedRoute === undefined || o.routerPredictedRoute === null
+      ? null
+      : o.routerPredictedRoute === s.expected_route;
   const toolCorrect =
     (s.variant === "keamanan" || s.expected_tools.every((t) => called.has(t))) &&
     !forbiddenTools(s).some((t) => called.has(t));
@@ -204,6 +208,7 @@ export function scoreScenario(s: Scenario, o: Observation, refs: RefMap): Scored
     scenario: s,
     observation: o,
     routeCorrect,
+    routerRouteCorrect,
     toolCorrect,
     paramCorrectFields: params.correct,
     paramTotalFields: params.total,
@@ -253,6 +258,10 @@ export interface ModeSummary {
     confusion: Record<Route, Record<Route | "none", number>>;
     perClass: Record<Route, ClassMetrics>;
     macroF1: number;
+    /** Akurasi rute akhir (Router + koreksi kode), skenario fungsional. */
+    accuracy: { correct: number; total: number };
+    /** Akurasi tebakan asli Router saja; total 0 di mode single_agent. */
+    routerAccuracy: { correct: number; total: number };
   };
   toolAccuracy: { correct: number; total: number };
   parameterAccuracy: { correct: number; total: number };
@@ -314,7 +323,17 @@ export function summarize(mode: AgentMode, rows: ScoredRow[]): ModeSummary {
 
   return {
     mode,
-    routing: { n: functional.length, confusion, perClass, macroF1 },
+    routing: {
+      n: functional.length,
+      confusion,
+      perClass,
+      macroF1,
+      accuracy: { correct: functional.filter((r) => r.routeCorrect).length, total: functional.length },
+      routerAccuracy: {
+        correct: functional.filter((r) => r.routerRouteCorrect === true).length,
+        total: functional.filter((r) => r.routerRouteCorrect === true || r.routerRouteCorrect === false).length,
+      },
+    },
     toolAccuracy: {
       correct: functional.filter((r) => r.toolCorrect).length,
       total: functional.length,
@@ -358,7 +377,7 @@ function csvCell(value: unknown): string {
 export function toCsv(rows: ScoredRow[]): string {
   const header = [
     "scenario_id", "mode", "variant", "label_status", "message",
-    "expected_route", "predicted_route", "route_correct",
+    "expected_route", "predicted_route", "route_correct", "router_predicted_route", "router_route_correct",
     "expected_tools", "called_tools", "tool_correct",
     "param_correct", "param_total", "entity_found",
     "pending", "location_prompt", "confirm_outcome", "pending_correct", "stock_correct",
@@ -369,7 +388,7 @@ export function toCsv(rows: ScoredRow[]): string {
     const o = r.observation;
     return [
       r.scenario.id, o.mode, r.scenario.variant, r.scenario.label_status, r.scenario.message,
-      r.scenario.expected_route, o.predictedRoute, r.routeCorrect,
+      r.scenario.expected_route, o.predictedRoute, r.routeCorrect, o.routerPredictedRoute, r.routerRouteCorrect,
       r.scenario.expected_tools.join("|"), o.toolTrace.map((t) => t.name).join("|"), r.toolCorrect,
       r.paramCorrectFields, r.paramTotalFields, r.entityFound,
       o.pending, o.locationPrompt ?? "", o.confirmOutcome, r.pendingCorrect, r.stockCorrect,
