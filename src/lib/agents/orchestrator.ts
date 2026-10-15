@@ -42,6 +42,7 @@ import {
 } from "@/src/lib/agents/product-resolution";
 import { trimHistoryForContext } from "@/src/lib/agents/history-window";
 import { offTopicReply } from "@/src/lib/agents/off-topic";
+import { dropPinSentences, mentionsPinConfirmation, READ_ONLY_PIN_FEEDBACK } from "@/src/lib/agents/read-only-reply";
 import { agentInputMessage, normalizeShorthand } from "@/src/lib/agents/normalize-shorthand";
 import { guardRoute } from "@/src/lib/agents/route-guard";
 import { MAX_TREND_MONTHS, parseSalesPeriod, stripSalesPeriod } from "@/src/lib/agents/sales-period";
@@ -861,6 +862,7 @@ async function runAgentTurnInner(
 
   let nudgedMissingCall = false;
   let nudgedUnbacked = false;
+  let nudgedReadOnlyPin = false;
   let sawMalformed = false;
   let checkedTwoLocations = false;
   // Teks model sebelum diingatkan; dipakai bila balasan sesudahnya kosong.
@@ -935,10 +937,29 @@ async function runAgentTurnInner(
       rec.add(answerStep("unbacked"));
       return { agentType, assistantText: UNBACKED_STOCK_REPLY, toolTrace };
     }
+    // H-14: agent hanya memanggil alat baca (mutasi mengakhiri giliran, jadi jejak
+    // berisi alat baca saja) lalu menulis "konfirmasi dengan PIN". Tidak ada PIN
+    // yang diminta sistem: diperlakukan sebagai jawaban query.
+    const readOnlyPin =
+      reply.calls.length === 0 && toolTrace.length > 0 && mentionsPinConfirmation(reply.text || content);
+    if (readOnlyPin && !nudgedReadOnlyPin && i < MAX_TOOL_ITERATIONS - 1) {
+      nudgedReadOnlyPin = true;
+      messages.push({ role: "assistant", content });
+      messages.push({ role: "user", content: READ_ONLY_PIN_FEEDBACK });
+      rec.add(retryStep("read_only_pin"));
+      continue;
+    }
+    if (readOnlyPin) {
+      if (agentType === "transaction") {
+        agentType = "query";
+        rec.add({ kind: "route", label: "Tidak ada pencatatan stok, jawaban dibaca sebagai pertanyaan stok (Query Agent)", status: "done" });
+      }
+    }
     if (reply.calls.length === 0) {
       // Balasan kosong (Run 19, S-03 single: model diam sesudah diingatkan) tidak
       // boleh sampai ke staf sebagai pesan kosong.
-      const modelText = (reply.text || (reply.malformed ? "" : content)).trim() || textBeforeNudge;
+      const rawText = (reply.text || (reply.malformed ? "" : content)).trim();
+      const modelText = (readOnlyPin ? dropPinSentences(rawText) : rawText) || textBeforeNudge;
       rec.add(answerStep(!modelText ? "code" : toolTrace.length > 0 ? "model" : "model_no_tool"));
       // Jawaban dari cache offline selalu diberi keterangan oleh kode (model sering lupa).
       const cacheNote = modelText ? cacheNoteFor(toolTrace) : null;
