@@ -57,6 +57,8 @@ import {
   mentionsStockMovement,
   offlineNoMatchReply,
 } from "@/src/lib/agents/offline-answers";
+import { claimsRecorded, contradictsStock, stockReply, summarizeStock } from "@/src/lib/agents/stock-summary";
+import { contradictsTrend, summarizeTrend, trendFactsText, trendReply } from "@/src/lib/agents/trend-summary";
 import {
   ProcessRecorder,
   answerStep,
@@ -965,9 +967,35 @@ async function runAgentTurnInner(
       // boleh sampai ke staf sebagai pesan kosong.
       const rawText = (reply.text || (reply.malformed ? "" : content)).trim();
       const modelText = (readOnlyPin ? dropPinSentences(rawText) : rawText) || textBeforeNudge;
-      rec.add(answerStep(!modelText ? "code" : toolTrace.length > 0 ? "model" : "model_no_tool"));
       // Jawaban dari cache offline selalu diberi keterangan oleh kode (model sering lupa).
       const cacheNote = modelText ? cacheNoteFor(toolTrace) : null;
+      // Q-13: jawaban tren yang bertentangan dengan hitungan kode diganti kalimat dari kode.
+      const trendTrace = [...toolTrace].reverse().find((t) => t.name === "getSalesTrend");
+      const trendSummary = trendTrace ? summarizeTrend(trendTrace.result) : null;
+      if (modelText && trendSummary && contradictsTrend(modelText, trendSummary)) {
+        rec.add(answerStep("code"));
+        const productName = String((trendTrace?.result as { product_name?: unknown })?.product_name ?? "");
+        return { agentType, assistantText: trendReply(trendSummary, productName), toolTrace };
+      }
+      // Q-07: jawaban pembacaan stok yang bertentangan dengan getStock (mis. "kosong di
+      // semua lokasi" saat Gudang 2, atau mengaku "sudah dicatat") diganti kalimat dari kode.
+      const stockTrace = [...toolTrace].reverse().find((t) => t.name === "getStock");
+      const stockSummary = stockTrace && !trendTrace ? summarizeStock(stockTrace.result) : null;
+      // Semua kalimat jawaban ternyata permintaan PIN: datanya diambil dari getStock.
+      if (!modelText && readOnlyPin && stockSummary) {
+        rec.add(answerStep("code"));
+        const stockText = stockReply(stockSummary);
+        const note = cacheNoteFor(toolTrace);
+        return { agentType, assistantText: note ? `${stockText}\n\n${note}` : stockText, toolTrace };
+      }
+      if (modelText && stockSummary && contradictsStock(modelText, stockSummary)) {
+        rec.add(answerStep("code"));
+        const reply = stockReply(stockSummary, { notRecorded: claimsRecorded(modelText) });
+        return { agentType, assistantText: cacheNote ? `${reply}
+
+${cacheNote}` : reply, toolTrace };
+      }
+      rec.add(answerStep(!modelText ? "code" : toolTrace.length > 0 ? "model" : "model_no_tool"));
       return {
         agentType,
         assistantText: cacheNote
@@ -1073,6 +1101,9 @@ async function runAgentTurnInner(
       }
       // Model menerima versi ringkas; toolTrace di atas tetap menyimpan hasil lengkap.
       responses.push(formatToolResponse(call.name, call.name === "getStock" ? compactStockResult(result) : result));
+      // Q-13: arah tren dan bulan tertinggi dihitung kode, model hanya menyampaikannya.
+      const trendSummary = call.name === "getSalesTrend" ? summarizeTrend(result) : null;
+      if (trendSummary) responses.push(trendFactsText(trendSummary));
     }
 
     // Dikirim sebagai pesan user, bukan role 'tool': template chat model non-Hermes
