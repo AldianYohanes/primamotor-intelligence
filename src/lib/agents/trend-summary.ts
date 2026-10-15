@@ -16,6 +16,8 @@ export type TrendDirection =
 export interface TrendPoint {
   label: string;
   quantity: number;
+  /** Bulan berjalan (belum penuh): ditampilkan, tapi tidak ikut menghitung arah dan bulan tertinggi. */
+  partial?: boolean;
 }
 
 export interface TrendSummary {
@@ -41,7 +43,12 @@ function periodLabel(period: string): { key: string; label: string } {
   return { key: `${m[1]}-${m[2]}`, label: `${MONTH_SHORT[month - 1]} ${m[1]}` };
 }
 
-export function summarizeTrend(result: unknown): TrendSummary | null {
+/**
+ * @param now Waktu sekarang (UTC, seperti date_trunc('month', now()) di get_sales_trend).
+ *   Titik terakhir yang jatuh di bulan ini baru terisi sebagian, jadi dikeluarkan dari
+ *   hitungan arah: stabil 10 per bulan dan 5 di tengah bulan bukan "turun".
+ */
+export function summarizeTrend(result: unknown, now: Date = new Date()): TrendSummary | null {
   const trend = (result as { trend?: unknown } | null)?.trend;
   if (!Array.isArray(trend) || trend.length === 0) return null;
 
@@ -53,25 +60,32 @@ export function summarizeTrend(result: unknown): TrendSummary | null {
     })
     .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
 
-  const points = rows.map(({ label, quantity }) => ({ label, quantity }));
+  const currentKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+  const last = rows.length - 1;
+  const points: TrendPoint[] = rows.map(({ key, label, quantity }, i) =>
+    i === last && key === currentKey ? { label, quantity, partial: true } : { label, quantity },
+  );
   const total = points.reduce((sum, p) => sum + p.quantity, 0);
-  const n = points.length;
+  // Arah dan bulan tertinggi hanya dari bulan penuh.
+  const full = points.filter((p) => !p.partial);
+  const fullTotal = full.reduce((sum, p) => sum + p.quantity, 0);
+  const n = full.length;
 
   if (total === 0) return { points, total, direction: "tidak_ada_penjualan", peak: null };
-  if (n < 2) return { points, total, direction: "tidak_cukup_data", peak: null };
+  if (n < 2 || fullTotal === 0) return { points, total, direction: "tidak_cukup_data", peak: null };
 
   // Garis tren (kuadrat terkecil): perubahan sepanjang periode dibanding rata-rata.
-  const mean = total / n;
+  const mean = fullTotal / n;
   const xMean = (n - 1) / 2;
   let num = 0;
   let den = 0;
-  points.forEach((p, x) => {
+  full.forEach((p, x) => {
     num += (x - xMean) * (p.quantity - mean);
     den += (x - xMean) ** 2;
   });
   const change = (num / den) * (n - 1);
   const relative = change / mean;
-  const quantities = points.map((p) => p.quantity);
+  const quantities = full.map((p) => p.quantity);
   const spread = (Math.max(...quantities) - Math.min(...quantities)) / mean;
   const direction: TrendDirection =
     Math.abs(relative) < STABLE_THRESHOLD
@@ -85,14 +99,14 @@ export function summarizeTrend(result: unknown): TrendSummary | null {
   let peak: TrendPoint | null = null;
   if (direction !== "stabil") {
     const max = Math.max(...quantities);
-    const tops = points.filter((p) => p.quantity === max);
+    const tops = full.filter((p) => p.quantity === max);
     peak = tops.length === 1 ? tops[0] : null;
   }
   return { points, total, direction, peak };
 }
 
 function perMonth(s: TrendSummary): string {
-  return s.points.map((p) => `${p.label}: ${p.quantity}`).join(", ");
+  return s.points.map((p) => `${p.label}: ${p.quantity}${p.partial ? " (bulan berjalan, belum penuh)" : ""}`).join(", ");
 }
 
 function directionText(s: TrendSummary): string {
@@ -108,13 +122,14 @@ function directionText(s: TrendSummary): string {
     case "tidak_ada_penjualan":
       return "tidak ada penjualan";
     case "tidak_cukup_data":
-      return "belum cukup data untuk menilai arah (hanya satu bulan)";
+      return "belum cukup data untuk menilai arah (kurang dari dua bulan penuh)";
   }
 }
 
 /** Fakta untuk model, ditempel di hasil alat. */
 export function trendFactsText(s: TrendSummary): string {
-  const parts = [`arah tren: ${directionText(s)}`, `total ${s.total} buah`, `per bulan: ${perMonth(s)}`];
+  const note = s.points.some((p) => p.partial) ? " (bulan berjalan tidak dihitung)" : "";
+  const parts = [`arah tren${note}: ${directionText(s)}`, `total ${s.total} buah`, `per bulan: ${perMonth(s)}`];
   if (s.peak) parts.push(`bulan tertinggi: ${s.peak.label} (${s.peak.quantity})`);
   return `FAKTA TREN (dihitung kode, pakai apa adanya; jangan menyebut arah atau bulan tertinggi yang berbeda): ${parts.join("; ")}.`;
 }
@@ -127,7 +142,7 @@ export function trendReply(s: TrendSummary, productName: string): string {
   }
   const lead =
     s.direction === "tidak_cukup_data"
-      ? `Penjualan ${name}: baru ada data satu bulan, belum cukup untuk menilai tren.`
+      ? `Penjualan ${name}: belum ada dua bulan penuh, belum cukup untuk menilai tren.`
       : `Penjualan ${name} ${directionText(s)} dalam ${s.points.length} bulan terakhir.`;
   const peak = s.peak ? ` Paling banyak terjual di ${s.peak.label} (${s.peak.quantity}).` : "";
   return `${lead} Total ${s.total} buah (${perMonth(s)}).${peak}`;
