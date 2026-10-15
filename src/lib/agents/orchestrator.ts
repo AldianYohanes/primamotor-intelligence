@@ -53,6 +53,7 @@ import {
   mentionsStockMovement,
   offlineNoMatchReply,
 } from "@/src/lib/agents/offline-answers";
+import { contradictsTrend, summarizeTrend, trendFactsText, trendReply } from "@/src/lib/agents/trend-summary";
 import {
   ProcessRecorder,
   answerStep,
@@ -937,9 +938,17 @@ async function runAgentTurnInner(
       // Balasan kosong (Run 19, S-03 single: model diam sesudah diingatkan) tidak
       // boleh sampai ke staf sebagai pesan kosong.
       const modelText = (reply.text || (reply.malformed ? "" : content)).trim() || textBeforeNudge;
-      rec.add(answerStep(!modelText ? "code" : toolTrace.length > 0 ? "model" : "model_no_tool"));
       // Jawaban dari cache offline selalu diberi keterangan oleh kode (model sering lupa).
       const cacheNote = modelText ? cacheNoteFor(toolTrace) : null;
+      // Q-13: jawaban tren yang bertentangan dengan hitungan kode diganti kalimat dari kode.
+      const trendTrace = [...toolTrace].reverse().find((t) => t.name === "getSalesTrend");
+      const trendSummary = trendTrace ? summarizeTrend(trendTrace.result) : null;
+      if (modelText && trendSummary && contradictsTrend(modelText, trendSummary)) {
+        rec.add(answerStep("code"));
+        const productName = String((trendTrace?.result as { product_name?: unknown })?.product_name ?? "");
+        return { agentType, assistantText: trendReply(trendSummary, productName), toolTrace };
+      }
+      rec.add(answerStep(!modelText ? "code" : toolTrace.length > 0 ? "model" : "model_no_tool"));
       return {
         agentType,
         assistantText: cacheNote
@@ -1044,6 +1053,9 @@ async function runAgentTurnInner(
       }
       // Model menerima versi ringkas; toolTrace di atas tetap menyimpan hasil lengkap.
       responses.push(formatToolResponse(call.name, call.name === "getStock" ? compactStockResult(result) : result));
+      // Q-13: arah tren dan bulan tertinggi dihitung kode, model hanya menyampaikannya.
+      const trendSummary = call.name === "getSalesTrend" ? summarizeTrend(result) : null;
+      if (trendSummary) responses.push(trendFactsText(trendSummary));
     }
 
     // Dikirim sebagai pesan user, bukan role 'tool': template chat model non-Hermes
