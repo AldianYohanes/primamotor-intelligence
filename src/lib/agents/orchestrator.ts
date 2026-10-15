@@ -42,7 +42,7 @@ import {
 } from "@/src/lib/agents/product-resolution";
 import { trimHistoryForContext } from "@/src/lib/agents/history-window";
 import { offTopicReply } from "@/src/lib/agents/off-topic";
-import { normalizeShorthand } from "@/src/lib/agents/normalize-shorthand";
+import { agentInputMessage, normalizeShorthand } from "@/src/lib/agents/normalize-shorthand";
 import { guardRoute } from "@/src/lib/agents/route-guard";
 import { MAX_TREND_MONTHS, parseSalesPeriod, stripSalesPeriod } from "@/src/lib/agents/sales-period";
 import { agentHistory, routerContext } from "@/src/lib/agents/router-context";
@@ -777,6 +777,8 @@ async function runAgentTurnInner(
   signal?: AbortSignal,
 ): Promise<AgentTurnResult> {
   const toolTrace: AgentTurnResult["toolTrace"] = [];
+  // Agent membaca kata utuh ("klr" → "keluar"); riwayat dan balasan kode tetap teks asli.
+  const agentMessage = agentInputMessage(userMessage);
   // Mode single_agent: nilai ini placeholder, diganti inferAgentTypeFromTrace di runAgentTurn.
   let agentType: AgentTurnResult["agentType"] = "query";
   let systemPrompt = SINGLE_AGENT_SYSTEM_PROMPT;
@@ -813,7 +815,7 @@ async function runAgentTurnInner(
     // memanggil model (uji M4 9 Okt: model gagal menulis tool call 3× lalu
     // jawaban cadangan yang tidak menjelaskan alasannya).
     if (agentType === "transaction" && typeof navigator !== "undefined" && !navigator.onLine) {
-      if (mentionsStockMovement(userMessage)) {
+      if (mentionsStockMovement(agentMessage)) {
         rec.add({ kind: "action", label: "Sedang offline, transaksi tidak dikirim", status: "failed" });
         rec.add(answerStep("code"));
         return { agentType, assistantText: OFFLINE_MUTATION_MESSAGE, toolTrace };
@@ -854,7 +856,7 @@ async function runAgentTurnInner(
     // Hanya role & content: pesan di UI bisa membawa field lain (mis. trace).
     // Tanpa balasan kode (model cenderung menyalinnya, uji M4 9 Okt).
     ...trimHistoryForContext(agentHistory(history, CODE_REPLIES)).map(({ role, content }) => ({ role, content })),
-    { role: "user", content: userMessage },
+    { role: "user", content: agentMessage },
   ];
 
   let nudgedMissingCall = false;
@@ -970,7 +972,7 @@ async function runAgentTurnInner(
       ) {
         checkedTwoLocations = true;
         const locations = await fetchTenantLocations();
-        const two = locations ? mentionedTwoStoreLocations(userMessage, locations) : null;
+        const two = locations ? mentionedTwoStoreLocations(agentMessage, locations) : null;
         if (two) {
           rec.add(retryStep("two_locations"));
           responses.push(twoLocationsFeedback(two));
@@ -986,7 +988,7 @@ async function runAgentTurnInner(
         const outcome = await advanceMutation(
           call.name,
           args,
-          userMessage,
+          agentMessage,
           conversationId,
           businessId,
           getDevicePosition,
@@ -1016,7 +1018,7 @@ async function runAgentTurnInner(
       if (!allowed) {
         result = { error: `Tool ${call.name} tidak tersedia untuk agent ini.` };
       } else if (call.name === "getSalesTrend") {
-        ({ result, resolvedArgs } = await runSalesTrend(args, conversationId, businessId, userMessage));
+        ({ result, resolvedArgs } = await runSalesTrend(args, conversationId, businessId, agentMessage));
       } else {
         result = await executeTool(call.name, args, conversationId, businessId);
       }
