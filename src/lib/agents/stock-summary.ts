@@ -56,15 +56,29 @@ export function stockReply(s: StockSummary, opts: { notRecorded?: boolean } = {}
 }
 
 const RECORDED_RE =
-  /\b(sudah|telah|berhasil|sukses)\s+(?:saya\s+|kami\s+)?(?:di)?(?:catat|mencatat|simpan|menyimpan|update|perbarui|memperbarui|ubah|mengubah)\w*|\b(?:dicatat|tercatat|tersimpan|saya\s+catat)\b/i;
+  /\b(sudah|telah|berhasil|sukses)\s+(?:saya\s+|kami\s+)?(?:di|ter)?(?:catat|mencatat|simpan|menyimpan|update|perbarui|memperbarui|ubah|mengubah)\w*|\b(?:dicatat|tersimpan|saya\s+catat)\b/i;
+// Kata sebelum "dicatat" yang membuatnya bukan klaim: "belum dicatat", "mau dicatat keluar dari mana?".
+const NOT_A_CLAIM_RE = /\b(?:belum|akan|mau|bisa|perlu|ingin|tidak|nggak|gak|tanpa|jika|kalau|supaya|agar)\b/i;
 
-/** Jawaban mengaku sudah mencatat/mengubah stok. */
+/**
+ * Jawaban mengaku sudah mencatat/mengubah stok. Dinilai per kalimat: pertanyaan
+ * dan kalimat yang didahului "belum/mau/akan/..." bukan klaim, dan "tercatat"
+ * saja ("stok yang tercatat di Gudang 2") hanya kata baca yang wajar.
+ */
 export function claimsRecorded(text: string): boolean {
-  return RECORDED_RE.test(text);
+  return text.split(/(?<=[.!?])\s+|\n+/).some((sentence) => {
+    const m = RECORDED_RE.exec(sentence);
+    if (!m) return false;
+    if (sentence.trim().endsWith("?")) return false;
+    return !NOT_A_CLAIM_RE.test(sentence.slice(0, m.index));
+  });
 }
 
 const EMPTY_RE = /\b(kosong|habis|tidak\s+ada\s+stok|tidak\s+tersedia|stok\s+nol)\b/i;
 const ALL_LOCATIONS_RE = /(semua|seluruh)\s+lokasi|di\s+mana[- ]?mana/i;
+
+// Pemisah yang boleh ada antara nama lokasi dan angkanya, lalu angka yang bukan tanggal.
+const QTY_AFTER_NAME = String.raw`(?:\s*[:=]\s*|\s+(?:ada|masih|sisa|stok|tinggal|sebanyak|punya|berjumlah)(?:\s+(?:ada|masih|sebanyak))?\s+|\s+)(\d+)(?![\d.,]*\d)(?!\s*(?:jan|feb|mar|apr|mei|jun|jul|agu|sep|okt|nov|des)\w*)`;
 
 function escapeRe(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -84,9 +98,17 @@ export function contradictsStock(text: string, s: StockSummary): boolean {
     if (!namesLocation || ALL_LOCATIONS_RE.test(text)) return true;
   }
   // Angka tepat sesudah nama lokasi harus sama dengan data ("Toko ada 5" padahal 0).
-  // Celah dibatasi tanpa koma/titik supaya tidak mengambil angka lokasi berikutnya.
+  // Hanya pola jelas yang dibandingkan ("Toko 0", "Toko: 0", "Toko ada 0"); kata lain di
+  // antaranya ("Gudang dan Toko total 2", "Gudang (cek 12 Okt): 4") dilewati.
   for (const l of p.locations) {
-    const m = new RegExp(`${escapeRe(l.name)}[^\\d,;.\\n]{0,15}?(\\d+)`, "i").exec(text);
+    // Nama lokasi yang saling awalan ("Toko" vs "Toko Cabang"): nama yang lebih panjang disingkirkan dulu.
+    let scoped = text;
+    for (const other of p.locations) {
+      if (other.name.length > l.name.length && other.name.toLowerCase().startsWith(l.name.toLowerCase())) {
+        scoped = scoped.replace(new RegExp(escapeRe(other.name), "gi"), " ");
+      }
+    }
+    const m = new RegExp(`${escapeRe(l.name)}(?![\\p{L}\\p{N}])${QTY_AFTER_NAME}`, "iu").exec(scoped);
     if (m && Number(m[1]) !== l.quantity) return true;
   }
   return false;

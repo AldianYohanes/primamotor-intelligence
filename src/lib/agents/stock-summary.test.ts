@@ -84,12 +84,22 @@ describe("stockReply", () => {
 });
 
 describe("claimsRecorded", () => {
-  it.each(["Stok sudah saya catat.", "Sudah dicatat ya", "Berhasil mencatat 5 unit", "Transaksi tercatat."])(
+  it.each(["Stok sudah saya catat.", "Sudah dicatat ya", "Berhasil mencatat 5 unit", "Transaksi sudah tercatat."])(
     "mengenali klaim mencatat: %s",
     (t) => expect(claimsRecorded(t)).toBe(true),
   );
   it("tidak salah kena pada jawaban stok biasa", () => {
     expect(claimsRecorded("Stok Wiper Bosch: Toko 0, Gudang 2.")).toBe(false);
+  });
+  it.each([
+    "Stok yang tercatat di Gudang 2 pcs.",
+    "Stok belum dicatat berubah.",
+    "Busi NGK ada di Toko 3, Gudang 5. Mau dicatat keluar dari mana?",
+    "Perubahan baru akan dicatat setelah PIN dikonfirmasi.",
+    "Sudah dicatat belum ya?",
+  ])("kata netral atau pertanyaan bukan klaim: %s", (t) => expect(claimsRecorded(t)).toBe(false));
+  it("klaim di kalimat kedua tetap ketangkap", () => {
+    expect(claimsRecorded("Stok Toko 3. Sudah saya catat keluar 2.")).toBe(true);
   });
 });
 
@@ -103,6 +113,19 @@ describe("contradictsStock", () => {
 
   it("menangkap angka lokasi yang salah", () => {
     expect(contradictsStock("Di Toko ada 5, di Gudang 2.", s)).toBe(true);
+  });
+
+  it("angka yang bukan angka lokasi tidak disalahartikan", () => {
+    expect(contradictsStock("Ada di Gudang dan Toko total 2.", s)).toBe(false);
+    expect(contradictsStock("Gudang (cek 12 Okt): 2, Toko 0.", s)).toBe(false);
+  });
+
+  it("nama lokasi yang saling awalan tidak tertukar", () => {
+    const cabang = summarizeStock({
+      results: [{ product_id: "p", name: "Busi", stock_by_location: [row("Toko", 1), row("Toko Cabang", 6)] }],
+    })!;
+    expect(contradictsStock("Toko Cabang 6, Toko 1.", cabang)).toBe(false);
+    expect(contradictsStock("Toko Cabang 9, Toko 1.", cabang)).toBe(true);
   });
 
   it("jawaban yang cocok dengan data lolos", () => {
