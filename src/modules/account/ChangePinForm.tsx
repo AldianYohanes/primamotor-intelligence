@@ -6,7 +6,11 @@ import { validateChangePin } from "@/src/lib/auth/change-pin";
 
 const digits = (v: string) => v.replace(/\D/g, "").slice(0, 12);
 
-export function ChangePinForm() {
+/**
+ * Form ganti PIN sendiri, dipakai di halaman Akun saya dan panel akun (compact).
+ * Validasi sama dengan server lewat validateChangePin; server tetap memeriksa ulang.
+ */
+export function ChangePinForm({ compact = false }: { compact?: boolean }) {
   const [currentPin, setCurrentPin] = useState("");
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
@@ -37,6 +41,25 @@ export function ChangePinForm() {
     setNewPin("");
     setConfirmPin("");
     setMessage({ ok: true, text: "PIN berhasil diganti. Pakai PIN baru saat masuk dan konfirmasi transaksi." });
+  }
+
+  if (compact) {
+    const small = "field-input !py-1.5 text-center tracking-widest";
+    return (
+      <form onSubmit={submit} className="space-y-2">
+        <input type="password" inputMode="numeric" autoComplete="current-password" placeholder="PIN lama" aria-label="PIN lama" value={currentPin} onChange={(e) => setCurrentPin(digits(e.target.value))} className={small} required />
+        <input type="password" inputMode="numeric" autoComplete="new-password" placeholder="PIN baru (min. 6 digit)" aria-label="PIN baru" value={newPin} onChange={(e) => setNewPin(digits(e.target.value))} className={small} minLength={6} required />
+        <input type="password" inputMode="numeric" autoComplete="new-password" placeholder="Ulangi PIN baru" aria-label="Ulangi PIN baru" value={confirmPin} onChange={(e) => setConfirmPin(digits(e.target.value))} className={small} minLength={6} required />
+        {message && (
+          <p role={message.ok ? "status" : "alert"} className={message.ok ? "text-xs text-emerald-700" : "text-xs text-red-600"}>
+            {message.text}
+          </p>
+        )}
+        <button type="submit" disabled={busy} className="btn btn-primary w-full justify-center !py-1.5 !text-xs">
+          {busy ? "Menyimpan…" : "Simpan PIN baru"}
+        </button>
+      </form>
+    );
   }
 
   const field = "field-input w-full text-center tracking-widest";

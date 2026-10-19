@@ -24,6 +24,7 @@ import { isStandalone, useInstallPrompt } from "@/src/lib/pwa/install-prompt";
 import { useModelStore } from "@/src/lib/stores/model-store";
 import { formatBytes } from "@/src/lib/agents/model-progress";
 import { MODEL_OPTIONS } from "@/src/lib/agents/model-options";
+import { ChangePinForm } from "@/src/modules/account/ChangePinForm";
 
 export interface AccountInfo {
   fullName: string;
@@ -69,55 +70,6 @@ function Section({
       </button>
       {open && <div className="space-y-3 px-4 pb-3.5">{children}</div>}
     </div>
-  );
-}
-
-function ChangePinForm() {
-  const [current, setCurrent] = useState("");
-  const [next, setNext] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
-  const digits = (v: string) => v.replace(/\D/g, "").slice(0, 12);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (next !== confirm) {
-      setMessage({ ok: false, text: "Konfirmasi PIN baru tidak sama" });
-      return;
-    }
-    setBusy(true);
-    setMessage(null);
-    const res = await fetch("/api/account/pin", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ current_pin: current, new_pin: next }),
-    });
-    const data = await res.json().catch(() => ({}));
-    setBusy(false);
-    if (!res.ok) {
-      setMessage({ ok: false, text: data.error ?? "Gagal mengganti PIN" });
-      return;
-    }
-    setCurrent("");
-    setNext("");
-    setConfirm("");
-    setMessage({ ok: true, text: "PIN berhasil diganti. Pakai PIN baru saat masuk dan konfirmasi transaksi." });
-  }
-
-  const field = "field-input !py-1.5 text-center tracking-widest";
-  return (
-    <form onSubmit={submit} className="space-y-2">
-      <input type="password" inputMode="numeric" autoComplete="current-password" placeholder="PIN lama" value={current} onChange={(e) => setCurrent(digits(e.target.value))} className={field} required />
-      <input type="password" inputMode="numeric" autoComplete="new-password" placeholder="PIN baru (min. 6 digit)" value={next} onChange={(e) => setNext(digits(e.target.value))} className={field} minLength={6} required />
-      <input type="password" inputMode="numeric" autoComplete="new-password" placeholder="Ulangi PIN baru" value={confirm} onChange={(e) => setConfirm(digits(e.target.value))} className={field} minLength={6} required />
-      {message && (
-        <p className={clsx("text-xs", message.ok ? "text-emerald-700" : "text-red-600")}>{message.text}</p>
-      )}
-      <button type="submit" disabled={busy} className="btn btn-primary w-full justify-center !py-1.5 !text-xs">
-        {busy ? "Menyimpan…" : "Simpan PIN baru"}
-      </button>
-    </form>
   );
 }
 
@@ -333,7 +285,7 @@ export function AccountPanel({ account, onNavigate }: { account: AccountInfo; on
         <DensitySetting />
       </Section>
       <Section icon={KeyRound} title="Ganti PIN">
-        <ChangePinForm />
+        <ChangePinForm compact />
       </Section>
       <Section icon={Cpu} title="Pengaturan perangkat">
         <DeviceSettings />
