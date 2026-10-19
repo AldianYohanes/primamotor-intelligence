@@ -1,5 +1,6 @@
 import type { LocationChoice } from "@/src/lib/agents/location-choice";
 import type { ProcessStep } from "@/src/lib/agents/process-trace";
+import type { InferenceSnapshot } from "@/src/lib/agents/inference-stats";
 
 export type ChatRole = "user" | "assistant" | "system" | "tool";
 
@@ -45,6 +46,8 @@ export interface AgentTurnResult {
   usage?: { promptTokens: number; completionTokens: number } | null;
   /** Langkah "Lihat proses" (process-trace.ts), ditampilkan ke staf. */
   processSteps?: ProcessStep[];
+  /** Waktu, token, dan kecepatan tiap panggilan model di giliran ini. */
+  inferenceStats?: InferenceSnapshot;
 }
 
 /**

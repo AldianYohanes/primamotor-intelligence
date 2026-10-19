@@ -23,6 +23,7 @@ import {
   stripThinking,
 } from "@/src/lib/agents/tool-protocol";
 import { streamChatCompletion } from "@/src/lib/agents/turn/stream";
+import type { InferenceMeter } from "@/src/lib/agents/inference-stats";
 import {
   CODE_REPLIES,
   OFFLINE_MUTATION_MESSAGE,
@@ -97,7 +98,7 @@ export async function runAgentTurnInner(
   userMessage: string,
   conversationId: string,
   businessId: string,
-  usageAcc: { promptTokens: number; completionTokens: number; hasUsage: boolean },
+  usageAcc: { promptTokens: number; completionTokens: number; hasUsage: boolean; meter?: InferenceMeter },
   mode: AgentMode,
   modelReplies: string[],
   getDevicePosition: () => Promise<GeoPoint | null>,
@@ -115,7 +116,9 @@ export async function runAgentTurnInner(
 
   if (mode === "multi_agent") {
     const routing = rec.add({ kind: "route", label: "Router menentukan agent…", status: "running" });
+    const routerCall = usageAcc.meter?.startCall("Router");
     const routed = await routeMessage(engine, userMessage, history, signal);
+    if (routerCall !== undefined) usageAcc.meter?.finishCall(routerCall, routed.usage);
     agentType = routed.agentType;
     meta.routerAgentType = routed.agentType;
     rec.finish(routing, routeStep(agentType, stripThinking(routed.text)));
@@ -203,7 +206,15 @@ export async function runAgentTurnInner(
   let textBeforeNudge = "";
   const rejectedTools = new Set<string>();
   for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-    const { content, usage } = await streamChatCompletion(engine, messages, onToken, signal);
+    const agentCall = usageAcc.meter?.startCall("Agent");
+    const { content, usage } = await streamChatCompletion(
+      engine,
+      messages,
+      onToken,
+      signal,
+      agentCall === undefined ? undefined : () => usageAcc.meter?.tick(agentCall),
+    );
+    if (agentCall !== undefined) usageAcc.meter?.finishCall(agentCall, usage);
     if (usage) {
       usageAcc.hasUsage = true;
       usageAcc.promptTokens += usage.prompt_tokens ?? 0;

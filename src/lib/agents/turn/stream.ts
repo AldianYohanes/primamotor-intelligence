@@ -3,6 +3,7 @@ import { TOOL_STOP_SEQUENCES, visibleStreamText } from "@/src/lib/agents/tool-pr
 import { thinkingOptions } from "@/src/lib/agents/model-options";
 import { getActiveModelId } from "@/src/lib/agents/webllm-engine";
 import { TurnStoppedError, type ChatMessage } from "@/src/lib/agents/turn/types";
+import type { WebLlmUsage } from "@/src/lib/agents/inference-stats";
 
 /** Menghentikan generasi model begitu `signal` dibatalkan; kembalikan fungsi pembersih. */
 export function interruptOnAbort(engine: MLCEngineInterface, signal?: AbortSignal): () => void {
@@ -26,10 +27,7 @@ export function interruptOnAbort(engine: MLCEngineInterface, signal?: AbortSigna
 interface StreamChunkDelta {
   content?: string;
 }
-interface StreamChunkUsage {
-  prompt_tokens?: number;
-  completion_tokens?: number;
-}
+type StreamChunkUsage = WebLlmUsage;
 interface StreamChunk {
   choices: { delta?: StreamChunkDelta }[];
   // Chunk terakhir dari stream OpenAI-compatible (yang ditiru WebLLM) bisa punya
@@ -51,6 +49,8 @@ export async function streamChatCompletion(
   messages: ChatMessage[],
   onToken?: (partialText: string) => void,
   signal?: AbortSignal,
+  /** Dipanggil tiap chunk teks, untuk statistik inferensi (inference-stats.ts). */
+  onChunk?: () => void,
 ): Promise<{
   content: string;
   usage: StreamChunkUsage | null;
@@ -58,7 +58,7 @@ export async function streamChatCompletion(
   if (signal?.aborted) throw new TurnStoppedError();
   const stopListening = interruptOnAbort(engine, signal);
   try {
-    return await consumeStream(engine, messages, onToken, signal);
+    return await consumeStream(engine, messages, onToken, signal, onChunk);
   } finally {
     stopListening();
   }
@@ -69,6 +69,7 @@ async function consumeStream(
   messages: ChatMessage[],
   onToken?: (partialText: string) => void,
   signal?: AbortSignal,
+  onChunk?: () => void,
 ): Promise<{
   content: string;
   usage: StreamChunkUsage | null;
@@ -99,6 +100,7 @@ async function consumeStream(
     const delta = chunk.choices[0]?.delta;
     if (delta?.content) {
       content += delta.content;
+      onChunk?.();
       onToken?.(visibleStreamText(content));
     }
   }

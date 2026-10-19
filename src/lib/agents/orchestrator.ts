@@ -9,6 +9,7 @@ import {
 import { reportAgentExecutionMetric } from "@/src/lib/agents/turn/metrics";
 import { KNOWN_TOOL_NAMES, runAgentTurnInner } from "@/src/lib/agents/turn/agent-loop";
 import { getActiveModelId } from "@/src/lib/agents/webllm-engine";
+import { InferenceMeter, type InferenceSnapshot } from "@/src/lib/agents/inference-stats";
 import {
   readDevicePosition,
   type GeoPoint,
@@ -80,6 +81,8 @@ export async function runAgentTurn(
     onStep?: (steps: ProcessStep[]) => void;
     /** Batalkan untuk menghentikan giliran; runAgentTurn melempar TurnStoppedError. */
     signal?: AbortSignal;
+    /** Statistik inferensi live (waktu, token, kecepatan per panggilan model). */
+    onInference?: (snapshot: InferenceSnapshot) => void;
   } = {},
 ): Promise<AgentTurnResult> {
   const mode = options.mode ?? "multi_agent";
@@ -92,7 +95,8 @@ export async function runAgentTurn(
   const contextLengthAtCall =
     trimHistoryForContext(history).reduce((sum, m) => sum + m.content.length, 0) +
     userMessage.length;
-  const usageAcc = { promptTokens: 0, completionTokens: 0, hasUsage: false };
+  const meter = new InferenceMeter(getActiveModelId(), options.onInference);
+  const usageAcc = { promptTokens: 0, completionTokens: 0, hasUsage: false, meter };
   const modelReplies: string[] = [];
   const rec = new ProcessRecorder(options.onStep);
   const meta: { routerAgentType?: AgentTurnResult["agentType"] } = {};
@@ -124,6 +128,7 @@ export async function runAgentTurn(
       ...(mode === "multi_agent" && meta.routerAgentType && { routerAgentType: meta.routerAgentType }),
       latencyMs,
       processSteps: rec.steps,
+      inferenceStats: meter.snapshot(),
       usage: usageAcc.hasUsage
         ? {
             promptTokens: usageAcc.promptTokens,

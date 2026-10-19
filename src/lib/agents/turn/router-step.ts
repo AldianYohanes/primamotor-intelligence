@@ -7,11 +7,9 @@ import { routerContext } from "@/src/lib/agents/router-context";
 import { CODE_REPLIES } from "@/src/lib/agents/turn/replies";
 import { interruptOnAbort } from "@/src/lib/agents/turn/stream";
 import { TurnStoppedError, type ChatMessage } from "@/src/lib/agents/turn/types";
+import type { WebLlmUsage } from "@/src/lib/agents/inference-stats";
 
-export interface NonStreamUsage {
-  prompt_tokens?: number;
-  completion_tokens?: number;
-}
+export type NonStreamUsage = WebLlmUsage;
 
 export async function routeMessage(
   engine: MLCEngineInterface,
