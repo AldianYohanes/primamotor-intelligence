@@ -22,16 +22,15 @@ import {
   MISSING_TOOL_CALL_FEEDBACK,
   missingToolCallFeedback,
   type ToolSuggestion,
-  TOOL_STOP_SEQUENCES,
   announcesToolCall,
   buildToolInstructions,
   formatToolResponse,
   parseModelReply,
-  visibleStreamText,
 } from "@/src/lib/agents/tool-protocol";
+import { interruptOnAbort, streamChatCompletion } from "@/src/lib/agents/turn/stream";
+import { reportAgentExecutionMetric } from "@/src/lib/agents/turn/metrics";
 import { searchCachedStock } from "@/src/lib/cache/indexeddb";
 import { getActiveModelId } from "@/src/lib/agents/webllm-engine";
-import type { AgentExecutionMetricPayload } from "@/src/lib/agents/metrics-schema";
 import {
   buildLocationChoice,
   locationChoiceMessage,
@@ -115,135 +114,11 @@ export function inferAgentTypeFromTrace(
 
 const MAX_TOOL_ITERATIONS = 4;
 
-/** Menghentikan generasi model begitu `signal` dibatalkan; kembalikan fungsi pembersih. */
-function interruptOnAbort(engine: MLCEngineInterface, signal?: AbortSignal): () => void {
-  if (!signal) return () => {};
-  const onAbort = () => {
-    Promise.resolve(engine.interruptGenerate()).catch(() => {});
-  };
-  signal.addEventListener("abort", onAbort, { once: true });
-  return () => signal.removeEventListener("abort", onAbort);
-}
-
 const AGENT_TOOLS_BY_TYPE: Record<"query" | "transaction" | "off_topic", string[]> = {
   query: ["getStock", "getSalesTrend"],
   transaction: ["getStock", "updateStock", "transferStock"],
   off_topic: [],
 };
-
-/**
- * Bentuk minimal chunk streaming yang benar-benar kita pakai (format delta ala
- * OpenAI). Didefinisikan lokal alih-alih mengimpor tipe persis dari web-llm —
- * `Parameters`/`ReturnType` pada fungsi ber-overload di TypeScript cuma menangkap
- * overload TERAKHIR, jadi hasil `create({ stream: true })` tidak otomatis ke-narrow
- * ke AsyncIterable lewat literal type `stream: true` setelah di-cast. Cast manual
- * ke tipe lokal ini lebih eksplisit dan tidak bergantung pada detail overload itu.
- */
-interface StreamChunkDelta {
-  content?: string;
-}
-interface StreamChunkUsage {
-  prompt_tokens?: number;
-  completion_tokens?: number;
-}
-interface StreamChunk {
-  choices: { delta?: StreamChunkDelta }[];
-  // Chunk terakhir dari stream OpenAI-compatible (yang ditiru WebLLM) bisa punya
-  // `choices: []` + `usage` terisi kalau diminta lewat `stream_options:
-  // { include_usage: true }` di create(). Tidak semua versi runtime WebLLM
-  // menjaminnya, makanya semua pemakaian field ini di bawah dibuat opsional
-  // dengan fallback null — jangan sampai fitur metrics ini bikin chat gagal
-  // total kalau usage ternyata tidak dikirim.
-  usage?: StreamChunkUsage;
-}
-
-/**
- * Konsumsi stream chunk demi chunk. Pemanggilan tool ditulis model sebagai teks
- * (lihat tool-protocol.ts), jadi yang dikirim ke UI lewat onToken hanya bagian
- * yang aman ditampilkan; blok tool call disaring.
- */
-async function streamChatCompletion(
-  engine: MLCEngineInterface,
-  messages: ChatMessage[],
-  onToken?: (partialText: string) => void,
-  signal?: AbortSignal,
-): Promise<{
-  content: string;
-  usage: StreamChunkUsage | null;
-}> {
-  if (signal?.aborted) throw new TurnStoppedError();
-  const stopListening = interruptOnAbort(engine, signal);
-  try {
-    return await consumeStream(engine, messages, onToken, signal);
-  } finally {
-    stopListening();
-  }
-}
-
-async function consumeStream(
-  engine: MLCEngineInterface,
-  messages: ChatMessage[],
-  onToken?: (partialText: string) => void,
-  signal?: AbortSignal,
-): Promise<{
-  content: string;
-  usage: StreamChunkUsage | null;
-}> {
-  // WebLLM mengharapkan union tipe pesan yang didiskriminasi ketat per role (mis.
-  // pesan 'tool' wajib punya tool_call_id, dst) — ChatMessage kita sengaja lebih
-  // longgar (satu shape untuk semua role) supaya gampang dipakai di seluruh modul
-  // chat. Cast ke tipe parameter asli `create()` di sini, satu tempat saja, alih-alih
-  // melonggarkan ChatMessage global atau menaruh @ts-expect-error yang rawan salah
-  // baris tiap kali fungsi ini diedit.
-  type CreateParams = Parameters<typeof engine.chat.completions.create>[0];
-  const stream = (await engine.chat.completions.create({
-    messages,
-    temperature: 0.2,
-    stop: TOOL_STOP_SEQUENCES,
-    stream: true,
-    stream_options: { include_usage: true },
-  } as unknown as CreateParams)) as AsyncIterable<StreamChunk>;
-
-  let content = "";
-  let usage: StreamChunkUsage | null = null;
-
-  for await (const chunk of stream) {
-    if (signal?.aborted) throw new TurnStoppedError(visibleStreamText(content));
-    if (chunk.usage) usage = chunk.usage;
-
-    const delta = chunk.choices[0]?.delta;
-    if (delta?.content) {
-      content += delta.content;
-      onToken?.(visibleStreamText(content));
-    }
-  }
-
-  if (signal?.aborted) throw new TurnStoppedError(visibleStreamText(content));
-
-  // Teks yang disimpan web-llm (stop string dipotong). Streaming tidak menahan
-  // potongan stop string yang terdiri dari beberapa token, jadi `content` bisa
-  // berbeda; riwayat harus identik dengan versi ini agar KV cache dipakai ulang.
-  const stored = await engine.getMessage().catch(() => null);
-  return { content: stored || content, usage };
-}
-
-/**
- * Kirim satu baris metrics ke /api/agent/metrics — fire-and-forget murni.
- * `keepalive: true` supaya request tetap sempat terkirim walau dipanggil pas
- * runAgentTurn sudah resolve dan komponen pemanggil re-render/unmount duluan.
- * Sengaja tidak pernah throw ke pemanggil: kegagalan endpoint metrics adalah
- * masalah observability, bukan alasan untuk mengganggu pengalaman chat staf.
- */
-function reportAgentExecutionMetric(payload: AgentExecutionMetricPayload) {
-  fetch("/api/agent/metrics", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-    keepalive: true,
-  }).catch(() => {
-    // Diamkan — lihat catatan di atas fungsi.
-  });
-}
 
 /**
  * Eksekusi tool memanggil Route Handler kita sendiri (bukan langsung Supabase dari
