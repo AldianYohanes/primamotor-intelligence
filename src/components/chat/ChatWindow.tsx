@@ -49,6 +49,7 @@ import { StockSyncIndicator } from "./StockSyncIndicator";
 import { useStockSyncStore } from "@/src/lib/stores/stock-sync-store";
 import { MutationChoiceCard } from "./MutationChoiceCard";
 import { ProcessDetails } from "./ProcessDetails";
+import { EXAMPLE_QUESTIONS, shouldSubmitOnEnter, turnErrorMessage } from "./chat-ui";
 
 interface Props {
   /** Tenant aktif (bagi super admin bisa tenant lain). */
@@ -210,8 +211,8 @@ export function ChatWindow({
     return () => window.removeEventListener("keydown", onKey);
   }, [isThinking]);
 
-  async function handleSend() {
-    const text = input.trim();
+  async function handleSend(override?: string) {
+    const text = (override ?? input).trim();
     if (!text || !engine || !conversationId || isThinking) return;
 
     setInput("");
@@ -273,7 +274,7 @@ export function ChatWindow({
         ...prev,
         {
           role: "assistant",
-          content: "Maaf, terjadi kesalahan. Coba lagi ya.",
+          content: turnErrorMessage(isOnline),
           // runAgentTurn menandai langkah yang terputus sebagai gagal sebelum melempar error.
           trace: lastSteps,
         },
@@ -490,8 +491,9 @@ export function ChatWindow({
               <button
                 onClick={() => setHistoryOpen(true)}
                 disabled={isThinking || loadingHistory || !isOnline}
-                className="btn btn-secondary rounded-full !text-xs !py-1.5 !px-3"
+                className="btn btn-secondary min-h-10 min-w-10 rounded-full !text-xs !py-1.5 !px-3"
                 title={isOnline ? "Riwayat percakapan" : undefined}
+                aria-label="Riwayat percakapan"
               >
                 <History size={13} />
                 <span className="hidden sm:inline">Riwayat</span>
@@ -501,8 +503,9 @@ export function ChatWindow({
               <button
                 onClick={handleNewConversation}
                 disabled={isThinking || !engine || !isOnline}
-                className="btn btn-secondary rounded-full !text-xs !py-1.5 !px-3"
+                className="btn btn-secondary min-h-10 min-w-10 rounded-full !text-xs !py-1.5 !px-3"
                 title={isOnline ? "Percakapan baru" : undefined}
+                aria-label="Percakapan baru"
               >
                 <Plus size={13} />
                 <span className="hidden sm:inline">Percakapan Baru</span>
@@ -527,7 +530,13 @@ export function ChatWindow({
         </div>
       )}
 
-      <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-4">
+      <div
+        ref={scrollRef}
+        role="log"
+        aria-live="polite"
+        aria-label="Percakapan dengan asisten"
+        className="flex-1 space-y-3 overflow-y-auto p-4"
+      >
         {loadingHistory && (
           <p className="mt-8 text-center text-sm text-slate-400">
             Memuat riwayat percakapan…
@@ -538,10 +547,21 @@ export function ChatWindow({
             <div className="mx-auto mb-3 flex h-9 w-9 items-center justify-center rounded-full bg-brand-50 text-brand-600">
               <Send size={15} />
             </div>
-            <p className="text-sm text-slate-400">
-              Coba tanya: &quot;ada radiator 240 gak?&quot; atau &quot;masuk
-              barang 10 pcs filter oli&quot;
-            </p>
+            <p className="text-sm font-medium text-slate-600">Mau cek atau catat apa?</p>
+            <p className="mt-1 text-xs text-slate-400">Ketuk salah satu contoh, atau ketik sendiri.</p>
+            <div className="mt-3 flex flex-col gap-2">
+              {EXAMPLE_QUESTIONS.map((q) => (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => handleSend(q)}
+                  disabled={isThinking || !conversationId}
+                  className="btn btn-secondary min-h-11 justify-start !whitespace-normal rounded-xl text-left"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
           </div>
         )}
         {messages.map((m, i) => (
@@ -567,7 +587,7 @@ export function ChatWindow({
                 message={{ role: "assistant", content: draftText }}
               />
             )}
-            <div className="mt-1 flex items-center gap-1.5 px-1 text-xs text-slate-400">
+            <div role="status" className="mt-1 flex items-center gap-1.5 px-1 text-xs text-slate-500">
               <span className="flex gap-0.5">
                 <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300 [animation-delay:-0.3s]" />
                 <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300 [animation-delay:-0.15s]" />
@@ -580,30 +600,35 @@ export function ChatWindow({
         )}
       </div>
 
-      <div className="border-t border-slate-200 bg-white p-3">
+      <div className="border-t border-slate-200 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="flex gap-2">
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSend()}
+            onKeyDown={(e) => shouldSubmitOnEnter(e.nativeEvent) && handleSend()}
             placeholder={engine ? "Ketik pesan…" : "Asisten AI belum siap…"}
+            aria-label="Pesan untuk asisten"
+            enterKeyHint="send"
+            autoComplete="off"
             disabled={!engine}
-            className="field-input flex-1 rounded-full"
+            className="field-input min-h-11 flex-1 rounded-full !text-base sm:!text-sm"
           />
           {isThinking ? (
             <button
               onClick={handleStop}
-              className="btn btn-secondary rounded-full px-5"
+              className="btn btn-secondary min-h-11 rounded-full px-5"
               title="Hentikan (Esc)"
+              aria-label="Hentikan jawaban"
             >
               <Square size={14} />
               Stop
             </button>
           ) : (
             <button
-              onClick={handleSend}
-              disabled={!engine}
-              className="btn btn-primary rounded-full px-5"
+              onClick={() => handleSend()}
+              disabled={!engine || !input.trim()}
+              aria-label="Kirim pesan"
+              className="btn btn-primary min-h-11 rounded-full px-5"
             >
               <Send size={14} />
               Kirim
