@@ -17,6 +17,8 @@ import { formatRupiah } from "./utils/utils";
 export function DashboardSummaryModule() {
   const [rangeDays, setRangeDays] = useState<7 | 30>(7);
   const { summary, isLoading, error } = useGetDashboardSummary(rangeDays);
+  // Kalau gagal, tampilkan "-" (bukan skeleton yang berputar selamanya).
+  const kpi = (v: string | undefined) => (error ? "-" : (v ?? null));
 
   return (
     <div className="space-y-4">
@@ -24,32 +26,41 @@ export function DashboardSummaryModule() {
         <KpiCard
           icon={Wallet}
           label="Pendapatan Hari Ini"
-          value={summary ? summary.todayRevenueFormatted : null}
-          isLoading={isLoading}
+          value={kpi(summary?.todayRevenueFormatted)}
+          isLoading={isLoading && !error}
           tone="emerald"
         />
         <KpiCard
           icon={Receipt}
           label="Transaksi Hari Ini"
-          value={summary ? String(summary.todayTransactionCount) : null}
-          isLoading={isLoading}
+          value={kpi(summary ? String(summary.todayTransactionCount) : undefined)}
+          isLoading={isLoading && !error}
           tone="blue"
         />
         <KpiCard
           icon={Clock}
           label="Shift Aktif Sekarang"
-          value={summary ? String(summary.activeShiftCount) : null}
-          isLoading={isLoading}
+          value={kpi(summary ? String(summary.activeShiftCount) : undefined)}
+          isLoading={isLoading && !error}
           tone={summary && summary.activeShiftCount > 0 ? "emerald" : "amber"}
         />
       </div>
 
       <div className="card p-5">
         <div className="flex items-center justify-between">
-          <h2 className="text-[13px] font-semibold uppercase tracking-wide text-slate-500">
-            Tren Pendapatan
-          </h2>
-          <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-0.5">
+          <div>
+            <h2 className="text-[13px] font-semibold uppercase tracking-wide text-slate-500">
+              Tren Pendapatan
+            </h2>
+            <p className="text-xs text-slate-400">
+              Per hari, dari nota POS yang selesai (tidak termasuk nota batal).
+            </p>
+          </div>
+          <div
+            role="group"
+            aria-label="Rentang tren"
+            className="flex items-center gap-1 rounded-lg bg-slate-100 p-0.5"
+          >
             <RangeButton active={rangeDays === 7} onClick={() => setRangeDays(7)}>
               7 Hari
             </RangeButton>
@@ -60,7 +71,7 @@ export function DashboardSummaryModule() {
         </div>
 
         {error && (
-          <p className="mt-4 text-sm text-red-500">
+          <p className="mt-4 text-sm text-red-500" role="alert">
             Gagal memuat data tren: {error.message}
           </p>
         )}
@@ -76,7 +87,13 @@ export function DashboardSummaryModule() {
         )}
 
         {!error && !isLoading && summary && summary.trend.some((p) => p.revenue > 0) && (
-          <div className="mt-4 h-64">
+          <div
+            className="mt-4 h-64"
+            role="img"
+            aria-label={`Grafik area pendapatan harian ${rangeDays} hari terakhir. Total ${formatRupiah(
+              summary.trend.reduce((a, p) => a + p.revenue, 0),
+            )}.`}
+          >
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={summary.trend} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
                 <defs>
@@ -138,8 +155,10 @@ function RangeButton({
 }) {
   return (
     <button
+      type="button"
+      aria-pressed={active}
       onClick={onClick}
-      className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+      className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
         active ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
       }`}
     >

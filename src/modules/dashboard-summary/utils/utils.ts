@@ -16,3 +16,19 @@ export function formatDayLabel(dateStr: string): string {
     month: "short",
   });
 }
+
+// monthKey formatnya 'YYYY-MM'. Sama seperti formatDayLabel, dibangun manual
+// supaya tidak digeser timezone browser.
+export function formatMonthLabel(monthKey: string): string {
+  const [y, m] = monthKey.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString("id-ID", {
+    month: "short",
+    year: "2-digit",
+  });
+}
+
+export function formatRupiahShort(v: number): string {
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1).replace(".0", "")}jt`;
+  if (v >= 1000) return `${Math.round(v / 1000)}rb`;
+  return String(v);
+}

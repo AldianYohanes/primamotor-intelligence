@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { logger } from "@/src/lib/logging/logger";
 import { requireStaffRow } from "@/src/lib/auth/staff-context";
+import { WIB_OFFSET_MS } from "@/src/modules/dashboard-summary/utils/overview";
 
 // Agregasi dilakukan di TS (bukan RPC Postgres baru) — data POS baru mulai
 // terisi sejak migration 0025, volume per tenant di skala thesis ini masih
@@ -33,9 +34,14 @@ export async function GET(req: NextRequest) {
   // Ambil cukup jauh ke belakang untuk cover kebutuhan chart 7/30 hari
   // sekaligus (client bisa slice ke 7 hari terakhir tanpa request ulang),
   // tapi query cuma sekali per param `days` yang diminta.
-  const since = new Date();
-  since.setHours(0, 0, 0, 0);
-  since.setDate(since.getDate() - (days - 1));
+  // Hari dihitung menurut WIB (zona waktu toko), bukan zona server: nota
+  // sebelum jam 07.00 WIB tidak lagi masuk ke hari sebelumnya, dan hasilnya
+  // sama di server UTC maupun laptop dev berzona WIB.
+  const nowWib = new Date(Date.now() + WIB_OFFSET_MS);
+  const sinceWib = new Date(
+    Date.UTC(nowWib.getUTCFullYear(), nowWib.getUTCMonth(), nowWib.getUTCDate() - (days - 1)),
+  );
+  const since = new Date(sinceWib.getTime() - WIB_OFFSET_MS);
 
   const [salesResult, openShiftsResult] = await Promise.all([
     supabase
@@ -76,22 +82,21 @@ export async function GET(req: NextRequest) {
 
   const sales = salesResult.data ?? [];
 
-  // Bucket per hari (format YYYY-MM-DD berbasis waktu server/UTC — konsisten
-  // dengan `created_at` yang disimpan sebagai timestamptz tanpa konversi
-  // timezone eksplisit di tempat lain di codebase ini, mis. shift report).
+  // Bucket per hari (format YYYY-MM-DD menurut WIB).
+  const dayKey = (iso: string) =>
+    new Date(new Date(iso).getTime() + WIB_OFFSET_MS).toISOString().slice(0, 10);
   const dailyMap = new Map<string, { revenue: number; count: number }>();
   for (let i = 0; i < days; i++) {
-    const d = new Date(since);
-    d.setDate(since.getDate() + i);
+    const d = new Date(sinceWib.getTime() + i * 24 * 60 * 60 * 1000);
     dailyMap.set(d.toISOString().slice(0, 10), { revenue: 0, count: 0 });
   }
 
-  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayKey = nowWib.toISOString().slice(0, 10);
   let todayRevenue = 0;
   let todayCount = 0;
 
   for (const sale of sales) {
-    const key = sale.created_at.slice(0, 10);
+    const key = dayKey(sale.created_at);
     const bucket = dailyMap.get(key);
     if (bucket) {
       bucket.revenue += sale.total_amount;
