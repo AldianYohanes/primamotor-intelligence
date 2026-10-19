@@ -20,6 +20,7 @@ import {
   buildToolInstructions,
   formatToolResponse,
   parseModelReply,
+  stripThinking,
 } from "@/src/lib/agents/tool-protocol";
 import { streamChatCompletion } from "@/src/lib/agents/turn/stream";
 import {
@@ -117,7 +118,7 @@ export async function runAgentTurnInner(
     const routed = await routeMessage(engine, userMessage, history, signal);
     agentType = routed.agentType;
     meta.routerAgentType = routed.agentType;
-    rec.finish(routing, routeStep(agentType, routed.text));
+    rec.finish(routing, routeStep(agentType, stripThinking(routed.text)));
     // Pengaman kode: pesan yang jelas berisi pencatatan barang tidak boleh berhenti
     // di Query Agent karena Router salah menebak (T-10).
     const guarded = guardRoute(agentType, userMessage);
@@ -211,6 +212,8 @@ export async function runAgentTurnInner(
 
     modelReplies.push(content);
     const reply = parseModelReply(content);
+    // Teks tampil/cek tanpa blok <think>; `content` mentah tetap dipakai untuk riwayat.
+    const shownContent = stripThinking(content);
     // Model kecil kadang menulis JSON tool call yang rusak; beri satu kesempatan
     // memperbaiki selama masih ada sisa iterasi, alih-alih langsung menyerah.
     if (reply.calls.length === 0 && reply.malformed && i < MAX_TOOL_ITERATIONS - 1) {
@@ -232,7 +235,7 @@ export async function runAgentTurnInner(
       i < MAX_TOOL_ITERATIONS - 1
     ) {
       nudgedMissingCall = true;
-      textBeforeNudge = (reply.text || content).trim();
+      textBeforeNudge = (reply.text || shownContent).trim();
       messages.push({ role: "assistant", content });
       messages.push({ role: "user", content: MISSING_TOOL_CALL_FEEDBACK });
       rec.add(retryStep("missing_call"));
@@ -244,10 +247,10 @@ export async function runAgentTurnInner(
       !nudgedMissingCall &&
       toolTrace.length === 0 &&
       i < MAX_TOOL_ITERATIONS - 1 &&
-      announcesToolCall(reply.text || content)
+      announcesToolCall(reply.text || shownContent)
     ) {
       nudgedMissingCall = true;
-      textBeforeNudge = (reply.text || content).trim();
+      textBeforeNudge = (reply.text || shownContent).trim();
       messages.push({ role: "assistant", content });
       messages.push({ role: "user", content: missingToolCallFeedback(suggestedNext) });
       rec.add(retryStep("missing_call"));
@@ -282,7 +285,7 @@ export async function runAgentTurnInner(
       reply.calls.length === 0 &&
       toolTrace.length > 0 &&
       !staffMentionsPin(userMessage) &&
-      mentionsPinConfirmation(reply.text || content, pinProductNames);
+      mentionsPinConfirmation(reply.text || shownContent, pinProductNames);
     if (readOnlyPin) readOnlyPinSeen = true;
     if (readOnlyPin && !nudgedReadOnlyPin && i < MAX_TOOL_ITERATIONS - 1) {
       nudgedReadOnlyPin = true;

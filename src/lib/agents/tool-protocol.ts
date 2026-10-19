@@ -164,7 +164,19 @@ function parseJsonCalls(raw: string, lenient = false): ParsedToolCall[] | null {
   return repaired ? callsFromJson(repaired) : null;
 }
 
-export function parseModelReply(content: string): ParsedReply {
+/**
+ * Buang teks "berpikir" model (Qwen3, DeepSeek-R1 dsb.): blok <think>…</think>, atau
+ * <think> tanpa penutup sampai akhir (model kehabisan token / berhenti di stop
+ * sequence sebelum menjawab). Teks ini bukan jawaban dan sering menyebut kata
+ * seperti "transaction" atau nama alat, jadi tidak boleh ikut dibaca Router,
+ * parser tool call, atau ditampilkan ke staf.
+ */
+export function stripThinking(content: string): string {
+  return content.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/<think>[\s\S]*$/i, "").replace(/^\s*<\/think>/i, "");
+}
+
+export function parseModelReply(rawContent: string): ParsedReply {
+  const content = stripThinking(rawContent);
   const calls: ParsedToolCall[] = [];
   let malformed = false;
   let text = "";
@@ -235,7 +247,9 @@ function findEmbeddedCalls(content: string): ParsedToolCall[] {
  * tahan keluaran yang tampak seperti awal JSON/tag supaya markup tidak sempat
  * muncul di layar staf.
  */
-export function visibleStreamText(content: string): string {
+export function visibleStreamText(rawContent: string): string {
+  // Selama blok <think> belum ditutup, semuanya disembunyikan.
+  const content = stripThinking(rawContent);
   const cut = content.indexOf("<tool_call");
   let visible = cut === -1 ? content : content.slice(0, cut);
   for (let n = Math.min(OPEN.length - 1, visible.length); n > 0; n--) {
@@ -245,6 +259,8 @@ export function visibleStreamText(content: string): string {
     }
   }
   const head = visible.trimStart();
+  // Awalan "<think>" yang belum lengkap ("<thi") ditahan seperti awalan <tool_call>.
+  if (head.length > 0 && "<think>".startsWith(head.toLowerCase())) return "";
   if (head.startsWith("{") || head.startsWith("[") || head.startsWith("```")) return "";
   return visible;
 }

@@ -21,3 +21,12 @@ export const MODEL_OPTIONS = [
   { id: "Hermes-2-Pro-Mistral-7B-q4f16_1-MLC", label: "Hermes 2 Pro Mistral 7B", vramMB: 4033 },
   { id: "Hermes-3-Llama-3.1-8B-q4f16_1-MLC", label: "Hermes 3 Llama 3.1 8B", vramMB: 4876 },
 ] as const;
+
+/**
+ * Opsi WebLLM untuk mematikan mode berpikir. Hanya model Qwen3 yang mengenalnya
+ * (di model lain WebLLM tidak memeriksa, tapi menyisipkan tag <think> kosong).
+ * Teks <think> yang tetap muncul dibuang oleh stripThinking (tool-protocol.ts).
+ */
+export function thinkingOptions(modelId: string): { extra_body?: { enable_thinking: false } } {
+  return /qwen3/i.test(modelId) ? { extra_body: { enable_thinking: false } } : {};
+}

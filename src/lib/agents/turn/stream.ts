@@ -1,5 +1,7 @@
 import type { MLCEngineInterface } from "@mlc-ai/web-llm";
 import { TOOL_STOP_SEQUENCES, visibleStreamText } from "@/src/lib/agents/tool-protocol";
+import { thinkingOptions } from "@/src/lib/agents/model-options";
+import { getActiveModelId } from "@/src/lib/agents/webllm-engine";
 import { TurnStoppedError, type ChatMessage } from "@/src/lib/agents/turn/types";
 
 /** Menghentikan generasi model begitu `signal` dibatalkan; kembalikan fungsi pembersih. */
@@ -84,6 +86,7 @@ async function consumeStream(
     stop: TOOL_STOP_SEQUENCES,
     stream: true,
     stream_options: { include_usage: true },
+    ...thinkingOptions(getActiveModelId()),
   } as unknown as CreateParams)) as AsyncIterable<StreamChunk>;
 
   let content = "";

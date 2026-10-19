@@ -1,6 +1,8 @@
 import type { MLCEngineInterface } from "@mlc-ai/web-llm";
 import { ROUTER_SYSTEM_PROMPT, buildRouterInput, parseRouterReply } from "@/src/lib/agents/prompts/router";
 import { normalizeShorthand } from "@/src/lib/agents/normalize-shorthand";
+import { thinkingOptions } from "@/src/lib/agents/model-options";
+import { getActiveModelId } from "@/src/lib/agents/webllm-engine";
 import { routerContext } from "@/src/lib/agents/router-context";
 import { CODE_REPLIES } from "@/src/lib/agents/turn/replies";
 import { interruptOnAbort } from "@/src/lib/agents/turn/stream";
@@ -34,6 +36,7 @@ export async function routeMessage(
         { role: "user", content: buildRouterInput(normalizeShorthand(userMessage), lastAssistant) },
       ],
       temperature: 0,
+      ...thinkingOptions(getActiveModelId()),
     });
   } finally {
     stopListening();

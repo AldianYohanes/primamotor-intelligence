@@ -3,7 +3,7 @@ import { cacheNoteFor } from "@/src/lib/agents/offline-answers";
 import { claimsRecorded, contradictsStock, stockReply, summarizeStock } from "@/src/lib/agents/stock-summary";
 import { contradictsTrend, summarizeTrend, trendReply } from "@/src/lib/agents/trend-summary";
 import { ProcessRecorder, answerStep } from "@/src/lib/agents/process-trace";
-import type { ParsedReply } from "@/src/lib/agents/tool-protocol";
+import { stripThinking, type ParsedReply } from "@/src/lib/agents/tool-protocol";
 import type { AgentTurnResult } from "@/src/lib/agents/turn/types";
 
 /**
@@ -40,7 +40,7 @@ export function composeFinalAnswer({
   }
   // Balasan kosong (Run 19, S-03 single: model diam sesudah diingatkan) tidak
   // boleh sampai ke staf sebagai pesan kosong.
-  const rawText = (reply.text || (reply.malformed ? "" : content)).trim();
+  const rawText = (reply.text || (reply.malformed ? "" : stripThinking(content))).trim();
   const modelText = (readOnlyPin ? dropPinSentences(rawText, pinProductNames) : rawText) || textBeforeNudge;
   // Jawaban dari cache offline selalu diberi keterangan oleh kode (model sering lupa).
   const cacheNote = modelText ? cacheNoteFor(toolTrace) : null;
