@@ -155,6 +155,8 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   const [gpuPrefChanged, setGpuPrefChanged] = useState(false);
   const [savedRun, setSavedRun] = useState<SavedRun | null>(null);
   const [interruptions, setInterruptions] = useState<Interruption[]>([]);
+  // Modal besar saat run berhenti karena error, supaya terlihat dari jauh (bukan hanya teks status).
+  const [errorModal, setErrorModal] = useState<{ kind: "gpu" | "error"; message: string; during: string; at: string } | null>(null);
   const [progress, setProgress] = useState<{
     done: number;
     total: number;
@@ -390,6 +392,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
     setRows([...collected]);
     setStoppedReason(null);
     setInterruptions(interruptions);
+    setErrorModal(null);
     let during = "persiapan";
     setStartedAt(runStartedAt);
     let stop: Interruption | null = null;
@@ -561,6 +564,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         at: new Date().toISOString(),
       };
       setStoppedReason(stop);
+      if (stop.kind !== "stopped") setErrorModal({ kind: stop.kind, message, during, at: stop.at });
       interruptions.push(stop);
       setInterruptions([...interruptions]);
       persist();
@@ -991,6 +995,34 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             </tbody>
           </table>
         </section>
+      )}
+      {errorModal && (
+        <div role="alertdialog" aria-modal="true" aria-labelledby="eval-error-title" className="fixed inset-0 z-50 flex items-center justify-center bg-red-700/95 p-4">
+          <div className="w-full max-w-3xl space-y-5 text-center text-white">
+            <p id="eval-error-title" className="text-4xl font-bold sm:text-6xl">
+              {errorModal.kind === "gpu" ? "ERROR GPU" : "EVALUASI BERHENTI"}
+            </p>
+            <p className="text-xl sm:text-2xl">
+              Saat {errorModal.during} · {new Date(errorModal.at).toLocaleTimeString("id-ID")}
+              {progress && ` · ${progress.done}/${progress.total} eksekusi selesai`}
+            </p>
+            <p className="break-words text-sm opacity-90">{errorModal.message.slice(0, 300)}</p>
+            <p className="text-base">
+              Hasil sejauh ini tersimpan dan sudah diunduh.{" "}
+              {errorModal.kind === "gpu" ? "Muat ulang halaman, lalu klik \"Lanjutkan run\"." : "Klik \"Lanjutkan run\" setelah masalahnya beres."}
+            </p>
+            <div className="flex flex-wrap justify-center gap-3">
+              {errorModal.kind === "gpu" && (
+                <button className="rounded-lg bg-white px-5 py-3 text-lg font-semibold text-red-700" onClick={() => window.location.reload()}>
+                  Muat ulang halaman
+                </button>
+              )}
+              <button className="rounded-lg border-2 border-white px-5 py-3 text-lg font-semibold text-white" onClick={() => setErrorModal(null)}>
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   );
