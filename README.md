@@ -52,6 +52,12 @@ Skenario uji ada di `src/lib/eval/scenarios.json`. Laporan dari hasil ekspor:
 bun scripts/eval-report.ts <hasil.json> --out <folder>
 ```
 
+Bandingkan dua run per skenario (pulih, turun, McNemar, per kelompok skenario):
+
+```bash
+bun scripts/eval-compare.ts <sebelum.json> <sesudah.json> --out banding.md
+```
+
 ## Test
 
 ```bash
