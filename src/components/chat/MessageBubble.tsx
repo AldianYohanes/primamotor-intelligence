@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import type { StoredChatMessage } from "@/src/lib/agents/conversation";
 import { ProcessDetails } from "./ProcessDetails";
+import { InferenceSummary } from "./InferenceStats";
 
 export function MessageBubble({ message }: { message: StoredChatMessage }) {
   if (message.role === "tool" || message.role === "system") return null;
@@ -18,6 +19,9 @@ export function MessageBubble({ message }: { message: StoredChatMessage }) {
       >
         {message.content}
       </div>
+      {!isUser && message.inference && (
+        <InferenceSummary snapshot={message.inference.snapshot} totalMs={message.inference.totalMs} />
+      )}
       {!isUser && message.trace && <ProcessDetails steps={message.trace} />}
     </div>
   );

@@ -44,6 +44,8 @@ import {
 import { ConversationHistoryPanel } from "./ConversationHistoryPanel";
 import { EnableNotificationsBanner } from "./EnableNotificationsBanner";
 import { MessageBubble } from "./MessageBubble";
+import { LiveInferenceStats } from "./InferenceStats";
+import type { InferenceSnapshot } from "@/src/lib/agents/inference-stats";
 import { CANCELLED_MESSAGE, PinConfirmDialog } from "./PinConfirmDialog";
 import { StockSyncIndicator } from "./StockSyncIndicator";
 import { useStockSyncStore } from "@/src/lib/stores/stock-sync-store";
@@ -95,6 +97,9 @@ export function ChatWindow({
   const [draftText, setDraftText] = useState("");
   // Langkah "Lihat proses" giliran yang sedang berjalan (live).
   const [liveSteps, setLiveSteps] = useState<ProcessStep[]>([]);
+  // Stopwatch dan statistik model giliran yang sedang berjalan.
+  const [turnStartedAt, setTurnStartedAt] = useState(0);
+  const [liveInference, setLiveInference] = useState<InferenceSnapshot | null>(null);
   const [pendingConfirmation, setPendingConfirmation] =
     useState<PendingConfirmation | null>(null);
   const [mutationChoice, setMutationChoice] = useState<MutationChoice | null>(null);
@@ -227,8 +232,14 @@ export function ChatWindow({
     stopRef.current = controller;
     setDraftText("");
     setLiveSteps([]);
+    const startedAt = Date.now();
+    setTurnStartedAt(startedAt);
+    setLiveInference(null);
     // Salinan terakhir dari onStep, dipakai bila giliran gagal di tengah jalan.
     let lastSteps: ProcessStep[] = [];
+    let lastInference: InferenceSnapshot | null = null;
+    const inferenceOf = () =>
+      lastInference ? { inference: { snapshot: lastInference, totalMs: Date.now() - startedAt } } : {};
 
     try {
       const result = await runAgentTurn(
@@ -244,13 +255,19 @@ export function ChatWindow({
             lastSteps = steps;
             setLiveSteps(steps);
           },
+          onInference: (snapshot) => {
+            lastInference = snapshot;
+            setLiveInference(snapshot);
+          },
         },
       );
+      lastInference = result.inferenceStats ?? lastInference;
       const trace = result.processSteps ?? [];
       const assistantMsg: StoredChatMessage = {
         role: "assistant",
         content: result.assistantText,
         trace,
+        ...inferenceOf(),
       };
       setMessages((prev) => [...prev, assistantMsg]);
       persistMessage("assistant", result.assistantText, result.agentType, trace);
@@ -265,7 +282,7 @@ export function ChatWindow({
       if (err instanceof TurnStoppedError) {
         const partial = err.partialText.trim();
         const content = partial ? `${partial}\n\n(dihentikan)` : "Dihentikan.";
-        setMessages((prev) => [...prev, { role: "assistant", content, trace: lastSteps }]);
+        setMessages((prev) => [...prev, { role: "assistant", content, trace: lastSteps, ...inferenceOf() }]);
         persistMessage("assistant", content, undefined, lastSteps);
         return;
       }
@@ -285,6 +302,7 @@ export function ChatWindow({
       setIsThinking(false);
       setDraftText("");
       setLiveSteps([]);
+      setLiveInference(null);
     }
   }
 
@@ -595,6 +613,7 @@ export function ChatWindow({
               </span>
               {liveStatusLabel(liveSteps)}
             </div>
+            <LiveInferenceStats snapshot={liveInference} startedAt={turnStartedAt} />
             <ProcessDetails steps={liveSteps} live />
           </div>
         )}

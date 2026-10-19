@@ -7,6 +7,8 @@ import { isWebGPUAvailable } from "@/src/lib/agents/webgpu-support";
 import { MODEL_ID, MODEL_OPTIONS } from "@/src/lib/agents/model-options";
 import type { AgentMode, ProcessStep } from "@/src/lib/agents/orchestrator";
 import { ProcessTimeline } from "@/src/components/chat/ProcessDetails";
+import { LiveInferenceStats } from "@/src/components/chat/InferenceStats";
+import type { InferenceSnapshot } from "@/src/lib/agents/inference-stats";
 import scenarioFile from "@/src/lib/eval/scenarios.json";
 import { scoreScenario, stockKey, summarize, toCsv, type ModeSummary } from "@/src/lib/eval/scoring";
 import {
@@ -153,6 +155,10 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   const [alertsOn, setAlertsOn] = useState(true);
   const [notifPermission, setNotifPermission] = useState<ReturnType<typeof notificationPermission>>("default");
   const [liveSteps, setLiveSteps] = useState<ProcessStep[]>([]);
+  const [liveInference, setLiveInference] = useState<{ snapshot: InferenceSnapshot | null; startedAt: number }>({
+    snapshot: null,
+    startedAt: 0,
+  });
   const [prefillChunk, setPrefillChunk] = useState<number | null>(null);
   const [padPrompt, setPadPrompt] = useState(false);
   // Opsi ablasi selalu mulai mati di setiap kunjungan halaman.
@@ -514,6 +520,19 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         };
         let observation: Observation;
         setLiveSteps([]);
+        const scenarioStartedAt = Date.now();
+        setLiveInference({ snapshot: null, startedAt: scenarioStartedAt });
+        // Maksimal 2 render per detik supaya tampilan statistik tidak menambah beban
+        // selama skenario diukur (sebelumnya halaman ini tidak render per token).
+        let lastInferenceRender = 0;
+        let lastCallCount = 0;
+        const onInference = (snapshot: InferenceSnapshot) => {
+          const now = Date.now();
+          if (now - lastInferenceRender < 500 && snapshot.calls.length === lastCallCount && snapshot.calls.at(-1)?.status === "running") return;
+          lastInferenceRender = now;
+          lastCallCount = snapshot.calls.length;
+          setLiveInference({ snapshot, startedAt: scenarioStartedAt });
+        };
         try {
           const conversationId = await createConversation(mode);
           const result = await guard(
@@ -521,6 +540,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
               mode,
               getDevicePosition: fixedDevicePosition,
               onStep: setLiveSteps,
+              onInference,
               signal: controller.signal,
             }),
           );
@@ -953,6 +973,9 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             <p className="text-xs text-slate-500">Asisten sedang berpikir…</p>
           ) : (
             <ProcessTimeline steps={liveSteps} />
+          )}
+          {liveInference.startedAt > 0 && (
+            <LiveInferenceStats snapshot={liveInference.snapshot} startedAt={liveInference.startedAt} />
           )}
         </section>
       )}
