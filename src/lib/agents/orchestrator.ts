@@ -17,9 +17,11 @@ import {
   buildToolInstructions,
   formatToolResponse,
   parseModelReply,
+  stripThinking,
   visibleStreamText,
 } from "@/src/lib/agents/tool-protocol";
 import { searchCachedStock } from "@/src/lib/cache/indexeddb";
+import { thinkingOptions } from "@/src/lib/agents/model-options";
 import { getActiveModelId } from "@/src/lib/agents/webllm-engine";
 import type { AgentExecutionMetricPayload } from "@/src/lib/agents/metrics-schema";
 import {
@@ -243,6 +245,7 @@ async function consumeStream(
     stop: TOOL_STOP_SEQUENCES,
     stream: true,
     stream_options: { include_usage: true },
+    ...thinkingOptions(getActiveModelId()),
   } as unknown as CreateParams)) as AsyncIterable<StreamChunk>;
 
   let content = "";
@@ -773,6 +776,7 @@ async function routeMessage(
         { role: "user", content: buildRouterInput(normalizeShorthand(userMessage), lastAssistant) },
       ],
       temperature: 0,
+      ...thinkingOptions(getActiveModelId()),
     });
   } finally {
     stopListening();
@@ -817,7 +821,7 @@ async function runAgentTurnInner(
     const routed = await routeMessage(engine, userMessage, history, signal);
     agentType = routed.agentType;
     meta.routerAgentType = routed.agentType;
-    rec.finish(routing, routeStep(agentType, routed.text));
+    rec.finish(routing, routeStep(agentType, stripThinking(routed.text)));
     // Pengaman kode: pesan yang jelas berisi pencatatan barang tidak boleh berhenti
     // di Query Agent karena Router salah menebak (T-10).
     const guarded = guardRoute(agentType, userMessage);
@@ -911,6 +915,8 @@ async function runAgentTurnInner(
 
     modelReplies.push(content);
     const reply = parseModelReply(content);
+    // Teks tampil/cek tanpa blok <think>; `content` mentah tetap dipakai untuk riwayat.
+    const shownContent = stripThinking(content);
     // Model kecil kadang menulis JSON tool call yang rusak; beri satu kesempatan
     // memperbaiki selama masih ada sisa iterasi, alih-alih langsung menyerah.
     if (reply.calls.length === 0 && reply.malformed && i < MAX_TOOL_ITERATIONS - 1) {
@@ -932,7 +938,7 @@ async function runAgentTurnInner(
       i < MAX_TOOL_ITERATIONS - 1
     ) {
       nudgedMissingCall = true;
-      textBeforeNudge = (reply.text || content).trim();
+      textBeforeNudge = (reply.text || shownContent).trim();
       messages.push({ role: "assistant", content });
       messages.push({ role: "user", content: MISSING_TOOL_CALL_FEEDBACK });
       rec.add(retryStep("missing_call"));
@@ -944,10 +950,10 @@ async function runAgentTurnInner(
       !nudgedMissingCall &&
       toolTrace.length === 0 &&
       i < MAX_TOOL_ITERATIONS - 1 &&
-      announcesToolCall(reply.text || content)
+      announcesToolCall(reply.text || shownContent)
     ) {
       nudgedMissingCall = true;
-      textBeforeNudge = (reply.text || content).trim();
+      textBeforeNudge = (reply.text || shownContent).trim();
       messages.push({ role: "assistant", content });
       messages.push({ role: "user", content: missingToolCallFeedback(suggestedNext) });
       rec.add(retryStep("missing_call"));
@@ -982,7 +988,7 @@ async function runAgentTurnInner(
       reply.calls.length === 0 &&
       toolTrace.length > 0 &&
       !staffMentionsPin(userMessage) &&
-      mentionsPinConfirmation(reply.text || content, pinProductNames);
+      mentionsPinConfirmation(reply.text || shownContent, pinProductNames);
     if (readOnlyPin) readOnlyPinSeen = true;
     if (readOnlyPin && !nudgedReadOnlyPin && i < MAX_TOOL_ITERATIONS - 1) {
       nudgedReadOnlyPin = true;
@@ -1001,7 +1007,7 @@ async function runAgentTurnInner(
       }
       // Balasan kosong (Run 19, S-03 single: model diam sesudah diingatkan) tidak
       // boleh sampai ke staf sebagai pesan kosong.
-      const rawText = (reply.text || (reply.malformed ? "" : content)).trim();
+      const rawText = (reply.text || (reply.malformed ? "" : shownContent)).trim();
       const modelText = (readOnlyPin ? dropPinSentences(rawText, pinProductNames) : rawText) || textBeforeNudge;
       // Jawaban dari cache offline selalu diberi keterangan oleh kode (model sering lupa).
       const cacheNote = modelText ? cacheNoteFor(toolTrace) : null;
