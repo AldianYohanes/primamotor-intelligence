@@ -7,7 +7,7 @@ import { isWebGPUAvailable } from "@/src/lib/agents/webgpu-support";
 import { MODEL_ID, MODEL_OPTIONS } from "@/src/lib/agents/model-options";
 import type { AgentMode, ProcessStep } from "@/src/lib/agents/orchestrator";
 import { ProcessTimeline } from "@/src/components/chat/ProcessDetails";
-import { LiveInferenceStats } from "@/src/components/chat/InferenceStats";
+import { InferenceStatsButton, LiveInferenceLine, type TurnRecord } from "@/src/components/chat/InferenceStats";
 import type { InferenceSnapshot } from "@/src/lib/agents/inference-stats";
 import scenarioFile from "@/src/lib/eval/scenarios.json";
 import { scoreScenario, stockKey, summarize, toCsv, type ModeSummary } from "@/src/lib/eval/scoring";
@@ -155,10 +155,8 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   const [alertsOn, setAlertsOn] = useState(true);
   const [notifPermission, setNotifPermission] = useState<ReturnType<typeof notificationPermission>>("default");
   const [liveSteps, setLiveSteps] = useState<ProcessStep[]>([]);
-  const [liveInference, setLiveInference] = useState<{ snapshot: InferenceSnapshot | null; startedAt: number }>({
-    snapshot: null,
-    startedAt: 0,
-  });
+  // Statistik model skenario terakhir (maks. 20) untuk tombol/modal statistik.
+  const [evalTurns, setEvalTurns] = useState<TurnRecord[]>([]);
   const [prefillChunk, setPrefillChunk] = useState<number | null>(null);
   const [padPrompt, setPadPrompt] = useState(false);
   // Opsi ablasi selalu mulai mati di setiap kunjungan halaman.
@@ -521,17 +519,25 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         let observation: Observation;
         setLiveSteps([]);
         const scenarioStartedAt = Date.now();
-        setLiveInference({ snapshot: null, startedAt: scenarioStartedAt });
+        const turnId = `${scenario.id}-${mode}-${scenarioStartedAt}`;
+        const updateTurn = (patch: Partial<TurnRecord>) =>
+          setEvalTurns((prev) => prev.map((t) => (t.id === turnId ? { ...t, ...patch } : t)));
+        setEvalTurns((prev) => [
+          ...prev.slice(-19),
+          { id: turnId, title: `${scenario.id} · ${mode === "multi_agent" ? "multi" : "single"} · ${scenario.message}`, startedAt: scenarioStartedAt, snapshot: null },
+        ]);
+        let latestInference: InferenceSnapshot | null = null;
         // Maksimal 2 render per detik supaya tampilan statistik tidak menambah beban
         // selama skenario diukur (sebelumnya halaman ini tidak render per token).
         let lastInferenceRender = 0;
         let lastCallCount = 0;
         const onInference = (snapshot: InferenceSnapshot) => {
+          latestInference = snapshot;
           const now = Date.now();
           if (now - lastInferenceRender < 500 && snapshot.calls.length === lastCallCount && snapshot.calls.at(-1)?.status === "running") return;
           lastInferenceRender = now;
           lastCallCount = snapshot.calls.length;
-          setLiveInference({ snapshot, startedAt: scenarioStartedAt });
+          updateTurn({ snapshot });
         };
         try {
           const conversationId = await createConversation(mode);
@@ -590,6 +596,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         }
         collected.push(scoreScenario(scenario, observation, refs));
         setRows([...collected]);
+        updateTurn({ snapshot: latestInference, totalMs: Date.now() - scenarioStartedAt });
         durations.push(performance.now() - execStart);
         persist();
       }
@@ -640,6 +647,8 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
       stopRef.current = null;
       releaseWake();
       setRunning(false);
+      // Skenario yang terputus (GPU, error, dihentikan) jangan terus terhitung berjalan.
+      setEvalTurns((prev) => prev.map((x) => (x.totalMs === undefined ? { ...x, totalMs: Date.now() - x.startedAt } : x)));
       if (collected.length > 0) {
         const json = buildExport({
           rows: collected,
@@ -968,14 +977,17 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
 
       {running && (
         <section className="space-y-2 rounded-xl border border-slate-200 bg-white p-4">
-          <h2 className="text-sm font-semibold text-slate-900">Proses saat ini · {status}</h2>
+          <div className="flex items-start justify-between gap-3">
+            <h2 className="text-sm font-semibold text-slate-900">Proses saat ini · {status}</h2>
+            <InferenceStatsButton turns={evalTurns} className="shrink-0 px-3 py-1 text-xs" />
+          </div>
           {liveSteps.length === 0 ? (
             <p className="text-xs text-slate-500">Asisten sedang berpikir…</p>
           ) : (
             <ProcessTimeline steps={liveSteps} />
           )}
-          {liveInference.startedAt > 0 && (
-            <LiveInferenceStats snapshot={liveInference.snapshot} startedAt={liveInference.startedAt} />
+          {evalTurns.at(-1)?.totalMs === undefined && evalTurns.length > 0 && (
+            <LiveInferenceLine snapshot={evalTurns.at(-1)!.snapshot} startedAt={evalTurns.at(-1)!.startedAt} />
           )}
         </section>
       )}

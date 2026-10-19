@@ -1,16 +1,15 @@
 import type { createClient } from "@/src/lib/supabase/client";
 import type { ChatMessage, ProcessStep } from "@/src/lib/agents/orchestrator";
-import type { InferenceSnapshot } from "@/src/lib/agents/inference-stats";
 
 type SupabaseBrowserClient = ReturnType<typeof createClient>;
 
 /**
  * Pesan yang ditampilkan di chat: pesan asisten bisa membawa langkah "Lihat proses"
- * dan statistik inferensi (hanya di memori sesi ini, tidak disimpan ke database).
+ * dan lama giliran (hanya di memori sesi ini, tidak disimpan ke database).
  */
 export type StoredChatMessage = ChatMessage & {
   trace?: ProcessStep[];
-  inference?: { snapshot: InferenceSnapshot; totalMs: number };
+  inference?: { totalMs: number };
 };
 
 /**

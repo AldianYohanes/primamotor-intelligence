@@ -131,18 +131,21 @@ export function liveTokPerS(call: ModelCallStats): number | undefined {
   return decodingMs > 0 ? ((call.liveTokens - 1) * 1000) / decodingMs : undefined;
 }
 
-/** 42_000 → "0:42", 125_000 → "2:05". */
-export function formatElapsed(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1000));
-  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
-}
-
-/** 38_400 → "38,4 dtk", 950 → "0,95 dtk". */
-export function formatSeconds(ms: number): string {
-  const s = ms / 1000;
-  return `${s.toLocaleString("id-ID", { maximumFractionDigits: s < 10 ? 2 : 1 })} dtk`;
+/**
+ * Durasi singkat: 950 → "0,95s", 3_900 → "3,9s", 42_000 → "42s", 83_000 → "1m23s".
+ * `precise: false` membulatkan ke detik (dipakai stopwatch yang berjalan).
+ */
+export function formatDuration(ms: number, { precise = true }: { precise?: boolean } = {}): string {
+  const safe = Math.max(0, ms);
+  if (safe < 60_000) {
+    const s = safe / 1000;
+    if (!precise || s >= 10) return `${Math.floor(s)}s`;
+    return `${s.toLocaleString("id-ID", { maximumFractionDigits: s < 1 ? 2 : 1 })}s`;
+  }
+  const total = Math.floor(safe / 1000);
+  return `${Math.floor(total / 60)}m${String(total % 60).padStart(2, "0")}s`;
 }
 
 export function formatRate(tokPerS: number | undefined): string {
-  return tokPerS === undefined ? "–" : `${tokPerS.toLocaleString("id-ID", { maximumFractionDigits: 1 })} tok/dtk`;
+  return tokPerS === undefined ? "–" : `${tokPerS.toLocaleString("id-ID", { maximumFractionDigits: 1 })} tok/s`;
 }

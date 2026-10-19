@@ -1,8 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   InferenceMeter,
-  formatElapsed,
-  formatSeconds,
+  formatDuration,
   inferenceTotals,
   liveTokPerS,
   type InferenceSnapshot,
@@ -89,9 +88,12 @@ describe("liveTokPerS", () => {
 });
 
 describe("format", () => {
-  it("menampilkan menit:detik dan detik berkoma", () => {
-    expect(formatElapsed(42_000)).toBe("0:42");
-    expect(formatElapsed(125_400)).toBe("2:05");
-    expect(formatSeconds(38_400)).toBe("38,4 dtk");
+  it("menampilkan detik dan menit seperti 30s dan 1m23s", () => {
+    expect(formatDuration(30_000)).toBe("30s");
+    expect(formatDuration(83_400)).toBe("1m23s");
+    expect(formatDuration(125_000)).toBe("2m05s");
+    expect(formatDuration(3_900)).toBe("3,9s");
+    expect(formatDuration(950)).toBe("0,95s");
+    expect(formatDuration(3_900, { precise: false })).toBe("3s");
   });
 });

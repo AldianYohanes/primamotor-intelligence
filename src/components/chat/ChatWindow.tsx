@@ -44,7 +44,7 @@ import {
 import { ConversationHistoryPanel } from "./ConversationHistoryPanel";
 import { EnableNotificationsBanner } from "./EnableNotificationsBanner";
 import { MessageBubble } from "./MessageBubble";
-import { LiveInferenceStats } from "./InferenceStats";
+import { InferenceStatsButton, LiveInferenceLine, type TurnRecord } from "./InferenceStats";
 import type { InferenceSnapshot } from "@/src/lib/agents/inference-stats";
 import { CANCELLED_MESSAGE, PinConfirmDialog } from "./PinConfirmDialog";
 import { StockSyncIndicator } from "./StockSyncIndicator";
@@ -100,6 +100,8 @@ export function ChatWindow({
   // Stopwatch dan statistik model giliran yang sedang berjalan.
   const [turnStartedAt, setTurnStartedAt] = useState(0);
   const [liveInference, setLiveInference] = useState<InferenceSnapshot | null>(null);
+  // Riwayat statistik giliran di sesi ini, untuk tombol dan modal statistik.
+  const [turns, setTurns] = useState<TurnRecord[]>([]);
   const [pendingConfirmation, setPendingConfirmation] =
     useState<PendingConfirmation | null>(null);
   const [mutationChoice, setMutationChoice] = useState<MutationChoice | null>(null);
@@ -235,11 +237,14 @@ export function ChatWindow({
     const startedAt = Date.now();
     setTurnStartedAt(startedAt);
     setLiveInference(null);
+    const turnId = `${startedAt}`;
+    const updateTurn = (patch: Partial<TurnRecord>) =>
+      setTurns((prev) => prev.map((t) => (t.id === turnId ? { ...t, ...patch } : t)));
+    setTurns((prev) => [...prev, { id: turnId, title: text, startedAt, snapshot: null }]);
     // Salinan terakhir dari onStep, dipakai bila giliran gagal di tengah jalan.
     let lastSteps: ProcessStep[] = [];
     let lastInference: InferenceSnapshot | null = null;
-    const inferenceOf = () =>
-      lastInference ? { inference: { snapshot: lastInference, totalMs: Date.now() - startedAt } } : {};
+    const inferenceOf = () => (lastInference ? { inference: { totalMs: Date.now() - startedAt } } : {});
 
     try {
       const result = await runAgentTurn(
@@ -258,6 +263,7 @@ export function ChatWindow({
           onInference: (snapshot) => {
             lastInference = snapshot;
             setLiveInference(snapshot);
+            updateTurn({ snapshot });
           },
         },
       );
@@ -303,6 +309,7 @@ export function ChatWindow({
       setDraftText("");
       setLiveSteps([]);
       setLiveInference(null);
+      updateTurn({ snapshot: lastInference, totalMs: Date.now() - startedAt });
     }
   }
 
@@ -613,7 +620,7 @@ export function ChatWindow({
               </span>
               {liveStatusLabel(liveSteps)}
             </div>
-            <LiveInferenceStats snapshot={liveInference} startedAt={turnStartedAt} />
+            <LiveInferenceLine snapshot={liveInference} startedAt={turnStartedAt} />
             <ProcessDetails steps={liveSteps} live />
           </div>
         )}
@@ -632,6 +639,7 @@ export function ChatWindow({
             disabled={!engine}
             className="field-input min-h-11 flex-1 rounded-full !text-base sm:!text-sm"
           />
+          <InferenceStatsButton turns={turns} className="min-h-11 rounded-full px-4" />
           {isThinking ? (
             <button
               onClick={handleStop}

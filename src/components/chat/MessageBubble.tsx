@@ -20,7 +20,7 @@ export function MessageBubble({ message }: { message: StoredChatMessage }) {
         {message.content}
       </div>
       {!isUser && message.inference && (
-        <InferenceSummary snapshot={message.inference.snapshot} totalMs={message.inference.totalMs} />
+        <InferenceSummary totalMs={message.inference.totalMs} />
       )}
       {!isUser && message.trace && <ProcessDetails steps={message.trace} />}
     </div>
