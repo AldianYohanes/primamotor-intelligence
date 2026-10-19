@@ -865,12 +865,6 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
           </button>
           <span className="text-sm text-slate-600">{status}</span>
         </div>
-        {progress && (
-          <p className="text-xs text-slate-600 sm:col-span-2 lg:col-span-4">
-            Progres {progress.done}/{progress.total} eksekusi · berjalan {formatDuration(progress.elapsedMs)}
-            {progress.etaMs !== null && progress.done < progress.total && ` · perkiraan sisa ±${formatDuration(progress.etaMs)}`}
-          </p>
-        )}
         {savedRun && !running && (
           <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 sm:col-span-2 lg:col-span-4">
             <p>
@@ -901,6 +895,56 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
           </div>
         )}
       </section>
+
+      {progress && (
+        <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+          <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-1">
+            <div className="flex items-baseline gap-3">
+              <span className="text-5xl font-bold tabular-nums text-slate-900">
+                {progress.done}/{progress.total}
+              </span>
+              <span className="text-3xl font-semibold tabular-nums text-sky-700">
+                {progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0}%
+              </span>
+            </div>
+            <div className="text-right text-sm text-slate-600">
+              <div>berjalan {formatDuration(progress.elapsedMs)}</div>
+              {progress.etaMs !== null && progress.done < progress.total && (
+                <div className="text-lg font-semibold text-slate-900">sisa ±{formatDuration(progress.etaMs)}</div>
+              )}
+            </div>
+          </div>
+          <div
+            className="h-4 w-full overflow-hidden rounded-full bg-slate-200"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={progress.total}
+            aria-valuenow={progress.done}
+          >
+            <div
+              className="h-full rounded-full bg-sky-600 transition-all"
+              style={{ width: `${progress.total > 0 ? (progress.done / progress.total) * 100 : 0}%` }}
+            />
+          </div>
+          {summaries.length > 0 && (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {summaries.map((s) => (
+                <div key={s.mode} className="rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                  <span className="text-slate-600">
+                    ETSR sementara · {s.mode === "multi_agent" ? "Multi-agent" : "Single-agent"}
+                  </span>
+                  <div>
+                    <strong className="text-2xl tabular-nums text-slate-900">{pct(s.etsr.success, s.etsr.total)}</strong>{" "}
+                    <span className="text-slate-600">
+                      ({s.etsr.success}/{s.etsr.total})
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {running && (
         <section className="space-y-2 rounded-xl border border-slate-200 bg-white p-4">
