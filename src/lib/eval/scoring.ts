@@ -95,6 +95,9 @@ export function entityFound(
 const CLAIMS_MISSING =
   /\b(tidak|tak|belum|ga|gak|nggak)\s+(ditemukan|ada|tersedia|ketemu)\b|\bkosong\b|\bhabis\b/i;
 
+// Jawaban masih menyebut ada stok di suatu tempat (dicek setelah frasa "kosong/habis/tidak ada" dibuang).
+const CLAIMS_AVAILABLE = /\b(masih|punya|tersedia|ready|sisa|ada)\b/i;
+
 /**
  * Faithfulness jawaban pertanyaan stok (heuristik deterministik, terpisah dari
  * ETSR): jawaban harus menyebut minimal satu angka stok tersedia yang benar dan
@@ -122,10 +125,14 @@ export function assessFaithfulness(s: Scenario, o: Observation, refs: RefMap): F
   const echoed = new Set([...digits(s.message), ...digits(String(row.name ?? ""))]);
   const numbers = digits(o.assistantText).filter((n) => !echoed.has(n));
   const mentionsStock = positive.some((q) => numbers.includes(q));
-  const claimsMissing = CLAIMS_MISSING.test(o.assistantText);
+  const text = o.assistantText;
+  const claimsMissing = CLAIMS_MISSING.test(text);
 
   if (positive.length === 0) return claimsMissing ? "faithful" : "review";
   if (!mentionsStock) {
+    // "Gudangnya masih punya, tapi toko kosong" tanpa angka: benar bila ada lokasi berstok nol dan ada lokasi berstok.
+    const claimsAvailable = CLAIMS_AVAILABLE.test(text.replace(new RegExp(CLAIMS_MISSING.source, "gi"), " "));
+    if (claimsMissing && numbers.length === 0 && claimsAvailable && quantities.some((q) => q === 0)) return "faithful";
     if (claimsMissing || numbers.length > 0) return "unfaithful";
     return "review"; // mis. "masih ada di gudang dan toko" tanpa angka: benar tapi tidak lengkap
   }

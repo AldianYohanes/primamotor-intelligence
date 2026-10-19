@@ -380,6 +380,16 @@ describe("faithfulness", () => {
     expect(judge("Di toko kosong, tapi gudang masih ada 4.", 0, 4)).toBe("faithful");
   });
 
+  it("Q-07 (Run 38): 'toko kosong' tanpa angka benar bila stok Toko memang 0 dan Gudang 4", () => {
+    expect(judge("Gudangnya masih punya, tapi toko kosong.", 0, 4)).toBe("faithful");
+    expect(judge("Toko habis, di gudang masih ada.", 0, 4)).toBe("faithful");
+  });
+
+  it("bilang kosong padahal semua lokasi berstok tetap tidak setia", () => {
+    expect(judge("Gudangnya masih punya, tapi toko kosong.", 25, 60)).toBe("unfaithful");
+    expect(judge("Stoknya kosong semua.", 0, 4)).toBe("unfaithful");
+  });
+
   it("jawaban benar tanpa angka stok ditandai review, angka dari nama barang tidak dihitung", () => {
     expect(judge("Ya, filter oli mahle masih tersedia di gudang dan toko.")).toBe("review");
     const karbu = { ...stockQuestion, message: "karbu 240 masih ada?" };

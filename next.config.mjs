@@ -1,9 +1,27 @@
+import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { withSerwist } from "@serwist/turbopack";
+
+/** Hash pendek, branch, dan tanda -dirty dari git; "unknown" kalau git tidak ada. Dicatat di ekspor /eval. */
+function gitInfo() {
+  const git = (cmd) => execSync(`git ${cmd}`, { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+  try {
+    const dirty = git("status --porcelain") !== "";
+    return { commit: git("rev-parse --short HEAD") + (dirty ? "-dirty" : ""), branch: git("rev-parse --abbrev-ref HEAD") };
+  } catch {
+    return { commit: "unknown", branch: "unknown" };
+  }
+}
+const { commit, branch } = gitInfo();
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+
+  env: {
+    NEXT_PUBLIC_GIT_COMMIT: commit,
+    NEXT_PUBLIC_GIT_BRANCH: branch,
+  },
 
   experimental: {
     serverActions: { bodySizeLimit: "10mb" },
