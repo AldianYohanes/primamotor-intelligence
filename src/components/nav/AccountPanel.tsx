@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import {
+  Bell,
   BellRing,
   Building2,
   ChevronDown,
@@ -319,6 +320,14 @@ export function AccountPanel({ account, onNavigate }: { account: AccountInfo; on
       >
         <UserRound size={15} className="shrink-0 text-slate-500" />
         Akun saya
+      </Link>
+      <Link
+        href="/notifications"
+        onClick={onNavigate}
+        className="flex w-full items-center gap-2.5 border-t border-slate-100 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
+      >
+        <Bell size={15} className="shrink-0 text-slate-500" />
+        Notifikasi
       </Link>
       <Section icon={Rows3} title="Tampilan">
         <DensitySetting />

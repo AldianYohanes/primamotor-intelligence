@@ -22,6 +22,7 @@ import {
   Building2,
   AlertTriangle,
   PackagePlus,
+  Bell,
 } from "lucide-react";
 import { can, type Role } from "@/src/lib/auth/rbac";
 import { AdminHeader } from "./AdminHeader";
@@ -41,6 +42,7 @@ const NAV = [
   { href: "/admin/receipt-imports", label: "Review Bon", icon: ScanLine },
   { href: "/admin/reports", label: "Laporan", icon: BarChart3 },
   { href: "/admin/audit-log", label: "Riwayat Aksi Agent", icon: History },
+  { href: "/notifications", label: "Notifikasi", icon: Bell },
   { href: "/admin/car-models", label: "Model Mobil", icon: Car },
 ] as const;
 
