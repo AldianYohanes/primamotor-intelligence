@@ -21,6 +21,7 @@ import {
   Clock,
   Building2,
   AlertTriangle,
+  PackagePlus,
 } from "lucide-react";
 import { can, type Role } from "@/src/lib/auth/rbac";
 import { AdminHeader } from "./AdminHeader";
@@ -29,6 +30,7 @@ const NAV = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/admin/products", label: "Produk", icon: Package },
   { href: "/admin/stock", label: "Stok per Lokasi", icon: Boxes },
+  { href: "/admin/reorder", label: "Saran Belanja Ulang", icon: PackagePlus },
   { href: "/admin/locations", label: "Lokasi", icon: MapPin },
   { href: "/admin/suppliers", label: "Supplier", icon: Truck },
   { href: "/admin/staff", label: "Staf", icon: Users },
