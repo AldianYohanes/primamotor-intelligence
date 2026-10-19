@@ -64,11 +64,11 @@ export function ProcessDetails({ steps, live = false }: { steps: ProcessStep[]; 
   if (steps.length === 0) return null;
 
   return (
-    <div className="mt-1 max-w-[80%]">
+    <div className="mt-1 max-w-[90%] sm:max-w-[80%]">
       <button
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex items-center gap-1 px-1 text-[11px] font-medium text-slate-500 hover:text-slate-700"
+        className="flex min-h-8 items-center gap-1 px-1 text-xs font-medium text-slate-500 hover:text-slate-700"
       >
         {open ? "Sembunyikan proses" : "Lihat proses"}
         <span className="text-slate-400">({steps.length} langkah{live ? ", berjalan" : ""})</span>

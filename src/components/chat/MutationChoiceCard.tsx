@@ -13,10 +13,10 @@ interface Props {
 }
 
 export function MutationChoiceCard({ choice, busy, onSelect, onCancel }: Props) {
-  const buttonClass = "btn rounded-full !px-3 !py-1.5 !text-xs";
+  const buttonClass = "btn min-h-10 rounded-full !px-3.5 !py-2 !text-sm";
   return (
     <div className="flex justify-start">
-      <div className="card w-full max-w-[80%] space-y-2 p-3">
+      <div className="card w-full max-w-[95%] space-y-2 p-3 sm:max-w-[80%]">
         <p className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
           {choice.kind === "product" ? <Package size={13} /> : <MapPin size={13} />}
           {choice.kind === "product" ? "Pilih barang yang dimaksud" : "Pilih lokasi transaksi"}
@@ -32,7 +32,7 @@ export function MutationChoiceCard({ choice, busy, onSelect, onCancel }: Props) 
                   className={clsx(buttonClass, "btn-secondary flex-col !items-start !gap-0 text-left")}
                 >
                   <span className="font-medium">{option.name}</span>
-                  <span className="text-[11px] opacity-70">{option.detail}</span>
+                  <span className="text-xs opacity-70">{option.detail}</span>
                 </button>
               ))
             : choice.options.map((option) => {

@@ -10,7 +10,7 @@ export function MessageBubble({ message }: { message: StoredChatMessage }) {
     <div className={clsx("flex flex-col", isUser ? "items-end" : "items-start")}>
       <div
         className={clsx(
-          "max-w-[80%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
+          "max-w-[90%] whitespace-pre-wrap break-words rounded-2xl sm:max-w-[80%] px-4 py-2.5 text-sm leading-relaxed",
           isUser
             ? "rounded-br-md bg-brand-600 text-white"
             : "rounded-bl-md border border-slate-200 bg-white text-slate-800 shadow-xs",
