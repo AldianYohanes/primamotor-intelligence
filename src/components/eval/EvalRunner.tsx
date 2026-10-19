@@ -133,6 +133,12 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   const supabase = useMemo(() => createClient(), []);
   const [modeChoice, setModeChoice] = useState<ModeChoice>("both");
   const [idFilter, setIdFilter] = useState("");
+  // Run berulang: seluruh rencana diulang N kali, data eval direset di awal ulangan 2 dst.
+  const [repetitions, setRepetitions] = useState(1);
+  // Lanjut otomatis sesudah GPU putus: maks AUTO_RESUME_MAX kali per run, jeda AUTO_RESUME_DELAY_MS.
+  const [autoResume, setAutoResume] = useState(true);
+  const autoResumeCount = useRef(0);
+  const autoResumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pin, setPin] = useState("");
   const [running, setRunning] = useState(false);
   const stopRef = useRef<AbortController | null>(null);
@@ -168,7 +174,15 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   const [savedRun, setSavedRun] = useState<SavedRun | null>(null);
   const [interruptions, setInterruptions] = useState<Interruption[]>([]);
   // Modal besar saat run berhenti karena error, supaya terlihat dari jauh (bukan hanya teks status).
-  const [errorModal, setErrorModal] = useState<{ kind: "gpu" | "error"; message: string; during: string; at: string } | null>(null);
+  const [errorModal, setErrorModal] = useState<{
+    kind: "gpu" | "error";
+    message: string;
+    during: string;
+    at: string;
+    /** Diisi saat run akan dilanjutkan otomatis: waktu (Date.now) dan percobaan ke berapa. */
+    autoResumeAt?: number;
+    attempt?: number;
+  } | null>(null);
   const [seeding, setSeeding] = useState(false);
   const [seedStatus, setSeedStatus] = useState<string | null>(null);
   const [progress, setProgress] = useState<{
@@ -378,8 +392,15 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
     return () => window.removeEventListener("keydown", onKey);
   }, [running]);
 
-  async function run(resume?: SavedRun) {
+  function cancelAutoResume() {
+    if (autoResumeTimer.current) clearTimeout(autoResumeTimer.current);
+    autoResumeTimer.current = null;
+  }
+
+  async function run(resume?: SavedRun, opts: { auto?: boolean } = {}) {
     if (!isEvalTenant) return;
+    cancelAutoResume();
+    if (!opts.auto) autoResumeCount.current = 0;
     if (resume && resume.modelId !== modelId) {
       setStatus(`Run tersimpan memakai ${resume.modelId}. Pilih model yang sama untuk melanjutkan.`);
       return;
@@ -400,7 +421,8 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
     const controller = new AbortController();
     stopRef.current = controller;
     const runStartedAt = resume?.startedAt ?? new Date().toISOString();
-    const plan = resume?.plan ?? buildPlan(selected.map((s) => s.id), modes);
+    const plan = resume?.plan ?? buildPlan(selected.map((s) => s.id), modes, repetitions);
+    const totalRepetitions = Math.max(1, ...plan.map((p) => p.repetition ?? 1));
     const collected: ScoredRow[] = resume ? fromStoredRows(resume.rows, SCENARIOS) : [];
     const interruptions: Interruption[] = resume?.interruptions ?? [];
     const resumed: SavedRun["resumed"] = resume?.resumed ?? [];
@@ -487,13 +509,23 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
       const durations: number[] = [];
       const segmentStart = performance.now();
       // Mode diselang-seling per skenario supaya kondisi perangkat (suhu, beban) setara di kedua konfigurasi.
-      for (const { scenarioId, mode } of todo) {
+      for (const { scenarioId, mode, repetition = 1 } of todo) {
         if (controller.signal.aborted) throw Object.assign(new Error("Dihentikan oleh pengguna."), { name: "TurnStoppedError" });
         const scenario = SCENARIOS.find((s) => s.id === scenarioId);
         if (!scenario) continue;
+        // Awal ulangan 2 dst.: data eval direset supaya stok tiap ulangan mulai dari seed yang sama.
+        if (repetition > 1 && !collected.some((r) => (r.observation.repetition ?? 1) === repetition)) {
+          setStatus(`Ulangan ${repetition}/${totalRepetitions}: mereset data eval…`);
+          const res = await fetch("/api/eval/seed", { method: "POST" });
+          if (!res.ok) {
+            const body = (await res.json().catch(() => ({}))) as { error?: string };
+            throw new Error(`Reset data eval sebelum ulangan ${repetition} gagal: ${body.error ?? `HTTP ${res.status}`}`);
+          }
+        }
         const execStart = performance.now();
         const done = collected.length;
-        setStatus(`[${done + 1}/${plan.length}] ${scenario.id} · ${mode}`);
+        const repLabel = totalRepetitions > 1 ? ` · ulangan ${repetition}/${totalRepetitions}` : "";
+        setStatus(`[${done + 1}/${plan.length}] ${scenario.id} · ${mode}${repLabel}`);
         setProgress({
           done,
           total: plan.length,
@@ -505,6 +537,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         const base: Omit<Observation, "stockAfter"> = {
           scenarioId: scenario.id,
           mode,
+          ...(repetition > 1 && { repetition }),
           predictedRoute: null,
           assistantText: "",
           toolTrace: [],
@@ -622,7 +655,23 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         at: new Date().toISOString(),
       };
       setStoppedReason(stop);
-      if (stop.kind !== "stopped") setErrorModal({ kind: stop.kind, message, during, at: stop.at });
+      const canAutoResume = err instanceof GpuDeviceError && autoResume && autoResumeCount.current < AUTO_RESUME_MAX;
+      if (canAutoResume) {
+        autoResumeCount.current += 1;
+        const attempt = autoResumeCount.current;
+        const autoResumeAt = Date.now() + AUTO_RESUME_DELAY_MS;
+        setErrorModal({ kind: "gpu", message, during, at: stop.at, autoResumeAt, attempt });
+        autoResumeTimer.current = setTimeout(() => {
+          autoResumeTimer.current = null;
+          const saved = loadSavedRun();
+          if (saved) {
+            setErrorModal(null);
+            void run(saved, { auto: true });
+          }
+        }, AUTO_RESUME_DELAY_MS);
+      } else if (stop.kind !== "stopped") {
+        setErrorModal({ kind: stop.kind, message, during, at: stop.at });
+      }
       interruptions.push(stop);
       setInterruptions([...interruptions]);
       persist();
@@ -789,6 +838,35 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             onChange={(e) => setIdFilter(e.target.value)}
             disabled={running}
           />
+        </label>
+        <label className="space-y-1 text-sm">
+          <span className="font-medium text-slate-700">Ulang</span>
+          <select
+            className="field-input w-full"
+            value={repetitions}
+            onChange={(e) => setRepetitions(Number(e.target.value))}
+            disabled={running}
+          >
+            {[1, 2, 3, 4, 5].map((n) => (
+              <option key={n} value={n}>
+                {n === 1 ? "1× (run biasa)" : `${n}× (data eval direset tiap ulangan)`}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={autoResume}
+            onChange={(e) => setAutoResume(e.target.checked)}
+          />
+          <span>
+            <span className="font-medium text-slate-700">Lanjut otomatis kalau GPU putus</span>
+            <span className="block text-xs text-slate-500">
+              Tunggu {AUTO_RESUME_DELAY_MS / 1000} detik lalu lanjutkan run, maksimal {AUTO_RESUME_MAX}× per run.
+            </span>
+          </span>
         </label>
         <label className="space-y-1 text-sm">
           <span className="font-medium text-slate-700">PIN evaluator</span>
@@ -1130,10 +1208,30 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             <p className="break-words text-sm opacity-90">{errorModal.message.slice(0, 300)}</p>
             <p className="text-base">
               Hasil sejauh ini tersimpan dan sudah diunduh.{" "}
-              {errorModal.kind === "gpu" ? "Muat ulang halaman, lalu klik \"Lanjutkan run\"." : "Klik \"Lanjutkan run\" setelah masalahnya beres."}
+              {errorModal.autoResumeAt
+                ? null
+                : errorModal.kind === "gpu"
+                  ? "Muat ulang halaman, lalu klik \"Lanjutkan run\"."
+                  : "Klik \"Lanjutkan run\" setelah masalahnya beres."}
             </p>
+            {errorModal.autoResumeAt && (
+              <p className="text-2xl font-semibold">
+                Lanjut otomatis dalam <AutoResumeCountdown at={errorModal.autoResumeAt} /> (percobaan {errorModal.attempt}/{AUTO_RESUME_MAX})
+              </p>
+            )}
             <div className="flex flex-wrap justify-center gap-3">
-              {errorModal.kind === "gpu" && (
+              {errorModal.autoResumeAt && (
+                <button
+                  className="rounded-lg bg-white px-5 py-3 text-lg font-semibold text-red-700"
+                  onClick={() => {
+                    cancelAutoResume();
+                    setErrorModal({ ...errorModal, autoResumeAt: undefined });
+                  }}
+                >
+                  Batalkan lanjut otomatis
+                </button>
+              )}
+              {errorModal.kind === "gpu" && !errorModal.autoResumeAt && (
                 <button className="rounded-lg bg-white px-5 py-3 text-lg font-semibold text-red-700" onClick={() => window.location.reload()}>
                   Muat ulang halaman
                 </button>
@@ -1147,6 +1245,18 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
       )}
     </main>
   );
+}
+
+const AUTO_RESUME_MAX = 5;
+const AUTO_RESUME_DELAY_MS = 30_000;
+
+function AutoResumeCountdown({ at }: { at: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(id);
+  }, []);
+  return <>{Math.max(0, Math.ceil((at - now) / 1000))}s</>;
 }
 
 const PREFERENCE_LABEL: Record<GpuPowerPreference, string> = {

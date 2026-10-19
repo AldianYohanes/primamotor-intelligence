@@ -32,6 +32,24 @@ describe("buildPlan / remainingPlan", () => {
   });
 });
 
+describe("buildPlan berulang", () => {
+  it("mengulang seluruh daftar per ulangan dan ulangan 1 tanpa field repetition", () => {
+    const plan = buildPlan(["Q-01"], ["multi_agent", "single_agent"], 2);
+    expect(plan).toEqual([
+      { scenarioId: "Q-01", mode: "multi_agent" },
+      { scenarioId: "Q-01", mode: "single_agent" },
+      { scenarioId: "Q-01", mode: "multi_agent", repetition: 2 },
+      { scenarioId: "Q-01", mode: "single_agent", repetition: 2 },
+    ]);
+  });
+
+  it("hasil ulangan 1 tidak menutup eksekusi ulangan 2", () => {
+    const plan = buildPlan(["Q-01"], ["multi_agent"], 2);
+    const done = [{ scenario: "Q-01", observation: { mode: "multi_agent" as const } }];
+    expect(remainingPlan(plan, done)).toEqual([{ scenarioId: "Q-01", mode: "multi_agent", repetition: 2 }]);
+  });
+});
+
 describe("fromStoredRows", () => {
   it("memasang kembali objek skenario dan membuang id yang tidak dikenal", () => {
     const q1 = { id: "Q-01" } as Scenario;

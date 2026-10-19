@@ -24,8 +24,12 @@ export interface SavedRun {
   scenarioVersion: string;
   startedAt: string;
   modelId: string;
-  /** Urutan eksekusi asli: skenario terpilih × mode, diselang-seling per skenario. */
-  plan: { scenarioId: string; mode: AgentMode }[];
+  /**
+   * Urutan eksekusi asli: skenario terpilih × mode, diselang-seling per skenario.
+   * Run berulang: seluruh daftar diulang per ulangan (`repetition` 2, 3, …); ulangan 1
+   * tidak membawa field ini supaya rencana run biasa sama seperti sebelumnya.
+   */
+  plan: { scenarioId: string; mode: AgentMode; repetition?: number }[];
   environment: unknown;
   /** Opsi ablasi padding saat run dimulai; dipulihkan saat run dilanjutkan sesudah muat ulang halaman. */
   promptPadding?: boolean;
@@ -37,14 +41,22 @@ export interface SavedRun {
   updatedAt: string;
 }
 
-export function buildPlan(scenarioIds: string[], modes: AgentMode[]): SavedRun["plan"] {
-  return scenarioIds.flatMap((scenarioId) => modes.map((mode) => ({ scenarioId, mode })));
+export function buildPlan(scenarioIds: string[], modes: AgentMode[], repetitions = 1): SavedRun["plan"] {
+  const once = scenarioIds.flatMap((scenarioId) => modes.map((mode) => ({ scenarioId, mode })));
+  return Array.from({ length: Math.max(1, repetitions) }, (_, i) =>
+    i === 0 ? once : once.map((p) => ({ ...p, repetition: i + 1 })),
+  ).flat();
 }
 
+const planKey = (scenarioId: string, mode: AgentMode, repetition?: number) => `${scenarioId}|${mode}|${repetition ?? 1}`;
+
 /** Eksekusi rencana yang belum punya baris hasil, urutan rencana dipertahankan. */
-export function remainingPlan(plan: SavedRun["plan"], rows: { scenario: string; observation: { mode: AgentMode } }[]) {
-  const done = new Set(rows.map((r) => `${r.scenario}|${r.observation.mode}`));
-  return plan.filter((p) => !done.has(`${p.scenarioId}|${p.mode}`));
+export function remainingPlan(
+  plan: SavedRun["plan"],
+  rows: { scenario: string; observation: { mode: AgentMode; repetition?: number } }[],
+) {
+  const done = new Set(rows.map((r) => planKey(r.scenario, r.observation.mode, r.observation.repetition)));
+  return plan.filter((p) => !done.has(planKey(p.scenarioId, p.mode, p.repetition)));
 }
 
 export function toStoredRow(row: ScoredRow): StoredRow {

@@ -58,6 +58,8 @@ export type StockSnapshot = Record<string, number>;
 export interface Observation {
   scenarioId: string;
   mode: AgentMode;
+  /** Nomor ulangan pada run berulang (2, 3, …); kosong = ulangan 1 / run biasa. */
+  repetition?: number;
   /** Kelas akhir giliran (Router + koreksi kode); dasar routeCorrect. */
   predictedRoute: Route | null;
   /**
