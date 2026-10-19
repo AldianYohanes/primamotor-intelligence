@@ -7,7 +7,6 @@ import {
   type AgentTurnResult,
   type ChatMessage,
 } from "@/src/lib/agents/turn/types";
-import { ROUTER_SYSTEM_PROMPT, buildRouterInput, parseRouterReply } from "@/src/lib/agents/prompts/router";
 import { QUERY_AGENT_SYSTEM_PROMPT } from "@/src/lib/agents/prompts/query-agent";
 import { TRANSACTION_AGENT_SYSTEM_PROMPT } from "@/src/lib/agents/prompts/transaction-agent";
 import { SINGLE_AGENT_SYSTEM_PROMPT } from "@/src/lib/agents/prompts/single-agent";
@@ -23,7 +22,7 @@ import {
   formatToolResponse,
   parseModelReply,
 } from "@/src/lib/agents/tool-protocol";
-import { interruptOnAbort, streamChatCompletion } from "@/src/lib/agents/turn/stream";
+import { streamChatCompletion } from "@/src/lib/agents/turn/stream";
 import { reportAgentExecutionMetric } from "@/src/lib/agents/turn/metrics";
 import {
   CODE_REPLIES,
@@ -31,6 +30,7 @@ import {
   UNAVAILABLE_TOOL_REPLY,
   UNBACKED_STOCK_REPLY,
 } from "@/src/lib/agents/turn/replies";
+import { routeMessage } from "@/src/lib/agents/turn/router-step";
 import { advanceMutation } from "@/src/lib/agents/turn/mutation";
 import {
   executeTool,
@@ -58,9 +58,9 @@ import {
   READ_ONLY_PIN_FEEDBACK,
   staffMentionsPin,
 } from "@/src/lib/agents/read-only-reply";
-import { agentInputMessage, normalizeShorthand } from "@/src/lib/agents/normalize-shorthand";
+import { agentInputMessage } from "@/src/lib/agents/normalize-shorthand";
 import { guardRoute } from "@/src/lib/agents/route-guard";
-import { agentHistory, routerContext } from "@/src/lib/agents/router-context";
+import { agentHistory } from "@/src/lib/agents/router-context";
 import {
   cacheNoteFor,
   isOfflineNoMatch,
@@ -119,48 +119,10 @@ const AGENT_TOOLS_BY_TYPE: Record<"query" | "transaction" | "off_topic", string[
   off_topic: [],
 };
 
-interface NonStreamUsage {
-  prompt_tokens?: number;
-  completion_tokens?: number;
-}
-
 /** Juga menjawab "apa yang bisa kamu lakukan?", yang oleh Router diarahkan ke OFF_TOPIC. */
 export { OFF_TOPIC_REPLY } from "@/src/lib/agents/off-topic";
 
 const KNOWN_TOOL_NAMES = new Set<string>(AGENT_TOOL_DEFINITIONS.map((t) => t.function.name));
-
-async function routeMessage(
-  engine: MLCEngineInterface,
-  userMessage: string,
-  history: ChatMessage[],
-  signal?: AbortSignal,
-): Promise<{
-  agentType: "query" | "transaction" | "off_topic";
-  text: string;
-  usage: NonStreamUsage | null;
-}> {
-  // Balasan kode (off-topic, butuh koneksi, dst.) tidak ikut jadi konteks Router.
-  const lastAssistant = routerContext(history, CODE_REPLIES);
-  if (signal?.aborted) throw new TurnStoppedError();
-  const stopListening = interruptOnAbort(engine, signal);
-  let completion: Awaited<ReturnType<typeof engine.chat.completions.create>>;
-  try {
-    completion = await engine.chat.completions.create({
-      messages: [
-        { role: "system", content: ROUTER_SYSTEM_PROMPT },
-        // Singkatan diluruskan hanya untuk Router; agent dan riwayat tetap teks asli.
-        { role: "user", content: buildRouterInput(normalizeShorthand(userMessage), lastAssistant) },
-      ],
-      temperature: 0,
-    });
-  } finally {
-    stopListening();
-  }
-  if (signal?.aborted) throw new TurnStoppedError();
-  const text = completion.choices[0]?.message?.content ?? "";
-  const usage = (completion as unknown as { usage?: NonStreamUsage }).usage ?? null;
-  return { agentType: parseRouterReply(text), text, usage };
-}
 
 /**
  * Jalankan tool-calling loop + routing tanpa instrumentasi metrics — dipisah dari
