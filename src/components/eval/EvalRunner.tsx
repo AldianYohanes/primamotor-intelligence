@@ -103,9 +103,17 @@ async function readGpuInfo(): Promise<GpuInfo | null> {
   return probes.find((p) => p.preference === pref)?.adapter ?? null;
 }
 
+/** Versi kode yang sedang jalan (diisi next.config.mjs saat dev/build). */
+const CODE_VERSION = {
+  commit: process.env.NEXT_PUBLIC_GIT_COMMIT ?? "unknown",
+  branch: process.env.NEXT_PUBLIC_GIT_BRANCH ?? "unknown",
+};
+
 async function collectEnvironment(modelId: string) {
   return {
     model: modelId,
+    codeCommit: CODE_VERSION.commit,
+    codeBranch: CODE_VERSION.branch,
     userAgent: navigator.userAgent,
     hardwareConcurrency: navigator.hardwareConcurrency,
     deviceMemoryGB: (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? null,
@@ -662,6 +670,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
 
       <header className="space-y-1">
         <h1 className="text-xl font-semibold text-slate-900">Evaluasi Agent (Bab 4)</h1>
+        <p className="text-xs text-slate-500">Kode: {CODE_VERSION.commit} ({CODE_VERSION.branch})</p>
         <p className="text-sm text-slate-600">
           Menjalankan {SCENARIOS.length} skenario berlabel terhadap arsitektur multi-agent dan baseline single-agent pada
           perangkat ini.

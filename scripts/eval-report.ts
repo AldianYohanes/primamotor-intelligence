@@ -111,6 +111,7 @@ const md: string[] = [];
 md.push(`# Laporan evaluasi /eval`, "");
 md.push(`- Sumber: ${files.map((f) => path.basename(f)).join(", ")}`);
 md.push(`- Versi skenario: ${runs.map((r) => r.data.scenarioVersion).join(", ")} (kode sekarang ${scenarioFile.version})`);
+md.push(`- Kode: ${env.codeCommit ?? "tidak tercatat"} (${env.codeBranch ?? "–"})`);
 md.push(`- Model: ${env.model ?? "–"} · GPU: ${gpu.description || gpu.architecture || "–"} · prefill: ${JSON.stringify(env.prefillChunkSize ?? null)}`);
 md.push(`- Eksekusi: ${rows.length} dari ${SCENARIOS.length * MODES.length}${missing.length ? ` (belum ada: ${missing.join(", ")})` : ""}`);
 const interruptions = runs.reduce((n, r) => n + (r.data.interruptions?.length ?? 0), 0);
