@@ -1,0 +1,81 @@
+import { dropPinSentences, isReadOnlyTurn } from "@/src/lib/agents/read-only-reply";
+import { cacheNoteFor } from "@/src/lib/agents/offline-answers";
+import { claimsRecorded, contradictsStock, stockReply, summarizeStock } from "@/src/lib/agents/stock-summary";
+import { contradictsTrend, summarizeTrend, trendReply } from "@/src/lib/agents/trend-summary";
+import { ProcessRecorder, answerStep } from "@/src/lib/agents/process-trace";
+import type { ParsedReply } from "@/src/lib/agents/tool-protocol";
+import type { AgentTurnResult } from "@/src/lib/agents/turn/types";
+
+/**
+ * Jawaban akhir giliran (model tidak memanggil alat lagi): teks model dipakai apa
+ * adanya kecuali bertentangan dengan data alat, lalu diganti kalimat dari kode.
+ */
+export function composeFinalAnswer({
+  agentType,
+  toolTrace,
+  reply,
+  content,
+  readOnlyPin,
+  readOnlyPinSeen,
+  pinProductNames,
+  textBeforeNudge,
+  rec,
+}: {
+  agentType: AgentTurnResult["agentType"];
+  toolTrace: AgentTurnResult["toolTrace"];
+  reply: ParsedReply;
+  content: string;
+  readOnlyPin: boolean;
+  readOnlyPinSeen: boolean;
+  pinProductNames: string[];
+  textBeforeNudge: string;
+  rec: ProcessRecorder;
+}): Pick<AgentTurnResult, "agentType" | "assistantText" | "toolTrace"> {
+  // Giliran transaksi yang ternyata hanya membaca stok dilabeli "query", dengan
+  // atau tanpa jawaban yang menyebut PIN. Tebakan asli Router tetap tersimpan
+  // di routerAgentType (akurasi "Router saja").
+  if (agentType === "transaction" && (readOnlyPinSeen || isReadOnlyTurn(toolTrace))) {
+    agentType = "query";
+    rec.add({ kind: "route", label: "Tidak ada pencatatan stok, giliran dibaca sebagai pertanyaan stok (Query Agent)", status: "done" });
+  }
+  // Balasan kosong (Run 19, S-03 single: model diam sesudah diingatkan) tidak
+  // boleh sampai ke staf sebagai pesan kosong.
+  const rawText = (reply.text || (reply.malformed ? "" : content)).trim();
+  const modelText = (readOnlyPin ? dropPinSentences(rawText, pinProductNames) : rawText) || textBeforeNudge;
+  // Jawaban dari cache offline selalu diberi keterangan oleh kode (model sering lupa).
+  const cacheNote = modelText ? cacheNoteFor(toolTrace) : null;
+  // Q-13: jawaban tren yang bertentangan dengan hitungan kode diganti kalimat dari kode.
+  const trendTrace = [...toolTrace].reverse().find((t) => t.name === "getSalesTrend");
+  const trendSummary = trendTrace ? summarizeTrend(trendTrace.result) : null;
+  if (modelText && trendSummary && contradictsTrend(modelText, trendSummary)) {
+    rec.add(answerStep("code"));
+    const productName = String((trendTrace?.result as { product_name?: unknown })?.product_name ?? "");
+    return { agentType, assistantText: trendReply(trendSummary, productName), toolTrace };
+  }
+  // Q-07: jawaban pembacaan stok yang bertentangan dengan getStock (mis. "kosong di
+  // semua lokasi" saat Gudang 2, atau mengaku "sudah dicatat") diganti kalimat dari kode.
+  const stockTrace = [...toolTrace].reverse().find((t) => t.name === "getStock");
+  const stockSummary = stockTrace && !trendTrace ? summarizeStock(stockTrace.result) : null;
+  // Semua kalimat jawaban ternyata permintaan PIN: datanya diambil dari getStock.
+  if (!modelText && readOnlyPin && stockSummary) {
+    rec.add(answerStep("code"));
+    const stockText = stockReply(stockSummary);
+    const note = cacheNoteFor(toolTrace);
+    return { agentType, assistantText: note ? `${stockText}\n\n${note}` : stockText, toolTrace };
+  }
+  if (modelText && stockSummary && contradictsStock(modelText, stockSummary)) {
+    rec.add(answerStep("code"));
+    const reply = stockReply(stockSummary, { notRecorded: claimsRecorded(modelText) });
+    return { agentType, assistantText: cacheNote ? `${reply}
+
+${cacheNote}` : reply, toolTrace };
+  }
+  rec.add(answerStep(!modelText ? "code" : toolTrace.length > 0 ? "model" : "model_no_tool"));
+  return {
+    agentType,
+    assistantText: cacheNote
+      ? `${modelText}\n\n${cacheNote}`
+      : modelText || "Maaf, saya kurang mengerti maksudnya. Bisa diulang?",
+    toolTrace,
+  };
+}
