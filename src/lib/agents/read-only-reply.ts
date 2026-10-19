@@ -41,6 +41,21 @@ export function staffMentionsPin(message: string): boolean {
   return PIN_WORD_RE.test(message);
 }
 
+const WRITE_TOOLS = new Set(["updateStock", "transferStock"]);
+
+/**
+ * Giliran Transaction Agent yang selesai tanpa mencatat apa pun dan hanya membaca
+ * data (getStock/getSalesTrend) dilabeli "query", baik jawabannya menyebut PIN
+ * maupun tidak (H-14: "Tangki Air Radiator Febi ada 2 di gudang dan 1 di toko").
+ * Tanpa alat sama sekali (mis. hanya bertanya balik) label transaksi dipertahankan.
+ */
+export function isReadOnlyTurn(toolTrace: { name: string }[]): boolean {
+  return (
+    toolTrace.some((t) => t.name === "getStock" || t.name === "getSalesTrend") &&
+    !toolTrace.some((t) => WRITE_TOOLS.has(t.name))
+  );
+}
+
 export function mentionsPinConfirmation(text: string, productNames: string[] = []): boolean {
   return PIN_REQUEST_RE.test(withoutProductNames(text, productNames));
 }

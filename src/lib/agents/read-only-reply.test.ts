@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dropPinSentences, mentionsPinConfirmation, staffMentionsPin } from "@/src/lib/agents/read-only-reply";
+import { dropPinSentences, isReadOnlyTurn, mentionsPinConfirmation, staffMentionsPin } from "@/src/lib/agents/read-only-reply";
 
 describe("mentionsPinConfirmation", () => {
   it.each<[string]>([
@@ -68,5 +68,24 @@ describe("dropPinSentences", () => {
 
   it("nama barang berisi 'pin' tidak ikut dibuang", () => {
     expect(dropPinSentences("Stok Pin Piston di Gudang 5.", ["Pin Piston"])).toBe("Stok Pin Piston di Gudang 5.");
+  });
+});
+
+describe("isReadOnlyTurn", () => {
+  it("hanya getStock: dibaca sebagai query", () => {
+    expect(isReadOnlyTurn([{ name: "getStock" }])).toBe(true);
+  });
+  it("getStock lalu getSalesTrend: tetap baca saja", () => {
+    expect(isReadOnlyTurn([{ name: "getStock" }, { name: "getSalesTrend" }])).toBe(true);
+  });
+  it("ada alat pencatatan: tetap transaksi", () => {
+    expect(isReadOnlyTurn([{ name: "getStock" }, { name: "transferStock" }])).toBe(false);
+    expect(isReadOnlyTurn([{ name: "updateStock" }])).toBe(false);
+  });
+  it("tanpa alat sama sekali: tetap transaksi", () => {
+    expect(isReadOnlyTurn([])).toBe(false);
+  });
+  it("alat karangan saja bukan pembacaan data", () => {
+    expect(isReadOnlyTurn([{ name: "deleteProduct" }])).toBe(false);
   });
 });

@@ -47,6 +47,7 @@ import { trimHistoryForContext } from "@/src/lib/agents/history-window";
 import { offTopicReply } from "@/src/lib/agents/off-topic";
 import {
   dropPinSentences,
+  isReadOnlyTurn,
   mentionsPinConfirmation,
   READ_ONLY_PIN_FEEDBACK,
   staffMentionsPin,
@@ -991,10 +992,10 @@ async function runAgentTurnInner(
       continue;
     }
     if (reply.calls.length === 0) {
-      // Giliran transaksi yang ternyata hanya membaca stok dilabeli "query", baik
-      // model menurut sesudah diingatkan maupun tetap menyebut PIN. Tebakan asli
-      // Router tetap tersimpan di routerAgentType (akurasi "Router saja").
-      if (readOnlyPinSeen && agentType === "transaction") {
+      // Giliran transaksi yang ternyata hanya membaca stok dilabeli "query", dengan
+      // atau tanpa jawaban yang menyebut PIN. Tebakan asli Router tetap tersimpan
+      // di routerAgentType (akurasi "Router saja").
+      if (agentType === "transaction" && (readOnlyPinSeen || isReadOnlyTurn(toolTrace))) {
         agentType = "query";
         rec.add({ kind: "route", label: "Tidak ada pencatatan stok, giliran dibaca sebagai pertanyaan stok (Query Agent)", status: "done" });
       }
