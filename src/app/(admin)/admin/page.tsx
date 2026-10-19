@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowRight, Bell, PackageSearch } from "lucide-react";
 import { requirePage } from "@/src/lib/auth/staff-context";
 import { DashboardSummaryModule } from "@/src/modules/dashboard-summary/Component";
+import { DashboardOverviewModule } from "@/src/modules/dashboard-summary/Overview";
 
 const NOTIF_PAGE_SIZE = 10;
 
@@ -65,6 +66,8 @@ export default async function AdminDashboardPage({
         <DashboardSummaryModule />
       </Suspense>
 
+      <DashboardOverviewModule />
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <StatCard
           icon={PackageSearch}
@@ -104,7 +107,7 @@ export default async function AdminDashboardPage({
             <div key={s.id} className="flex items-center justify-between p-4">
               <div>
                 <p className="text-sm font-medium text-slate-900">
-                  {s.products?.name}
+                  {s.products?.name ?? "Produk tidak dikenal"}
                 </p>
                 <p className="text-xs text-slate-500">{s.reason}</p>
               </div>
