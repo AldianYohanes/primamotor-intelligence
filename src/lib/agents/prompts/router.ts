@@ -23,6 +23,8 @@ jangan koreksi mereka, teruskan apa adanya ke agent tujuan yang akan melakukan f
 
 Balas HANYA dengan salah satu token: QUERY_AGENT, TRANSACTION_AGENT, atau OFF_TOPIC.`
 
+import { stripThinking } from "@/src/lib/agents/tool-protocol";
+
 const ROUTER_CONTEXT_MAX_CHARS = 300;
 
 /**
@@ -34,12 +36,19 @@ export function buildRouterInput(userMessage: string, lastAssistantText?: string
   return context ? `Balasan asisten sebelumnya: "${context}"\nPesan staf: ${userMessage}` : userMessage;
 }
 
+const ROUTER_LABEL = /transaction|query|off[_\s-]?topic/i;
+
 /**
  * Toleran terhadap variasi keluaran model ("TRANSACTION", "transaction_agent",
  * "QUERY AGENT."): Llama 3.2 sering memotong akhiran "_AGENT".
+ *
+ * Teks "berpikir" (<think>…</think>) dibuang dulu, lalu label diambil dari kata
+ * label pertama di balasan, bukan dari kata mana pun: pikiran model yang menyebut
+ * "transaction" tidak boleh menentukan rute.
  */
 export function parseRouterReply(text: string): "query" | "transaction" | "off_topic" {
-  if (/transaction/i.test(text)) return "transaction";
-  if (/query/i.test(text)) return "query";
+  const label = ROUTER_LABEL.exec(stripThinking(text))?.[0].toLowerCase();
+  if (label?.startsWith("transaction")) return "transaction";
+  if (label?.startsWith("query")) return "query";
   return "off_topic";
 }
