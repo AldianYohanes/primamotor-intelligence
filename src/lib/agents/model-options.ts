@@ -18,6 +18,9 @@ export const MODEL_OPTIONS = [
   { id: "Qwen2.5-1.5B-Instruct-q4f32_1-MLC", label: "Qwen2.5 1.5B f32 (ringan, tanpa f16)", vramMB: 1889 },
   { id: "Llama-3.2-1B-Instruct-q4f16_1-MLC", label: "Llama 3.2 1B (ringan, HP)", vramMB: 879 },
   { id: "Llama-3.2-1B-Instruct-q4f32_1-MLC", label: "Llama 3.2 1B f32 (ringan, tanpa f16)", vramMB: 1129 },
+  { id: "Qwen3-1.7B-q4f16_1-MLC", label: "Qwen3 1.7B (ringan, HP)", vramMB: 2037 },
+  { id: "Qwen3-1.7B-q4f32_1-MLC", label: "Qwen3 1.7B f32 (ringan, tanpa f16)", vramMB: 2635 },
+  { id: "gemma3-1b-it-q4f16_1-MLC", label: "Gemma 3 1B (sangat ringan, HP)", vramMB: 711 },
   { id: "Hermes-2-Pro-Mistral-7B-q4f16_1-MLC", label: "Hermes 2 Pro Mistral 7B", vramMB: 4033 },
   { id: "Hermes-3-Llama-3.1-8B-q4f16_1-MLC", label: "Hermes 3 Llama 3.1 8B", vramMB: 4876 },
 ] as const;
