@@ -29,6 +29,12 @@ import {
 } from "@/src/lib/agents/tool-protocol";
 import { interruptOnAbort, streamChatCompletion } from "@/src/lib/agents/turn/stream";
 import { reportAgentExecutionMetric } from "@/src/lib/agents/turn/metrics";
+import {
+  CODE_REPLIES,
+  OFFLINE_MUTATION_MESSAGE,
+  UNAVAILABLE_TOOL_REPLY,
+  UNBACKED_STOCK_REPLY,
+} from "@/src/lib/agents/turn/replies";
 import { searchCachedStock } from "@/src/lib/cache/indexeddb";
 import { getActiveModelId } from "@/src/lib/agents/webllm-engine";
 import {
@@ -86,6 +92,7 @@ import {
 
 export type { LocationChoice } from "@/src/lib/agents/location-choice";
 export type { ProcessStep } from "@/src/lib/agents/process-trace";
+export { UNAVAILABLE_TOOL_REPLY, UNBACKED_STOCK_REPLY } from "@/src/lib/agents/turn/replies";
 export { TurnStoppedError } from "@/src/lib/agents/turn/types";
 export type {
   AgentMode,
@@ -240,9 +247,6 @@ async function fetchTenantLocations(): Promise<TenantLocation[] | null> {
 function isMutationTool(name: string): name is MutationTool {
   return name === "updateStock" || name === "transferStock";
 }
-
-const OFFLINE_MUTATION_MESSAGE =
-  "Sedang offline — perubahan stok butuh koneksi internet untuk verifikasi PIN dan mencatat transaksi dengan aman. Coba lagi setelah tersambung.";
 
 async function searchProducts(query: string, conversationId: string, businessId: string) {
   const res = (await executeTool("getStock", { query, limit: 5 }, conversationId, businessId)) as {
@@ -546,16 +550,6 @@ interface NonStreamUsage {
 export { OFF_TOPIC_REPLY } from "@/src/lib/agents/off-topic";
 
 const KNOWN_TOOL_NAMES = new Set<string>(AGENT_TOOL_DEFINITIONS.map((t) => t.function.name));
-
-export const UNBACKED_STOCK_REPLY =
-  "Maaf, stoknya belum bisa saya cek. Coba sebutkan lagi nama barangnya, misalnya \"stok filter oli di toko\".";
-
-export const UNAVAILABLE_TOOL_REPLY =
-  "Maaf, permintaan itu di luar kemampuan saya. Saya hanya bisa cek stok, melihat tren penjualan, " +
-  "dan mencatat barang masuk/keluar/pindah lokasi (dengan konfirmasi PIN).";
-
-/** Balasan kode milik orchestrator; tidak dipakai sebagai konteks Router maupun agent. */
-const CODE_REPLIES = [UNAVAILABLE_TOOL_REPLY, UNBACKED_STOCK_REPLY, OFFLINE_MUTATION_MESSAGE];
 
 async function routeMessage(
   engine: MLCEngineInterface,
