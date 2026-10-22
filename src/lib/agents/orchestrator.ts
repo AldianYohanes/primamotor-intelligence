@@ -10,6 +10,8 @@ import { AGENT_TOOL_DEFINITIONS } from "@/src/lib/agents/tool-schemas";
 import {
   MALFORMED_TOOL_CALL_FEEDBACK,
   MISSING_TOOL_CALL_FEEDBACK,
+  missingToolCallFeedback,
+  type ToolSuggestion,
   TOOL_STOP_SEQUENCES,
   announcesToolCall,
   buildToolInstructions,
@@ -29,6 +31,7 @@ import {
   resolveTransferLocations,
   resolveUpdateLocation,
   twoLocationsFeedback,
+  twoLocationsSuggestion,
   type GeoPoint,
   type LocationChoice,
   type TenantLocation,
@@ -42,7 +45,14 @@ import {
 } from "@/src/lib/agents/product-resolution";
 import { trimHistoryForContext } from "@/src/lib/agents/history-window";
 import { offTopicReply } from "@/src/lib/agents/off-topic";
-import { normalizeShorthand } from "@/src/lib/agents/normalize-shorthand";
+import {
+  dropPinSentences,
+  isReadOnlyTurn,
+  mentionsPinConfirmation,
+  READ_ONLY_PIN_FEEDBACK,
+  staffMentionsPin,
+} from "@/src/lib/agents/read-only-reply";
+import { agentInputMessage, normalizeShorthand } from "@/src/lib/agents/normalize-shorthand";
 import { guardRoute } from "@/src/lib/agents/route-guard";
 import { MAX_TREND_MONTHS, parseSalesPeriod, stripSalesPeriod } from "@/src/lib/agents/sales-period";
 import { agentHistory, routerContext } from "@/src/lib/agents/router-context";
@@ -53,6 +63,8 @@ import {
   mentionsStockMovement,
   offlineNoMatchReply,
 } from "@/src/lib/agents/offline-answers";
+import { claimsRecorded, contradictsStock, stockReply, summarizeStock } from "@/src/lib/agents/stock-summary";
+import { contradictsTrend, summarizeTrend, trendFactsText, trendReply } from "@/src/lib/agents/trend-summary";
 import {
   ProcessRecorder,
   answerStep,
@@ -85,7 +97,17 @@ export interface PendingConfirmation {
 }
 
 export interface AgentTurnResult {
+  /**
+   * Kelas akhir giliran: keluaran Router, dikoreksi pengaman kode (guardRoute,
+   * giliran transaksi yang ternyata cuma membaca stok jadi "query"). Mode single:
+   * disimpulkan dari jejak alat.
+   */
   agentType: "query" | "transaction" | "off_topic";
+  /**
+   * Tebakan asli Router sebelum koreksi kode apa pun; dasar akurasi "Router saja"
+   * di /eval. Kosong di mode single_agent (tidak ada Router).
+   */
+  routerAgentType?: "query" | "transaction" | "off_topic";
   assistantText: string;
   pendingConfirmation?: PendingConfirmation;
   /** Transaksi ditahan sampai staf memilih produk atau lokasi. */
@@ -393,6 +415,8 @@ export interface ProductChoice {
   /** Argumen dari model; product_id diisi dari pilihan staf. */
   args: Record<string, unknown>;
   userMessage: string;
+  /** Pesan asli staf untuk audit log; kosong = sama dengan userMessage. */
+  originalMessage?: string;
   options: { id: string; name: string; detail: string }[];
 }
 
@@ -534,6 +558,8 @@ async function advanceMutation(
   getDevicePosition: () => Promise<GeoPoint | null>,
   /** Tindakan kode untuk "Lihat proses" (mis. "Lokasi diisi: Gudang"). */
   note: (text: string) => void = () => {},
+  /** Pesan asli staf (sebelum singkatan diluruskan); disimpan sebagai alasan di audit log. */
+  originalMessage: string = userMessage,
 ): Promise<MutationOutcome> {
   if (!navigator.onLine) return { message: OFFLINE_MUTATION_MESSAGE, result: { status: "offline" } };
 
@@ -570,6 +596,7 @@ async function advanceMutation(
           toolName,
           args,
           userMessage,
+          originalMessage,
           options: pick.candidates.map((c) => ({ id: c.product_id, name: c.name, detail: describeStock(c) })),
         },
         result: { status: "product_choice_required", candidates: pick.candidates.map((c) => c.product_id) },
@@ -584,7 +611,7 @@ async function advanceMutation(
   const name = productName ?? "barang ini";
 
   const quantity = Number(args.quantity);
-  const reasoning = String(args.reasoning ?? "").trim() || userMessage;
+  const reasoning = String(args.reasoning ?? "").trim() || originalMessage;
   const resolvedArgs: Record<string, unknown> =
     toolName === "updateStock"
       ? {
@@ -696,6 +723,7 @@ export async function submitMutationChoice(
           businessId,
           readDevicePosition,
           (text) => rec.add({ kind: "action", label: text, status: "done" }),
+          choice.originalMessage ?? choice.userMessage,
         );
   rec.add(mutationOutcomeStep(outcome.result));
   rec.add(answerStep("code"));
@@ -773,10 +801,13 @@ async function runAgentTurnInner(
   modelReplies: string[],
   getDevicePosition: () => Promise<GeoPoint | null>,
   rec: ProcessRecorder,
+  meta: { routerAgentType?: AgentTurnResult["agentType"] },
   onToken?: (partialText: string) => void,
   signal?: AbortSignal,
 ): Promise<AgentTurnResult> {
   const toolTrace: AgentTurnResult["toolTrace"] = [];
+  // Agent membaca kata utuh ("klr" → "keluar"); riwayat dan balasan kode tetap teks asli.
+  const agentMessage = agentInputMessage(userMessage);
   // Mode single_agent: nilai ini placeholder, diganti inferAgentTypeFromTrace di runAgentTurn.
   let agentType: AgentTurnResult["agentType"] = "query";
   let systemPrompt = SINGLE_AGENT_SYSTEM_PROMPT;
@@ -785,6 +816,7 @@ async function runAgentTurnInner(
     const routing = rec.add({ kind: "route", label: "Router menentukan agent…", status: "running" });
     const routed = await routeMessage(engine, userMessage, history, signal);
     agentType = routed.agentType;
+    meta.routerAgentType = routed.agentType;
     rec.finish(routing, routeStep(agentType, routed.text));
     // Pengaman kode: pesan yang jelas berisi pencatatan barang tidak boleh berhenti
     // di Query Agent karena Router salah menebak (T-10).
@@ -813,7 +845,7 @@ async function runAgentTurnInner(
     // memanggil model (uji M4 9 Okt: model gagal menulis tool call 3× lalu
     // jawaban cadangan yang tidak menjelaskan alasannya).
     if (agentType === "transaction" && typeof navigator !== "undefined" && !navigator.onLine) {
-      if (mentionsStockMovement(userMessage)) {
+      if (mentionsStockMovement(agentMessage)) {
         rec.add({ kind: "action", label: "Sedang offline, transaksi tidak dikirim", status: "failed" });
         rec.add(answerStep("code"));
         return { agentType, assistantText: OFFLINE_MUTATION_MESSAGE, toolTrace };
@@ -854,13 +886,18 @@ async function runAgentTurnInner(
     // Hanya role & content: pesan di UI bisa membawa field lain (mis. trace).
     // Tanpa balasan kode (model cenderung menyalinnya, uji M4 9 Okt).
     ...trimHistoryForContext(agentHistory(history, CODE_REPLIES)).map(({ role, content }) => ({ role, content })),
-    { role: "user", content: userMessage },
+    { role: "user", content: agentMessage },
   ];
 
   let nudgedMissingCall = false;
   let nudgedUnbacked = false;
+  let nudgedReadOnlyPin = false;
+  // Pernah terlihat jawaban "konfirmasi PIN" padahal agent hanya membaca stok (H-14).
+  let readOnlyPinSeen = false;
   let sawMalformed = false;
   let checkedTwoLocations = false;
+  // Alat yang disarankan umpan balik pengaman sebelumnya; dipakai sebagai contoh di pengingat.
+  let suggestedNext: ToolSuggestion | null = null;
   // Teks model sebelum diingatkan; dipakai bila balasan sesudahnya kosong.
   let textBeforeNudge = "";
   const rejectedTools = new Set<string>();
@@ -912,7 +949,7 @@ async function runAgentTurnInner(
       nudgedMissingCall = true;
       textBeforeNudge = (reply.text || content).trim();
       messages.push({ role: "assistant", content });
-      messages.push({ role: "user", content: MISSING_TOOL_CALL_FEEDBACK });
+      messages.push({ role: "user", content: missingToolCallFeedback(suggestedNext) });
       rec.add(retryStep("missing_call"));
       continue;
     }
@@ -933,13 +970,68 @@ async function runAgentTurnInner(
       rec.add(answerStep("unbacked"));
       return { agentType, assistantText: UNBACKED_STOCK_REPLY, toolTrace };
     }
+    // H-14: agent hanya memanggil alat baca (mutasi mengakhiri giliran, jadi jejak
+    // berisi alat baca saja) lalu menulis "konfirmasi dengan PIN". Tidak ada PIN
+    // yang diminta sistem: diperlakukan sebagai jawaban query. Dilewati kalau staf
+    // sendiri menyebut PIN (mis. "tidak perlu PIN"): jawaban soal PIN itu sah.
+    // Nama barang yang memuat kata "pin" (pin piston) dari hasil getStock tidak dihitung.
+    const pinProductNames = toolTrace
+      .filter((t) => t.name === "getStock")
+      .flatMap((t) => summarizeStock(t.result)?.products.map((p) => p.name) ?? []);
+    const readOnlyPin =
+      reply.calls.length === 0 &&
+      toolTrace.length > 0 &&
+      !staffMentionsPin(userMessage) &&
+      mentionsPinConfirmation(reply.text || content, pinProductNames);
+    if (readOnlyPin) readOnlyPinSeen = true;
+    if (readOnlyPin && !nudgedReadOnlyPin && i < MAX_TOOL_ITERATIONS - 1) {
+      nudgedReadOnlyPin = true;
+      messages.push({ role: "assistant", content });
+      messages.push({ role: "user", content: READ_ONLY_PIN_FEEDBACK });
+      rec.add(retryStep("read_only_pin"));
+      continue;
+    }
     if (reply.calls.length === 0) {
+      // Giliran transaksi yang ternyata hanya membaca stok dilabeli "query", dengan
+      // atau tanpa jawaban yang menyebut PIN. Tebakan asli Router tetap tersimpan
+      // di routerAgentType (akurasi "Router saja").
+      if (agentType === "transaction" && (readOnlyPinSeen || isReadOnlyTurn(toolTrace))) {
+        agentType = "query";
+        rec.add({ kind: "route", label: "Tidak ada pencatatan stok, giliran dibaca sebagai pertanyaan stok (Query Agent)", status: "done" });
+      }
       // Balasan kosong (Run 19, S-03 single: model diam sesudah diingatkan) tidak
       // boleh sampai ke staf sebagai pesan kosong.
-      const modelText = (reply.text || (reply.malformed ? "" : content)).trim() || textBeforeNudge;
-      rec.add(answerStep(!modelText ? "code" : toolTrace.length > 0 ? "model" : "model_no_tool"));
+      const rawText = (reply.text || (reply.malformed ? "" : content)).trim();
+      const modelText = (readOnlyPin ? dropPinSentences(rawText, pinProductNames) : rawText) || textBeforeNudge;
       // Jawaban dari cache offline selalu diberi keterangan oleh kode (model sering lupa).
       const cacheNote = modelText ? cacheNoteFor(toolTrace) : null;
+      // Q-13: jawaban tren yang bertentangan dengan hitungan kode diganti kalimat dari kode.
+      const trendTrace = [...toolTrace].reverse().find((t) => t.name === "getSalesTrend");
+      const trendSummary = trendTrace ? summarizeTrend(trendTrace.result) : null;
+      if (modelText && trendSummary && contradictsTrend(modelText, trendSummary)) {
+        rec.add(answerStep("code"));
+        const productName = String((trendTrace?.result as { product_name?: unknown })?.product_name ?? "");
+        return { agentType, assistantText: trendReply(trendSummary, productName), toolTrace };
+      }
+      // Q-07: jawaban pembacaan stok yang bertentangan dengan getStock (mis. "kosong di
+      // semua lokasi" saat Gudang 2, atau mengaku "sudah dicatat") diganti kalimat dari kode.
+      const stockTrace = [...toolTrace].reverse().find((t) => t.name === "getStock");
+      const stockSummary = stockTrace && !trendTrace ? summarizeStock(stockTrace.result) : null;
+      // Semua kalimat jawaban ternyata permintaan PIN: datanya diambil dari getStock.
+      if (!modelText && readOnlyPin && stockSummary) {
+        rec.add(answerStep("code"));
+        const stockText = stockReply(stockSummary);
+        const note = cacheNoteFor(toolTrace);
+        return { agentType, assistantText: note ? `${stockText}\n\n${note}` : stockText, toolTrace };
+      }
+      if (modelText && stockSummary && contradictsStock(modelText, stockSummary)) {
+        rec.add(answerStep("code"));
+        const reply = stockReply(stockSummary, { notRecorded: claimsRecorded(modelText) });
+        return { agentType, assistantText: cacheNote ? `${reply}
+
+${cacheNote}` : reply, toolTrace };
+      }
+      rec.add(answerStep(!modelText ? "code" : toolTrace.length > 0 ? "model" : "model_no_tool"));
       return {
         agentType,
         assistantText: cacheNote
@@ -970,8 +1062,9 @@ async function runAgentTurnInner(
       ) {
         checkedTwoLocations = true;
         const locations = await fetchTenantLocations();
-        const two = locations ? mentionedTwoStoreLocations(userMessage, locations) : null;
+        const two = locations ? mentionedTwoStoreLocations(agentMessage, locations) : null;
         if (two) {
+          suggestedNext = twoLocationsSuggestion(args, two);
           rec.add(retryStep("two_locations"));
           responses.push(twoLocationsFeedback(two));
           continue;
@@ -986,11 +1079,12 @@ async function runAgentTurnInner(
         const outcome = await advanceMutation(
           call.name,
           args,
-          userMessage,
+          agentMessage,
           conversationId,
           businessId,
           getDevicePosition,
           (text) => rec.add({ kind: "action", label: text, status: "done" }),
+          userMessage,
         );
         rec.finish(running, { ...start, label: `Model memanggil ${call.name}`, status: "done" });
         rec.add(mutationOutcomeStep(outcome.result));
@@ -1016,7 +1110,7 @@ async function runAgentTurnInner(
       if (!allowed) {
         result = { error: `Tool ${call.name} tidak tersedia untuk agent ini.` };
       } else if (call.name === "getSalesTrend") {
-        ({ result, resolvedArgs } = await runSalesTrend(args, conversationId, businessId, userMessage));
+        ({ result, resolvedArgs } = await runSalesTrend(args, conversationId, businessId, agentMessage));
       } else {
         result = await executeTool(call.name, args, conversationId, businessId);
       }
@@ -1044,6 +1138,9 @@ async function runAgentTurnInner(
       }
       // Model menerima versi ringkas; toolTrace di atas tetap menyimpan hasil lengkap.
       responses.push(formatToolResponse(call.name, call.name === "getStock" ? compactStockResult(result) : result));
+      // Q-13: arah tren dan bulan tertinggi dihitung kode, model hanya menyampaikannya.
+      const trendSummary = call.name === "getSalesTrend" ? summarizeTrend(result) : null;
+      if (trendSummary) responses.push(trendFactsText(trendSummary));
     }
 
     // Dikirim sebagai pesan user, bukan role 'tool': template chat model non-Hermes
@@ -1103,6 +1200,7 @@ export async function runAgentTurn(
   const usageAcc = { promptTokens: 0, completionTokens: 0, hasUsage: false };
   const modelReplies: string[] = [];
   const rec = new ProcessRecorder(options.onStep);
+  const meta: { routerAgentType?: AgentTurnResult["agentType"] } = {};
 
   try {
     const inner = await runAgentTurnInner(
@@ -1116,6 +1214,7 @@ export async function runAgentTurn(
       modelReplies,
       options.getDevicePosition ?? readDevicePosition,
       rec,
+      meta,
       onToken,
       options.signal,
     );
@@ -1127,6 +1226,7 @@ export async function runAgentTurn(
         mode === "single_agent"
           ? inferAgentTypeFromTrace(inner.toolTrace)
           : inner.agentType,
+      ...(mode === "multi_agent" && meta.routerAgentType && { routerAgentType: meta.routerAgentType }),
       latencyMs,
       processSteps: rec.steps,
       usage: usageAcc.hasUsage

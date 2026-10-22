@@ -1,5 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { normalizeShorthand } from "@/src/lib/agents/normalize-shorthand";
+import { agentInputMessage, normalizeShorthand } from "@/src/lib/agents/normalize-shorthand";
+
+describe("agentInputMessage", () => {
+  it("agent menerima kata utuh, bukan singkatan chat (H-05)", () => {
+    expect(agentInputMessage("klr 2 v-belt alternator dr gdg")).toBe("keluar 2 v-belt alternator dari gudang");
+    expect(agentInputMessage("msk 6 filter oli ke gdg")).toBe("masuk 6 filter oli ke gudang");
+  });
+
+  it("pesan tanpa singkatan tidak berubah", () => {
+    const text = "Catat 3 busi bosch keluar dari toko";
+    expect(agentInputMessage(text)).toBe(text);
+  });
+});
 
 describe("normalizeShorthand", () => {
   it.each<[string, string]>([

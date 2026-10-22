@@ -7,6 +7,8 @@
  * lokasi terdekat dari posisi perangkat.
  */
 
+import type { ToolSuggestion } from "@/src/lib/agents/tool-protocol";
+
 export interface GeoPoint {
   latitude: number;
   longitude: number;
@@ -266,4 +268,28 @@ export function twoLocationsFeedback(names: [string, string]): string {
     "Kalau maksudnya memindahkan barang dari satu lokasi ke lokasi lain, panggil transferStock dengan from_location dan to_location. " +
     "Kalau memang hanya barang masuk atau keluar di satu lokasi, panggil updateStock lagi dengan lokasi yang benar.";
   return `<tool_response>\n${JSON.stringify({ error })}\n</tool_response>`;
+}
+
+/**
+ * Alat yang disarankan setelah umpan balik dua lokasi: transferStock dengan isian
+ * dari panggilan updateStock model. Lokasi yang ditulis model jadi asal, lokasi
+ * satunya tujuan; kalau tidak cocok, dibiarkan sebagai tanda isian (tidak ditebak).
+ */
+export function twoLocationsSuggestion(
+  args: Record<string, unknown>,
+  names: [string, string],
+): ToolSuggestion {
+  const written = typeof args.location === "string" ? args.location.toLowerCase().trim() : "";
+  const from = names.find((n) => written !== "" && written.includes(n.toLowerCase()));
+  const to = from ? names.find((n) => n !== from) : undefined;
+  return {
+    name: "transferStock",
+    arguments: {
+      product: typeof args.product === "string" && args.product.trim() ? args.product : "<nama barang>",
+      quantity: typeof args.quantity === "number" ? args.quantity : "<jumlah>",
+      from_location: from ?? "<lokasi asal>",
+      to_location: to ?? "<lokasi tujuan>",
+      reasoning: "Pindah stok sesuai permintaan staf",
+    },
+  };
 }

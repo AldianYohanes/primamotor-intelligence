@@ -58,7 +58,13 @@ export type StockSnapshot = Record<string, number>;
 export interface Observation {
   scenarioId: string;
   mode: AgentMode;
+  /** Kelas akhir giliran (Router + koreksi kode); dasar routeCorrect. */
   predictedRoute: Route | null;
+  /**
+   * Tebakan asli Router sebelum koreksi kode (guardRoute, giliran transaksi yang
+   * ternyata hanya membaca stok). Kosong di mode single_agent dan di run lama.
+   */
+  routerPredictedRoute?: Route | null;
   assistantText: string;
   modelReplies?: string[];
   /** Langkah "Lihat proses" yang sama dengan /chat. */
@@ -97,6 +103,8 @@ export interface ScoredRow {
   scenario: Scenario;
   observation: Observation;
   routeCorrect: boolean;
+  /** Tebakan asli Router benar? null/kosong = tidak ada Router (single) atau run lama. */
+  routerRouteCorrect?: boolean | null;
   toolCorrect: boolean;
   paramCorrectFields: number;
   paramTotalFields: number;

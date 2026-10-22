@@ -262,10 +262,32 @@ export function announcesToolCall(text: string): boolean {
   return ANNOUNCED_TOOL_CALL.test(text);
 }
 
-// Format tool_response (bukan kalimat obrolan): model cenderung membalas obrolan dengan obrolan.
-export const MISSING_TOOL_CALL_FEEDBACK = `<tool_response>
-{"error": "Belum ada alat yang dipanggil. Balas HANYA dengan blok ${OPEN} tanpa teks lain, misalnya:\\n${OPEN}\\n{\\"name\\": \\"getStock\\", \\"arguments\\": {\\"query\\": \\"<nama barang dari pesan staf>\\"}}\\n${CLOSE}"}
+/** Alat yang barusan disarankan pengaman lain, lengkap dengan argumen yang sudah diketahui. */
+export interface ToolSuggestion {
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
+const DEFAULT_TOOL_EXAMPLE: ToolSuggestion = { name: "getStock", arguments: { query: "<nama barang dari pesan staf>" } };
+
+/**
+ * Pengingat "belum ada alat yang dipanggil". Contohnya memakai alat yang disarankan
+ * pengaman sebelumnya (mis. transferStock dari umpan balik dua lokasi) supaya dua
+ * pengaman tidak saling menimpa; tanpa saran, contohnya getStock.
+ */
+export function missingToolCallFeedback(suggestion?: ToolSuggestion | null): string {
+  const example = JSON.stringify(suggestion ?? DEFAULT_TOOL_EXAMPLE);
+  const error = `Belum ada alat yang dipanggil. Balas HANYA dengan blok ${OPEN} tanpa teks lain, misalnya:
+${OPEN}
+${example}
+${CLOSE}`;
+  return `<tool_response>
+${JSON.stringify({ error })}
 </tool_response>`;
+}
+
+// Format tool_response (bukan kalimat obrolan): model cenderung membalas obrolan dengan obrolan.
+export const MISSING_TOOL_CALL_FEEDBACK = missingToolCallFeedback();
 
 export function formatToolResponse(name: string, result: unknown): string {
   return `<tool_response>\n${JSON.stringify({ name, content: result })}\n</tool_response>`;

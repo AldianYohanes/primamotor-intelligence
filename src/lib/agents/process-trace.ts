@@ -157,12 +157,13 @@ export function mutationOutcomeStep(result: Record<string, unknown>): ProcessSte
   }
 }
 
-export function retryStep(reason: "malformed" | "missing_call" | "unbacked_numbers" | "two_locations"): ProcessStep {
+export function retryStep(reason: "malformed" | "missing_call" | "unbacked_numbers" | "two_locations" | "read_only_pin"): ProcessStep {
   const label = {
     two_locations: "Pesan menyebut dua lokasi toko, model diminta menimbang transferStock",
     malformed: "Format pemanggilan alat rusak, model diminta menulis ulang",
     missing_call: "Model menyebut akan memanggil alat tapi belum memanggil, diingatkan",
     unbacked_numbers: "Model menjawab angka tanpa memanggil alat, diminta memanggil getStock dulu",
+    read_only_pin: "Tidak ada pencatatan stok tapi jawaban menyebut PIN, model diminta menjawab ulang tanpa PIN",
   }[reason];
   return { kind: "retry", label, status: "done" };
 }

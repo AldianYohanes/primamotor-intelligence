@@ -3,6 +3,8 @@ import {
   announcesToolCall,
   buildToolInstructions,
   formatToolResponse,
+  MISSING_TOOL_CALL_FEEDBACK,
+  missingToolCallFeedback,
   parseModelReply,
   repairJson,
   visibleStreamText,
@@ -168,5 +170,36 @@ describe("repairJson", () => {
   });
   it("koma di dalam string tidak disentuh", () => {
     expect(repairJson('{"a": "x,}"')).toBe('{"a": "x,}"}');
+  });
+});
+
+describe("missingToolCallFeedback", () => {
+  const errorOf = (text: string): string => {
+    const body = text.slice("<tool_response>".length, text.length - "</tool_response>".length);
+    return (JSON.parse(body) as { error: string }).error;
+  };
+
+  it("tanpa saran: sama dengan pengingat bawaan (contoh getStock)", () => {
+    expect(missingToolCallFeedback()).toBe(MISSING_TOOL_CALL_FEEDBACK);
+    expect(missingToolCallFeedback(null)).toBe(MISSING_TOOL_CALL_FEEDBACK);
+    expect(errorOf(MISSING_TOOL_CALL_FEEDBACK)).toContain("getStock");
+  });
+
+  it("T-07: dengan saran transferStock, contoh pengingat memakai transferStock, bukan getStock", () => {
+    const text = missingToolCallFeedback({
+      name: "transferStock",
+      arguments: { product: "lampu belakang kiri", quantity: 2, from_location: "Gudang", to_location: "Toko" },
+    });
+    expect(text.startsWith("<tool_response>")).toBe(true);
+    expect(text).toContain("transferStock");
+    expect(text).toContain("lampu belakang kiri");
+    expect(text).not.toContain("getStock");
+  });
+
+  it("contoh di pengingat bisa dibaca parseModelReply sebagai tool call valid", () => {
+    const suggestion = { name: "transferStock", arguments: { product: "busi", quantity: 3 } };
+    const error = errorOf(missingToolCallFeedback(suggestion));
+    const parsed = parseModelReply(error.slice(error.lastIndexOf("<tool_call>")));
+    expect(parsed.calls).toEqual([suggestion]);
   });
 });

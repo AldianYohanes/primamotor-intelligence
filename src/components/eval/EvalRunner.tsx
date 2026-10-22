@@ -155,6 +155,10 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   const [gpuPrefChanged, setGpuPrefChanged] = useState(false);
   const [savedRun, setSavedRun] = useState<SavedRun | null>(null);
   const [interruptions, setInterruptions] = useState<Interruption[]>([]);
+  // Modal besar saat run berhenti karena error, supaya terlihat dari jauh (bukan hanya teks status).
+  const [errorModal, setErrorModal] = useState<{ kind: "gpu" | "error"; message: string; during: string; at: string } | null>(null);
+  const [seeding, setSeeding] = useState(false);
+  const [seedStatus, setSeedStatus] = useState<string | null>(null);
   const [progress, setProgress] = useState<{
     done: number;
     total: number;
@@ -244,7 +248,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
     }
     const missing = [...referenced].filter((p) => !refs.products[p]);
     if (missing.length > 0 || !refs.locations.Toko || !refs.locations.Gudang) {
-      throw new Error(`Seed eval belum lengkap (produk hilang: ${missing.join(", ") || "-"}). Jalankan supabase/seed_eval.sql.`);
+      throw new Error(`Seed eval belum lengkap (produk hilang: ${missing.join(", ") || "-"}). Klik "Reset data eval" atau jalankan supabase/seed_eval.sql.`);
     }
     return refs;
   }
@@ -256,9 +260,30 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
       .eq("business_id", businessId);
     setWarning(
       count && count > 0
-        ? `Tenant eval sudah punya ${count} audit log dari run sebelumnya. Hasil tetap valid (dinilai dari selisih stok), tapi skenario stok-kurang bisa berubah perilaku. Untuk run resmi, jalankan ulang supabase/seed_eval.sql dulu.`
+        ? `Tenant eval sudah punya ${count} audit log dari run sebelumnya. Hasil tetap valid (dinilai dari selisih stok), tapi skenario stok-kurang bisa berubah perilaku. Untuk run resmi, klik "Reset data eval" dulu.`
         : null,
     );
+  }
+
+  async function resetEvalData() {
+    const lines = [
+      "Reset data eval? Semua stok, percakapan, dan audit log tenant eval dihapus lalu dibuat ulang seperti supabase/seed_eval.sql.",
+    ];
+    if (savedRun) lines.push("Ada run tersimpan: kalau dilanjutkan sesudah reset, stok awalnya tidak sama dengan saat run itu dimulai.");
+    if (!window.confirm(lines.join(" "))) return;
+    setSeeding(true);
+    setSeedStatus("Mereset data eval…");
+    try {
+      const res = await fetch("/api/eval/seed", { method: "POST" });
+      const body = (await res.json().catch(() => ({}))) as { error?: string; transactions?: number };
+      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+      setSeedStatus(`Data eval direset (${new Date().toLocaleTimeString("id-ID")}, ${body.transactions ?? "?"} transaksi awal).`);
+      setWarning(null);
+    } catch (err) {
+      setSeedStatus(`Reset gagal: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setSeeding(false);
+    }
   }
 
   async function createConversation(mode: AgentMode): Promise<string> {
@@ -390,6 +415,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
     setRows([...collected]);
     setStoppedReason(null);
     setInterruptions(interruptions);
+    setErrorModal(null);
     let during = "persiapan";
     setStartedAt(runStartedAt);
     let stop: Interruption | null = null;
@@ -501,6 +527,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
           observation = {
             ...base,
             predictedRoute: result.agentType,
+            routerPredictedRoute: result.routerAgentType ?? null,
             assistantText: result.assistantText,
             modelReplies: result.modelReplies,
             processSteps: result.processSteps,
@@ -560,6 +587,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         at: new Date().toISOString(),
       };
       setStoppedReason(stop);
+      if (stop.kind !== "stopped") setErrorModal({ kind: stop.kind, message, during, at: stop.at });
       interruptions.push(stop);
       setInterruptions([...interruptions]);
       persist();
@@ -654,6 +682,16 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
       )}
       {warning && (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{warning}</div>
+      )}
+      {isEvalTenant && (
+        <div className="flex flex-wrap items-center gap-3 rounded-md border border-slate-200 bg-white p-3 text-sm">
+          <button className="btn btn-secondary px-3 py-1.5" onClick={resetEvalData} disabled={running || seeding}>
+            {seeding ? "Mereset…" : "Reset data eval"}
+          </button>
+          <span className="text-slate-600">
+            {seedStatus ?? "Kembalikan stok, riwayat penjualan, percakapan, dan audit log tenant eval ke keadaan awal sebelum run baru."}
+          </span>
+        </div>
       )}
 
       <section className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -873,6 +911,12 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
           </h2>
           <div className="grid gap-3 text-sm sm:grid-cols-4">
             <div>Macro F1 routing: <strong>{s.routing.macroF1.toFixed(3)}</strong></div>
+            <div>
+              Akurasi rute: <strong>{pct(s.routing.accuracy.correct, s.routing.accuracy.total)}</strong>
+              {s.routing.routerAccuracy.total > 0 && (
+                <> (Router saja {pct(s.routing.routerAccuracy.correct, s.routing.routerAccuracy.total)})</>
+              )}
+            </div>
             <div>Akurasi tool: <strong>{pct(s.toolAccuracy.correct, s.toolAccuracy.total)}</strong></div>
             <div>Akurasi parameter: <strong>{pct(s.parameterAccuracy.correct, s.parameterAccuracy.total)}</strong></div>
             <div>ETSR: <strong>{pct(s.etsr.success, s.etsr.total)}</strong> ({s.etsr.success}/{s.etsr.total})</div>
@@ -947,7 +991,13 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
                   <td className="pr-3 font-mono">{r.scenario.id}</td>
                   <td className="pr-3">{r.observation.mode === "multi_agent" ? "multi" : "single"}</td>
                   <td className="pr-3">{r.scenario.expected_route}</td>
-                  <td className="pr-3">{r.observation.predictedRoute ?? "–"}</td>
+                  <td className="pr-3">
+                    {r.observation.predictedRoute ?? "–"}
+                    {r.observation.routerPredictedRoute &&
+                      r.observation.routerPredictedRoute !== r.observation.predictedRoute && (
+                        <span className="text-slate-400"> (Router: {r.observation.routerPredictedRoute})</span>
+                      )}
+                  </td>
                   <td className="pr-3">{r.observation.toolTrace.map((t) => t.name).join(", ") || "–"}</td>
                   <td className="pr-3">
                     {r.observation.locationPrompt
@@ -978,6 +1028,34 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             </tbody>
           </table>
         </section>
+      )}
+      {errorModal && (
+        <div role="alertdialog" aria-modal="true" aria-labelledby="eval-error-title" className="fixed inset-0 z-50 flex items-center justify-center bg-red-700/95 p-4">
+          <div className="w-full max-w-3xl space-y-5 text-center text-white">
+            <p id="eval-error-title" className="text-4xl font-bold sm:text-6xl">
+              {errorModal.kind === "gpu" ? "ERROR GPU" : "EVALUASI BERHENTI"}
+            </p>
+            <p className="text-xl sm:text-2xl">
+              Saat {errorModal.during} · {new Date(errorModal.at).toLocaleTimeString("id-ID")}
+              {progress && ` · ${progress.done}/${progress.total} eksekusi selesai`}
+            </p>
+            <p className="break-words text-sm opacity-90">{errorModal.message.slice(0, 300)}</p>
+            <p className="text-base">
+              Hasil sejauh ini tersimpan dan sudah diunduh.{" "}
+              {errorModal.kind === "gpu" ? "Muat ulang halaman, lalu klik \"Lanjutkan run\"." : "Klik \"Lanjutkan run\" setelah masalahnya beres."}
+            </p>
+            <div className="flex flex-wrap justify-center gap-3">
+              {errorModal.kind === "gpu" && (
+                <button className="rounded-lg bg-white px-5 py-3 text-lg font-semibold text-red-700" onClick={() => window.location.reload()}>
+                  Muat ulang halaman
+                </button>
+              )}
+              <button className="rounded-lg border-2 border-white px-5 py-3 text-lg font-semibold text-white" onClick={() => setErrorModal(null)}>
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   );

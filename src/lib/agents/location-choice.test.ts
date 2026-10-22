@@ -12,6 +12,7 @@ import {
   resolveTransferLocations,
   resolveUpdateLocation,
   twoLocationsFeedback,
+  twoLocationsSuggestion,
   type TenantLocation,
 } from "@/src/lib/agents/location-choice";
 
@@ -220,5 +221,42 @@ describe("twoLocationsFeedback", () => {
     expect(text).toContain("Toko");
     expect(text).toContain("Gudang");
     expect(text.startsWith("<tool_response>")).toBe(true);
+  });
+});
+
+describe("twoLocationsSuggestion", () => {
+  it("T-07: updateStock keluar di gudang + pesan menyebut toko & gudang -> saran transferStock gudang ke toko", () => {
+    const suggestion = twoLocationsSuggestion(
+      { product: "lampu belakang kiri", quantity: 2, direction: "keluar", location: "gudang", reasoning: "x" },
+      ["Toko", "Gudang"],
+    );
+    expect(suggestion).toEqual({
+      name: "transferStock",
+      arguments: {
+        product: "lampu belakang kiri",
+        quantity: 2,
+        from_location: "Gudang",
+        to_location: "Toko",
+        reasoning: expect.any(String),
+      },
+    });
+  });
+
+  it("lokasi yang ditulis model menentukan asal; lokasi satunya jadi tujuan", () => {
+    const s = twoLocationsSuggestion({ product: "busi", quantity: 1, location: "Toko" }, ["Toko", "Gudang"]);
+    expect(s.arguments).toMatchObject({ from_location: "Toko", to_location: "Gudang" });
+  });
+
+  it("lokasi kosong atau tidak cocok: asal/tujuan diberi tanda isian, bukan ditebak", () => {
+    const s = twoLocationsSuggestion({ product: "busi", quantity: 1 }, ["Toko", "Gudang"]);
+    expect(s.arguments.from_location).toBe("<lokasi asal>");
+    expect(s.arguments.to_location).toBe("<lokasi tujuan>");
+  });
+
+  it("argumen model yang aneh tidak bikin error", () => {
+    const s = twoLocationsSuggestion({ product: 5, quantity: "dua" }, ["Toko", "Gudang"]);
+    expect(s.name).toBe("transferStock");
+    expect(s.arguments.product).toBe("<nama barang>");
+    expect(s.arguments.quantity).toBe("<jumlah>");
   });
 });

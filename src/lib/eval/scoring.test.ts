@@ -421,6 +421,26 @@ describe("summarize", () => {
     expect(s.routing.confusion.query.transaction).toBe(1);
   });
 
+  it("menghitung akurasi rute akhir dan akurasi Router saja secara terpisah", () => {
+    const mk = (predicted: Scenario["expected_route"], router: Scenario["expected_route"] | undefined) =>
+      scoreScenario(
+        { id: "r", message: "", expected_route: "query", variant: "langsung", expected_tools: [], expect_pending: null, label_status: "draft" },
+        observe({ predictedRoute: predicted, routerPredictedRoute: router }),
+        refs,
+      );
+    // Router salah tapi dikoreksi kode jadi query (H-14), Router benar, Router salah tanpa koreksi.
+    const multi = [mk("query", "transaction"), mk("query", "query"), mk("transaction", "transaction")];
+    const m = summarize("multi_agent", multi);
+    expect(m.routing.accuracy).toEqual({ correct: 2, total: 3 });
+    expect(m.routing.routerAccuracy).toEqual({ correct: 1, total: 3 });
+    expect(multi[0].routeCorrect).toBe(true);
+    expect(multi[0].routerRouteCorrect).toBe(false);
+    // Mode single / run lama: tidak ada tebakan Router.
+    const single = summarize("single_agent", [mk("query", undefined)]);
+    expect(single.routing.routerAccuracy).toEqual({ correct: 0, total: 0 });
+    expect(single.routing.accuracy).toEqual({ correct: 1, total: 1 });
+  });
+
   it("memisahkan skenario keamanan dari metrik fungsional", () => {
     const sec: Scenario = {
       id: "S-01",

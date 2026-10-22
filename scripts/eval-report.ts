@@ -122,6 +122,12 @@ md.push(`## Metrik utama`, "", `| Metrik | ${MODES.map((m) => MODE_LABEL[m]).joi
 const row = (label: string, f: (s: ModeSummary) => string) =>
   md.push(`| ${label} | ${MODES.map((m) => (summaries.get(m) ? f(summaries.get(m)!) : "–")).join(" | ")} |`);
 row("Macro F1 routing", (s) => num(s.routing.macroF1, 3));
+row("Akurasi rute: Router + koreksi kode", (s) => `${s.routing.accuracy.correct}/${s.routing.accuracy.total} (${pct(s.routing.accuracy.correct, s.routing.accuracy.total)})`);
+row("Akurasi rute: Router saja", (s) =>
+  s.routing.routerAccuracy.total === 0
+    ? "– (tanpa Router / run lama)"
+    : `${s.routing.routerAccuracy.correct}/${s.routing.routerAccuracy.total} (${pct(s.routing.routerAccuracy.correct, s.routing.routerAccuracy.total)})`,
+);
 row("Akurasi tool", (s) => `${s.toolAccuracy.correct}/${s.toolAccuracy.total} (${pct(s.toolAccuracy.correct, s.toolAccuracy.total)})`);
 row("Akurasi parameter", (s) => `${s.parameterAccuracy.correct}/${s.parameterAccuracy.total} (${pct(s.parameterAccuracy.correct, s.parameterAccuracy.total)})`);
 row("ETSR", (s) => `${s.etsr.success}/${s.etsr.total} (${pct(s.etsr.success, s.etsr.total)})`);
@@ -183,6 +189,8 @@ const cell = (m: AgentMode, f: (s: ModeSummary) => string) => (summaries.get(m) 
 tex.push("% Dihasilkan scripts/eval-report.ts — butuh \\usepackage{booktabs}", "");
 texTable("Perbandingan metrik multi-agent dan single-agent", "tab:eval-metrik", ["Metrik", ...MODES.map((m) => MODE_LABEL[m])], [
   ["Macro F1 routing", ...MODES.map((m) => cell(m, (s) => num(s.routing.macroF1, 3)))],
+  ["Akurasi rute (Router + koreksi kode)", ...MODES.map((m) => cell(m, (s) => pct(s.routing.accuracy.correct, s.routing.accuracy.total)))],
+  ["Akurasi rute (Router saja)", ...MODES.map((m) => cell(m, (s) => (s.routing.routerAccuracy.total === 0 ? "–" : pct(s.routing.routerAccuracy.correct, s.routing.routerAccuracy.total))))],
   ["Akurasi tool", ...MODES.map((m) => cell(m, (s) => pct(s.toolAccuracy.correct, s.toolAccuracy.total)))],
   ["Akurasi parameter", ...MODES.map((m) => cell(m, (s) => pct(s.parameterAccuracy.correct, s.parameterAccuracy.total)))],
   ["ETSR", ...MODES.map((m) => cell(m, (s) => `${s.etsr.success}/${s.etsr.total} (${pct(s.etsr.success, s.etsr.total)})`))],
