@@ -148,3 +148,40 @@ describe("contradictsStock", () => {
     expect(contradictsStock("Kampas kosong di semua lokasi.", zero)).toBe(false);
   });
 });
+
+
+describe("contradictsStock: ungkapan tidak ada dan klaim per lokasi (Run 43, Llama)", () => {
+  const one = (name: string, toko: number, gudang: number) =>
+    summarizeStock({ results: [{ product_id: "p", name, stock_by_location: [row("Gudang", gudang), row("Toko", toko)] }] })!;
+
+  it.each<[string, number, number, string]>([
+    ["Timing Belt Volvo 240 B230", 6, 14, "Maaf, timing belt buat 240 tidak ada di stok saat ini."],
+    ["Karburator Volvo 240", 1, 1, "Maaf, part karbu 240 tidak ditemukan di gudang atau toko saat ini. Apakah kamu bisa memberikan nomor part?"],
+    ["Bilah Wiper Bosch 20 inch", 14, 20, "Maaf, part Wipr Bosch tidak ditemukan. Apakah kamu bisa memberikan nomor part atau model mobil yang sesuai?"],
+    ["Tangki Air Radiator Febi", 1, 2, "Maaf, stok Tangki Air Radiator Febi di gudang tidak ada."],
+    ["Radiator Volvo 240", 2, 3, "Maaf, radiator volvo 240 tidak ditemukan di stok kami. Namun, ada beberapa pilihan lain."],
+    ["Bushing Arm Suspensi Depan", 9, 30, "Maaf, stok bushing arm depan di toko ini kosong. Kamu bisa memeriksa stok di gudang, karena ada stok 30 unit."],
+  ])("menangkap klaim tidak ada padahal ada: %s", (name, toko, gudang, text) => {
+    expect(contradictsStock(text, one(name, toko, gudang))).toBe(true);
+  });
+
+  it("klaim kosong di lokasi yang memang nol tetap benar", () => {
+    const tail = one("Lampu Belakang Kiri Depo", 0, 4);
+    expect(contradictsStock("Gudangnya masih punya, tapi toko kosong. Kamu bisa ke gudang ya.", tail)).toBe(false);
+    expect(contradictsStock("Lampu belakang kiri tidak ada di toko, di gudang ada 4.", tail)).toBe(false);
+  });
+
+  it("\"tidak ada\" yang bukan soal barang tidak dianggap klaim kosong", () => {
+    const s = one("Filter Oli Mahle", 25, 60);
+    expect(contradictsStock("Stok Filter Oli Mahle: Toko 25, Gudang 60. Tidak ada perubahan stok.", s)).toBe(false);
+    expect(contradictsStock("Toko 25, Gudang 60, tidak ada transaksi yang dicatat.", s)).toBe(false);
+  });
+
+  it("pertanyaan balik model bukan klaim", () => {
+    expect(contradictsStock("Apakah maksudnya stok di toko habis?", one("Filter Oli Mahle", 25, 60))).toBe(false);
+  });
+
+  it("barang yang memang kosong di semua lokasi boleh dibilang tidak ditemukan stoknya", () => {
+    expect(contradictsStock("Maaf, stok Gril Depan tidak ada.", one("Gril Depan Volvo 240", 0, 0))).toBe(false);
+  });
+});
