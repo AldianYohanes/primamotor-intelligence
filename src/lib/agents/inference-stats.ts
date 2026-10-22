@@ -37,7 +37,9 @@ export interface InferenceSnapshot {
 type Clock = () => number;
 
 export class InferenceMeter {
-  private calls: (ModelCallStats & { startedAt: number })[] = [];
+  private calls: ModelCallStats[] = [];
+  /** Waktu mulai tiap panggilan (indeks sama dengan calls). */
+  private startedAt: number[] = [];
 
   constructor(
     private readonly modelId: string,
@@ -46,7 +48,8 @@ export class InferenceMeter {
   ) {}
 
   startCall(label: ModelCallStats["label"]): number {
-    this.calls.push({ label, status: "running", durationMs: 0, liveTokens: 0, startedAt: this.now() });
+    this.calls.push({ label, status: "running", durationMs: 0, liveTokens: 0 });
+    this.startedAt.push(this.now());
     this.emit();
     return this.calls.length - 1;
   }
@@ -56,9 +59,9 @@ export class InferenceMeter {
     const call = this.calls[index];
     if (!call || call.status === "done") return;
     const now = this.now();
-    if (call.liveTokens === 0) call.timeToFirstTokenMs = now - call.startedAt;
+    if (call.liveTokens === 0) call.timeToFirstTokenMs = now - this.startedAt[index];
     call.liveTokens += 1;
-    call.durationMs = now - call.startedAt;
+    call.durationMs = now - this.startedAt[index];
     this.emit();
   }
 
@@ -66,7 +69,7 @@ export class InferenceMeter {
     const call = this.calls[index];
     if (!call) return;
     call.status = "done";
-    call.durationMs = this.now() - call.startedAt;
+    call.durationMs = this.now() - this.startedAt[index];
     if (usage) {
       call.promptTokens = usage.prompt_tokens;
       call.completionTokens = usage.completion_tokens;
@@ -81,7 +84,7 @@ export class InferenceMeter {
   snapshot(): InferenceSnapshot {
     return {
       modelId: this.modelId,
-      calls: this.calls.map(({ startedAt: _startedAt, ...c }) => ({ ...c })),
+      calls: this.calls.map((c) => ({ ...c })),
     };
   }
 
