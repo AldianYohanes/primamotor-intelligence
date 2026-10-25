@@ -19,9 +19,13 @@ import {
   announcesToolCall,
   buildToolInstructions,
   formatToolResponse,
+  parseFunctionStyleCall,
   parseModelReply,
   stripThinking,
 } from "@/src/lib/agents/tool-protocol";
+import { correctToolCall, missingCallSuggestion } from "@/src/lib/agents/tool-correction";
+import { getModelProfile } from "@/src/lib/agents/model-profile";
+import { getActiveModelId } from "@/src/lib/agents/webllm-engine";
 import { streamChatCompletion } from "@/src/lib/agents/turn/stream";
 import type { InferenceMeter } from "@/src/lib/agents/inference-stats";
 import {
@@ -193,6 +197,8 @@ export async function runAgentTurnInner(
     { role: "user", content: agentMessage },
   ];
 
+  // Pengaman tambahan hanya untuk model dengan profil khusus (model-profile.ts).
+  const agentRecovery = getModelProfile(getActiveModelId()).agentRecovery;
   let nudgedMissingCall = false;
   let nudgedUnbacked = false;
   let nudgedReadOnlyPin = false;
@@ -222,9 +228,16 @@ export async function runAgentTurnInner(
     }
 
     modelReplies.push(content);
-    const reply = parseModelReply(content);
+    let reply = parseModelReply(content);
     // Teks tampil/cek tanpa blok <think>; `content` mentah tetap dipakai untuk riwayat.
     const shownContent = stripThinking(content);
+    if (agentRecovery && reply.calls.length === 0 && !reply.malformed) {
+      const styled = parseFunctionStyleCall(shownContent, allowedTools);
+      if (styled) {
+        reply = { text: "", calls: [styled], malformed: false };
+        rec.add({ kind: "action", label: `Panggilan ${styled.name} ditulis seperti kode, dibaca sebagai tool call`, status: "done" });
+      }
+    }
     // Model kecil kadang menulis JSON tool call yang rusak; beri satu kesempatan
     // memperbaiki selama masih ada sisa iterasi, alih-alih langsung menyerah.
     if (reply.calls.length === 0 && reply.malformed && i < MAX_TOOL_ITERATIONS - 1) {
@@ -264,6 +277,17 @@ export async function runAgentTurnInner(
       textBeforeNudge = (reply.text || shownContent).trim();
       messages.push({ role: "assistant", content });
       messages.push({ role: "user", content: missingToolCallFeedback(suggestedNext) });
+      rec.add(retryStep("missing_call"));
+      continue;
+    }
+    // Qwen3 1.7B menjawab pertanyaan stok dari ingatan atau menyalin pesan staf tanpa memanggil
+    // alat (Q-06, Q-07, H-15, H-18 pada run 23 Okt 2026; H-18 mengarang "10 unit"). Ditegur sekali.
+    const missing = agentRecovery && reply.calls.length === 0 && !nudgedMissingCall && toolTrace.length === 0 ? missingCallSuggestion(userMessage) : null;
+    if (missing && i < MAX_TOOL_ITERATIONS - 1) {
+      nudgedMissingCall = true;
+      textBeforeNudge = (reply.text || shownContent).trim();
+      messages.push({ role: "assistant", content });
+      messages.push({ role: "user", content: missingToolCallFeedback(missing.suggestion ?? suggestedNext) });
       rec.add(retryStep("missing_call"));
       continue;
     }
@@ -322,9 +346,12 @@ export async function runAgentTurnInner(
     messages.push({ role: "assistant", content });
     const responses: string[] = [];
 
-    for (const call of reply.calls) {
+    for (const writtenCall of reply.calls) {
       // Sesudah stop, tidak ada alat yang boleh dijalankan lagi.
       if (signal?.aborted) throw new TurnStoppedError();
+      const corrected = agentRecovery ? correctToolCall(writtenCall, agentMessage, allowedTools) : { call: writtenCall, note: null };
+      const call = corrected.call;
+      if (corrected.note) rec.add({ kind: "action", label: corrected.note, status: "done" });
       const args = call.arguments;
       const allowed = allowedTools.has(call.name);
 

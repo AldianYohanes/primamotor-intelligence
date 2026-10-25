@@ -278,6 +278,50 @@ export function announcesToolCall(text: string): boolean {
   return ANNOUNCED_TOOL_CALL.test(text);
 }
 
+/**
+ * Qwen3 1.7B kadang menulis panggilan seperti kode, `getStock(query="wipr bosch")`,
+ * bukan blok tool call (Q-10, run 23 Okt 2026). Hanya dibaca bila seluruh balasan
+ * adalah satu panggilan ke alat yang dikenal; kalimat biasa yang memuat tanda kurung
+ * tidak pernah dianggap panggilan.
+ */
+export function parseFunctionStyleCall(content: string, toolNames: ReadonlySet<string>): ParsedToolCall | null {
+  const match = /^\s*([A-Za-z]\w*)\s*\(([\s\S]*)\)\s*\.?\s*$/.exec(content);
+  if (!match || !toolNames.has(match[1])) return null;
+  const body = match[2];
+  const args: Record<string, unknown> = {};
+  let i = 0;
+  while (i < body.length) {
+    while (i < body.length && /[\s,]/.test(body[i])) i++;
+    if (i >= body.length) break;
+    const key = /^[A-Za-z_]\w*/.exec(body.slice(i));
+    if (!key) return null;
+    i += key[0].length;
+    while (i < body.length && /\s/.test(body[i])) i++;
+    if (body[i] !== "=" && body[i] !== ":") return null;
+    i++;
+    while (i < body.length && /\s/.test(body[i])) i++;
+    const quote = body[i];
+    if (quote === '"' || quote === "'") {
+      let j = i + 1;
+      let value = "";
+      while (j < body.length && body[j] !== quote) {
+        if (body[j] === "\\" && j + 1 < body.length) j++;
+        value += body[j];
+        j++;
+      }
+      if (j >= body.length) return null;
+      args[key[0]] = value;
+      i = j + 1;
+    } else {
+      const literal = /^(-?\d+(?:\.\d+)?|true|false|null)/.exec(body.slice(i));
+      if (!literal) return null;
+      args[key[0]] = literal[0] === "true" ? true : literal[0] === "false" ? false : literal[0] === "null" ? null : Number(literal[0]);
+      i += literal[0].length;
+    }
+  }
+  return Object.keys(args).length > 0 ? { name: match[1], arguments: args } : null;
+}
+
 /** Alat yang barusan disarankan pengaman lain, lengkap dengan argumen yang sudah diketahui. */
 export interface ToolSuggestion {
   name: string;

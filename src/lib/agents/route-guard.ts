@@ -86,3 +86,13 @@ export function guardRoute(agentType: RoutedAgent, userMessage: string): Guarded
   }
   return { agentType, reason: null };
 }
+
+/**
+ * Pesan menanyakan penjualan atau tren sebuah barang, bukan stoknya ("wiper bosch
+ * lagi rame gak?"). Kata stok atau ketersediaan di pesan membatalkannya: "penjualan
+ * dan sisa stok" tetap dibaca sebagai pertanyaan stok.
+ */
+export function asksSalesTrend(message: string): boolean {
+  const text = normalizeShorthand(message);
+  return TREND_RE.test(text) && !STOCK_WORD_RE.test(text) && !AVAILABILITY_RE.test(text);
+}

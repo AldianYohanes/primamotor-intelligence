@@ -10,12 +10,19 @@ export interface ModelProfile {
   routerPrompt: "default" | "compact";
   /** Balasan Router tanpa label dirutekan lewat pengaman kode (guardRoute), bukan otomatis OFF_TOPIC. */
   routerRecovery: boolean;
+  /**
+   * Pengaman panggilan alat di loop agent: panggilan gaya fungsi dibaca, arah updateStock dan
+   * pilihan getStock/getSalesTrend dicocokkan dengan pesan staf, dan pesan soal stok yang dijawab
+   * tanpa alat ditegur sekali (tool-correction.ts).
+   */
+  agentRecovery: boolean;
 }
 
 export const DEFAULT_PROFILE: ModelProfile = {
   routerGrammar: false,
   routerPrompt: "default",
   routerRecovery: false,
+  agentRecovery: false,
 };
 
 /**
@@ -26,6 +33,7 @@ const SMALL_QWEN3_PROFILE: ModelProfile = {
   routerGrammar: true,
   routerPrompt: "compact",
   routerRecovery: true,
+  agentRecovery: true,
 };
 
 export function getModelProfile(modelId: string): ModelProfile {
