@@ -47,8 +47,53 @@ const ROUTER_LABEL = /transaction|query|off[_\s-]?topic/i;
  * "transaction" tidak boleh menentukan rute.
  */
 export function parseRouterReply(text: string): "query" | "transaction" | "off_topic" {
+  return parseRouterReplyOrNull(text) ?? "off_topic";
+}
+
+/**
+ * Sama dengan parseRouterReply, tapi null bila balasan tidak memuat label sama
+ * sekali (model menyalin pesan staf atau menulis kata acak). Dipakai profil model
+ * kecil supaya balasan rusak tidak otomatis dianggap OFF_TOPIC.
+ */
+export function parseRouterReplyOrNull(text: string): "query" | "transaction" | "off_topic" | null {
   const label = ROUTER_LABEL.exec(stripThinking(text))?.[0].toLowerCase();
   if (label?.startsWith("transaction")) return "transaction";
   if (label?.startsWith("query")) return "query";
-  return "off_topic";
+  if (label) return "off_topic";
+  return null;
 }
+
+/**
+ * Tata bahasa untuk response_format WebLLM: Router hanya boleh menulis salah satu
+ * dari tiga label. Pada run 23 Okt 2026, Router Qwen3 1.7B menyalin pesan staf atau
+ * menulis kata acak ("KEJAUSTAN_AGENT") pada 11 dari 32 pesan stok dan transaksi.
+ */
+export const ROUTER_GRAMMAR = `root ::= "QUERY_AGENT" | "TRANSACTION_AGENT" | "OFF_TOPIC"`;
+
+/**
+ * Prompt Router versi ringkas untuk model sangat kecil (Qwen3 1.7B): satu aturan per
+ * kelas dan contoh berpasangan, tanpa penjelasan panjang. Contoh sengaja memakai barang
+ * dan kalimat yang tidak ada di skenario evaluasi supaya tidak membocorkan jawaban.
+ */
+export const ROUTER_COMPACT_SYSTEM_PROMPT = `Kamu Router untuk toko suku cadang Volvo. Pilih satu label untuk pesan staf. Jangan menjawab pesannya.
+
+QUERY_AGENT: tanya stok, sisa, ketersediaan, atau penjualan/tren sebuah barang.
+TRANSACTION_AGENT: mencatat pergerakan barang (masuk, keluar, kejual, pindah, transfer, kurangi, tambah).
+OFF_TOPIC: selain itu (sapaan, umum, cara/harga/rekomendasi, kemampuanmu).
+
+Contoh:
+"aki gs 70ah masih ada ga?" -> QUERY_AGENT
+"sisa busi ngk tinggal berapa" -> QUERY_AGENT
+"penjualan oli mesin 3 bulan terakhir" -> QUERY_AGENT
+"bearing roda belakang ready gk" -> QUERY_AGENT
+"masuk 6 busi ngk ke gudang" -> TRANSACTION_AGENT
+"klr 2 aki gs dr toko" -> TRANSACTION_AGENT
+"pindahin 4 seal klep dari gudang ke toko" -> TRANSACTION_AGENT
+"kurangin 1 kampas kopling" -> TRANSACTION_AGENT
+"halo, kamu siapa?" -> OFF_TOPIC
+"apa itu inflasi?" -> OFF_TOPIC
+"cara pasang aki baru gimana?" -> OFF_TOPIC
+"toko seberang jual aki berapa?" -> OFF_TOPIC
+
+Pesan dengan nama barang dan kata pergerakan adalah TRANSACTION_AGENT, walau singkat atau salah ketik.
+Balas HANYA satu label.`
