@@ -31,18 +31,25 @@ export async function executeTool(
           limit: String(args.limit ?? 5),
         });
         const res = await fetch(`/api/agent/tools/get-stock?${params}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+          // Isi pesan error server ikut dicatat: ekspor /eval hanya menyimpan jejak alat,
+          // dan tanpa ini penyebab fallback ke cache tidak bisa dilacak.
+          const body = (await res.json().catch(() => null)) as { error?: unknown } | null;
+          throw new Error(`HTTP ${res.status}${typeof body?.error === "string" ? `: ${body.error}` : ""}`);
+        }
         return await res.json();
-      } catch {
+      } catch (err) {
         // Offline atau server tak terjangkau — fallback ke cache lokal (disinkron
         // terakhir kali online, lihat syncStockCache). Hasilnya ditandai supaya
         // Query Agent bisa memberi tahu staf datanya mungkin tidak paling baru.
+        const fallbackReason = err instanceof Error ? err.message : String(err);
         const cached = await searchCachedStock(String(args.query), businessId);
         if (cached.length === 0) {
           return {
             results: [],
             source: "offline_cache",
             status: "no_cached_match",
+            fallback_reason: fallbackReason,
             cache_note:
               "Server tidak bisa dihubungi (offline atau gangguan) dan part ini tidak ada di cache. Ini BUKAN berarti stok nol — sampaikan ke staf bahwa stok belum bisa dicek, coba lagi sebentar lagi.",
           };
@@ -66,6 +73,7 @@ export async function executeTool(
             ],
           })),
           source: "offline_cache",
+          fallback_reason: fallbackReason,
           cache_note:
             "Server tidak bisa dihubungi, jadi data ini dari cache perangkat dan bisa saja tidak 100% terbaru — sampaikan ini ke staf.",
         };

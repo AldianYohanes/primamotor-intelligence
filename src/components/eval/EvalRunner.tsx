@@ -26,6 +26,7 @@ import {
 } from "@/src/lib/eval/run-store";
 import { holdWakeLock } from "@/src/lib/pwa/wake-lock";
 import { alertUser, notificationPermission, primeAlerts } from "@/src/lib/eval/alerts";
+import { MAX_CONSECUTIVE_SERVER_FALLBACKS, checkAgentServer, hasServerFallback } from "@/src/lib/eval/server-check";
 import type {
   ConfirmOutcome,
   Observation,
@@ -455,6 +456,13 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
     let stop: Interruption | null = null;
     try {
       if (!isWebGPUAvailable()) throw new Error("Browser ini tidak mendukung WebGPU.");
+      setStatus("Memeriksa server pencarian stok…");
+      const serverCheck = await checkAgentServer();
+      if (!serverCheck.ok) {
+        throw new Error(
+          `Server pencarian stok tidak bisa dipakai (${serverCheck.reason}). Run tidak dimulai karena jawaban stok akan datang dari cache lama dan hasilnya tidak valid.`,
+        );
+      }
       setStatus("Memeriksa data tenant eval…");
       const refs = await resolveRefs();
       await checkTenantIsFresh();
@@ -507,6 +515,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
 
       const todo = remainingPlan(plan, collected.map(toStoredRow));
       const durations: number[] = [];
+      let consecutiveServerFallbacks = 0;
       const segmentStart = performance.now();
       // Mode diselang-seling per skenario supaya kondisi perangkat (suhu, beban) setara di kedua konfigurasi.
       for (const { scenarioId, mode, repetition = 1 } of todo) {
@@ -599,6 +608,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             modelReplies: result.modelReplies,
             processSteps: result.processSteps,
             toolTrace: result.toolTrace,
+            ...(hasServerFallback(result.toolTrace) && { serverFallback: true }),
             pending: Boolean(result.pendingConfirmation),
             // Runner tidak memilihkan lokasi: pilihan staf di luar cakupan satu skenario.
             locationPrompt:
@@ -632,6 +642,13 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         updateTurn({ snapshot: latestInference, totalMs: Date.now() - scenarioStartedAt });
         durations.push(performance.now() - execStart);
         persist();
+        // Server gagal berulang: lanjut hanya membuang jam, karena jawaban stok datang dari cache lama.
+        consecutiveServerFallbacks = observation.serverFallback ? consecutiveServerFallbacks + 1 : 0;
+        if (consecutiveServerFallbacks >= MAX_CONSECUTIVE_SERVER_FALLBACKS) {
+          throw new Error(
+            `Run dihentikan: ${consecutiveServerFallbacks} eksekusi berturut-turut memakai cache perangkat atau gagal mencari produk ke server (terakhir ${scenario.id} · ${mode}). Periksa server lalu lanjutkan run dari run tersimpan.`,
+          );
+        }
       }
       setProgress({
         done: collected.length,

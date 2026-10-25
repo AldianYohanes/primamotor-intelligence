@@ -89,6 +89,11 @@ export interface Observation {
   completionTokens: number | null;
   /** Opsi ablasi panjang prompt aktif saat eksekusi ini (lihat prompt-padding.ts). */
   promptPadding?: boolean;
+  /**
+   * Giliran ini memakai cache perangkat atau pencarian produknya gagal karena server
+   * (lihat server-check.ts). Eksekusi seperti ini tidak menguji model.
+   */
+  serverFallback?: boolean;
   runError?: string;
 }
 
