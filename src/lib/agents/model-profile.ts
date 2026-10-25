@@ -16,6 +16,10 @@ export interface ModelProfile {
    * tanpa alat ditegur sekali (tool-correction.ts).
    */
   agentRecovery: boolean;
+  /** Pesan pencatatan yang jelas dirutekan kode ke Transaction Agent tanpa memanggil Router (hasilnya sama, tanpa waktu Router). */
+  skipRouterForMovement: boolean;
+  /** Nama barang dikenali dari katalog toko di cache perangkat saat pengaman rute menimbang pesan off-topic. */
+  catalogRouting: boolean;
 }
 
 export const DEFAULT_PROFILE: ModelProfile = {
@@ -23,6 +27,8 @@ export const DEFAULT_PROFILE: ModelProfile = {
   routerPrompt: "default",
   routerRecovery: false,
   agentRecovery: false,
+  skipRouterForMovement: false,
+  catalogRouting: false,
 };
 
 /**
@@ -34,6 +40,8 @@ const SMALL_QWEN3_PROFILE: ModelProfile = {
   routerPrompt: "compact",
   routerRecovery: true,
   agentRecovery: true,
+  skipRouterForMovement: true,
+  catalogRouting: true,
 };
 
 export function getModelProfile(modelId: string): ModelProfile {

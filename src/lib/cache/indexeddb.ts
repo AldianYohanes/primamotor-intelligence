@@ -1,6 +1,7 @@
 import Dexie, { type Table } from "dexie";
 import type { createClient } from "@/src/lib/supabase/client";
 import type { Database, Json } from "@/src/lib/db/types";
+import { setCatalogTerms } from "@/src/lib/agents/catalog-match";
 
 type AgentMessageInsert = Database["public"]["Tables"]["agent_messages"]["Insert"];
 import type { ProcessStep } from "@/src/lib/agents/process-trace";
@@ -30,15 +31,27 @@ export interface CachedConversationMessage {
   trace?: ProcessStep[];
 }
 
+/** Nama produk atau alias milik tenant, untuk mengenali nama barang di pesan staf (agents/catalog-match.ts). */
+export interface CachedCatalogTerm {
+  key: string;
+  business_id: string;
+  term: string;
+}
+
 class AppCache extends Dexie {
   stock!: Table<CachedStock, [string, string]>;
   pendingMessages!: Table<CachedConversationMessage, string>;
+  catalog!: Table<CachedCatalogTerm, string>;
 
   constructor() {
     super("prima-motor-cache");
     this.version(1).stores({
       stock: "[product_id+location_id], business_id, product_name",
       pendingMessages: "id, conversation_id, pending_sync",
+    });
+    // Versi 2 hanya menambah tabel; data versi 1 tidak disentuh.
+    this.version(2).stores({
+      catalog: "key, business_id",
     });
   }
 }
@@ -82,7 +95,41 @@ export async function syncStockCache(
     await cache.stock.clear();
     await cache.stock.bulkPut(rows);
   });
+  // Katalog hanya pelengkap pengaman rute: gagal tidak boleh membuat sinkron stok dianggap gagal.
+  await refreshCatalog(supabase, businessId).catch(() => {});
   return { ok: true, syncedAt, rows: rows.length };
+}
+
+/**
+ * Salin nama produk dan alias tenant ke perangkat dan ke pencocok katalog (catalog-match.ts).
+ * Dipanggil bersama sinkron stok, dan di awal run /eval yang tidak memakai halaman chat.
+ */
+export async function refreshCatalog(
+  supabase: ReturnType<typeof createClient>,
+  businessId: string,
+): Promise<{ ok: true; terms: number } | { ok: false; error: string }> {
+  const [products, aliases] = await Promise.all([
+    supabase.from("products").select("name").eq("business_id", businessId),
+    // RLS membatasi alias ke produk tenant sendiri.
+    supabase.from("product_aliases").select("alias"),
+  ]);
+  if (products.error || !products.data) return { ok: false, error: products.error?.message ?? "Data produk kosong" };
+  const terms = [
+    ...products.data.map((p) => p.name),
+    ...(aliases.data ?? []).map((a) => a.alias),
+  ].filter((t): t is string => typeof t === "string" && t.trim() !== "");
+  await cache.transaction("rw", cache.catalog, async () => {
+    await cache.catalog.where("business_id").equals(businessId).delete();
+    await cache.catalog.bulkPut(terms.map((term) => ({ key: `${businessId}|${term}`, business_id: businessId, term })));
+  });
+  setCatalogTerms(terms);
+  return { ok: true, terms: terms.length };
+}
+
+/** Muat katalog dari perangkat ke pencocok (saat /chat dibuka, juga ketika offline). */
+export async function loadCatalogTerms(businessId: string): Promise<void> {
+  const rows = await cache.catalog.where("business_id").equals(businessId).toArray();
+  setCatalogTerms(rows.map((r) => r.term));
 }
 
 /** Waktu sinkron terakhir cache stok tenant ini di perangkat, null bila belum pernah. */
@@ -97,6 +144,8 @@ export async function getLastStockSync(businessId: string): Promise<string | nul
  */
 export async function clearStockCache(): Promise<void> {
   await cache.stock.clear();
+  await cache.catalog.clear();
+  setCatalogTerms([]);
 }
 
 export async function searchCachedStock(

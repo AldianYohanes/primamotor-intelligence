@@ -1,5 +1,6 @@
 import { normalizeShorthand } from "@/src/lib/agents/normalize-shorthand";
 import { mentionsSparePart } from "@/src/lib/agents/off-topic";
+import { mentionsCatalogProduct } from "@/src/lib/agents/catalog-match";
 
 /**
  * Pengaman kode di sekitar keputusan Router (model kecil): LLM menafsirkan,
@@ -52,6 +53,11 @@ const AVAILABILITY_RE =
 const TREND_RE =
   /(?<![\p{L}\p{N}])(jual(?:an|nya)?|penjualan(?:nya)?|laku|laris|rame|tren|trend|grafik)(?![\p{L}\p{N}])/iu;
 
+export interface GuardOptions {
+  /** Kenali nama barang dari katalog toko di cache perangkat (profil model, model-profile.ts). */
+  catalog?: boolean;
+}
+
 export interface GuardedRoute {
   agentType: RoutedAgent;
   /** Alasan override untuk "Lihat proses"; null bila Router dibiarkan. */
@@ -65,7 +71,7 @@ export interface GuardedRoute {
  * (Llama 3.2 membuang 23 dari 32 pesan stok/transaksi ke OFF_TOPIC). Nama barang
  * saja tidak cukup: "cara ganti busi" tetap off-topic.
  */
-export function guardRoute(agentType: RoutedAgent, userMessage: string): GuardedRoute {
+export function guardRoute(agentType: RoutedAgent, userMessage: string, options: GuardOptions = {}): GuardedRoute {
   if (agentType === "transaction") return { agentType, reason: null };
   if (isClearStockMovement(userMessage)) {
     return agentType === "query"
@@ -80,7 +86,10 @@ export function guardRoute(agentType: RoutedAgent, userMessage: string): Guarded
         ? { agentType: "transaction", reason: "Router menilai di luar topik, tapi pesan menyebut stok dan perubahannya: dialihkan ke Transaction Agent" }
         : { agentType: "query", reason: "Router menilai di luar topik, tapi pesan menyebut stok: dialihkan ke Query Agent" };
     }
-    if (mentionsSparePart(text) && (AVAILABILITY_RE.test(text) || TREND_RE.test(text))) {
+    // Dengan opsi katalog, nama barang juga dikenali dari katalog toko (nama, alias, salah ketik),
+    // bukan hanya dari daftar kata suku cadang umum.
+    const namesPart = mentionsSparePart(text) || (options.catalog === true && mentionsCatalogProduct(text));
+    if (namesPart && (AVAILABILITY_RE.test(text) || TREND_RE.test(text))) {
       return { agentType: "query", reason: "Router menilai di luar topik, tapi pesan menanyakan ketersediaan atau penjualan suku cadang: dialihkan ke Query Agent" };
     }
   }

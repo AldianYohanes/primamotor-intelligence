@@ -67,6 +67,8 @@ export interface Observation {
    * ternyata hanya membaca stok). Kosong di mode single_agent dan di run lama.
    */
   routerPredictedRoute?: Route | null;
+  /** Rute diputuskan kode tanpa memanggil Router; eksekusi ini tidak ikut akurasi "Router saja". */
+  routedByCode?: boolean;
   assistantText: string;
   modelReplies?: string[];
   /** Langkah "Lihat proses" yang sama dengan /chat. */

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MLCEngineInterface } from "@mlc-ai/web-llm";
 import { createClient } from "@/src/lib/supabase/client";
+import { refreshCatalog } from "@/src/lib/cache/indexeddb";
 import { isWebGPUAvailable } from "@/src/lib/agents/webgpu-support";
 import { MODEL_ID, MODEL_OPTIONS } from "@/src/lib/agents/model-options";
 import type { AgentMode, ProcessStep } from "@/src/lib/agents/orchestrator";
@@ -463,6 +464,8 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
           `Server pencarian stok tidak bisa dipakai (${serverCheck.reason}). Run tidak dimulai karena jawaban stok akan datang dari cache lama dan hasilnya tidak valid.`,
         );
       }
+      // Katalog untuk pengaman rute profil model kecil; run tidak memakai halaman chat yang biasanya memuatnya.
+      await refreshCatalog(supabase, businessId).catch(() => {});
       setStatus("Memeriksa data tenant eval…");
       const refs = await resolveRefs();
       await checkTenantIsFresh();
@@ -604,6 +607,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             ...base,
             predictedRoute: result.agentType,
             routerPredictedRoute: result.routerAgentType ?? null,
+            ...(result.routedByCode && { routedByCode: true }),
             assistantText: result.assistantText,
             modelReplies: result.modelReplies,
             processSteps: result.processSteps,

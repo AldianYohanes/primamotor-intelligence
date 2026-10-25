@@ -128,6 +128,10 @@ const serverFallbacks = rows.filter((r) => r.observation.serverFallback).length;
 if (serverFallbacks > 0) {
   md.push(`- **PERINGATAN: ${serverFallbacks} eksekusi memakai cache perangkat atau gagal mencari produk ke server, jadi ETSR dan akurasi parameternya tidak valid.**`);
 }
+const routedByCode = rows.filter((r) => r.observation.routedByCode).length;
+if (routedByCode > 0) {
+  md.push(`- Rute diputuskan kode tanpa memanggil Router: ${routedByCode} eksekusi (tidak ikut "Router saja"; ikut akurasi rute akhir).`);
+}
 const interruptions = runs.reduce((n, r) => n + (r.data.interruptions?.length ?? 0), 0);
 if (interruptions) md.push(`- Run sempat berhenti ${interruptions}× lalu dilanjutkan.`);
 for (const w of warnings) md.push(`- ⚠ ${w}`);

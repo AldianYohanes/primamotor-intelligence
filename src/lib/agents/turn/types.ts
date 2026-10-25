@@ -31,6 +31,8 @@ export interface AgentTurnResult {
    * di /eval. Kosong di mode single_agent (tidak ada Router).
    */
   routerAgentType?: "query" | "transaction" | "off_topic";
+  /** Rute diputuskan kode tanpa memanggil Router (profil model, model-profile.ts); tidak ikut akurasi "Router saja". */
+  routedByCode?: boolean;
   assistantText: string;
   pendingConfirmation?: PendingConfirmation;
   /** Transaksi ditahan sampai staf memilih produk atau lokasi. */

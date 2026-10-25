@@ -99,7 +99,7 @@ export async function runAgentTurn(
   const usageAcc = { promptTokens: 0, completionTokens: 0, hasUsage: false, meter };
   const modelReplies: string[] = [];
   const rec = new ProcessRecorder(options.onStep);
-  const meta: { routerAgentType?: AgentTurnResult["agentType"] } = {};
+  const meta: { routerAgentType?: AgentTurnResult["agentType"]; routedByCode?: boolean } = {};
 
   try {
     const inner = await runAgentTurnInner(
@@ -126,6 +126,7 @@ export async function runAgentTurn(
           ? inferAgentTypeFromTrace(inner.toolTrace)
           : inner.agentType,
       ...(mode === "multi_agent" && meta.routerAgentType && { routerAgentType: meta.routerAgentType }),
+      ...(meta.routedByCode && { routedByCode: true }),
       latencyMs,
       processSteps: rec.steps,
       inferenceStats: meter.snapshot(),

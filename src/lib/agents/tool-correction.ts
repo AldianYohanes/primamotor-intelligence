@@ -1,5 +1,5 @@
 import type { ParsedToolCall, ToolSuggestion } from "@/src/lib/agents/tool-protocol";
-import { asksSalesTrend, guardRoute } from "@/src/lib/agents/route-guard";
+import { asksSalesTrend, guardRoute, type GuardOptions } from "@/src/lib/agents/route-guard";
 
 /**
  * Pengaman kode untuk panggilan alat model kecil (profil agentRecovery). Model
@@ -59,8 +59,8 @@ export function correctToolCall(call: ParsedToolCall, message: string, allowedTo
  * soal stok: contoh pencatatan untuk pesan pencatatan, getStock untuk selainnya.
  * Null bila pesan tidak jelas soal stok, sehingga tidak ada teguran.
  */
-export function missingCallSuggestion(message: string): { suggestion: ToolSuggestion | null } | null {
-  const routed = guardRoute("off_topic", message).agentType;
+export function missingCallSuggestion(message: string, options: GuardOptions = {}): { suggestion: ToolSuggestion | null } | null {
+  const routed = guardRoute("off_topic", message, options).agentType;
   if (routed === "off_topic") return null;
   if (routed === "query") return { suggestion: null };
   return {

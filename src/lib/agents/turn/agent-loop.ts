@@ -59,7 +59,7 @@ import {
   staffMentionsPin,
 } from "@/src/lib/agents/read-only-reply";
 import { agentInputMessage } from "@/src/lib/agents/normalize-shorthand";
-import { guardRoute } from "@/src/lib/agents/route-guard";
+import { guardRoute, isClearStockMovement } from "@/src/lib/agents/route-guard";
 import { agentHistory } from "@/src/lib/agents/router-context";
 import {
   isOfflineNoMatch,
@@ -107,11 +107,13 @@ export async function runAgentTurnInner(
   modelReplies: string[],
   getDevicePosition: () => Promise<GeoPoint | null>,
   rec: ProcessRecorder,
-  meta: { routerAgentType?: AgentTurnResult["agentType"] },
+  meta: { routerAgentType?: AgentTurnResult["agentType"]; routedByCode?: boolean },
   onToken?: (partialText: string) => void,
   signal?: AbortSignal,
 ): Promise<AgentTurnResult> {
   const toolTrace: AgentTurnResult["toolTrace"] = [];
+  // Pengaman tambahan hanya untuk model dengan profil khusus (model-profile.ts).
+  const modelProfile = getModelProfile(getActiveModelId());
   // Agent membaca kata utuh ("klr" → "keluar"); riwayat dan balasan kode tetap teks asli.
   const agentMessage = agentInputMessage(userMessage);
   // Mode single_agent: nilai ini placeholder, diganti inferAgentTypeFromTrace di runAgentTurn.
@@ -119,25 +121,33 @@ export async function runAgentTurnInner(
   let systemPrompt = SINGLE_AGENT_SYSTEM_PROMPT;
 
   if (mode === "multi_agent") {
-    const routing = rec.add({ kind: "route", label: "Router menentukan agent…", status: "running" });
-    const routerCall = usageAcc.meter?.startCall("Router");
-    const routed = await routeMessage(engine, userMessage, history, signal);
-    if (routerCall !== undefined) usageAcc.meter?.finishCall(routerCall, routed.usage);
-    agentType = routed.agentType;
-    meta.routerAgentType = routed.agentType;
-    rec.finish(routing, routeStep(agentType, stripThinking(routed.text)));
-    // Pengaman kode: pesan yang jelas berisi pencatatan barang tidak boleh berhenti
-    // di Query Agent karena Router salah menebak (T-10).
-    const guarded = guardRoute(agentType, userMessage);
-    if (guarded.reason) {
-      agentType = guarded.agentType;
-      rec.add({ kind: "route", label: guarded.reason, status: "done" });
-    }
-    modelReplies.push(`[router] ${routed.text}`);
-    if (routed.usage) {
-      usageAcc.hasUsage = true;
-      usageAcc.promptTokens += routed.usage.prompt_tokens ?? 0;
-      usageAcc.completionTokens += routed.usage.completion_tokens ?? 0;
+    if (modelProfile.skipRouterForMovement && isClearStockMovement(userMessage)) {
+      // guardRoute selalu mengalihkan pesan seperti ini ke transaksi apa pun tebakan Router,
+      // jadi memanggil Router hanya menambah waktu (sekitar 13 detik di Qwen3 1.7B).
+      agentType = "transaction";
+      meta.routedByCode = true;
+      rec.add({ kind: "route", label: "Pesan jelas berisi pencatatan barang dan jumlah: dirutekan kode ke Transaction Agent, Router dilewati", status: "done" });
+    } else {
+      const routing = rec.add({ kind: "route", label: "Router menentukan agent…", status: "running" });
+      const routerCall = usageAcc.meter?.startCall("Router");
+      const routed = await routeMessage(engine, userMessage, history, signal);
+      if (routerCall !== undefined) usageAcc.meter?.finishCall(routerCall, routed.usage);
+      agentType = routed.agentType;
+      meta.routerAgentType = routed.agentType;
+      rec.finish(routing, routeStep(agentType, stripThinking(routed.text)));
+      // Pengaman kode: pesan yang jelas berisi pencatatan barang tidak boleh berhenti
+      // di Query Agent karena Router salah menebak (T-10).
+      const guarded = guardRoute(agentType, userMessage, { catalog: modelProfile.catalogRouting });
+      if (guarded.reason) {
+        agentType = guarded.agentType;
+        rec.add({ kind: "route", label: guarded.reason, status: "done" });
+      }
+      modelReplies.push(`[router] ${routed.text}`);
+      if (routed.usage) {
+        usageAcc.hasUsage = true;
+        usageAcc.promptTokens += routed.usage.prompt_tokens ?? 0;
+        usageAcc.completionTokens += routed.usage.completion_tokens ?? 0;
+      }
     }
 
     if (agentType === "off_topic") {
@@ -197,8 +207,7 @@ export async function runAgentTurnInner(
     { role: "user", content: agentMessage },
   ];
 
-  // Pengaman tambahan hanya untuk model dengan profil khusus (model-profile.ts).
-  const agentRecovery = getModelProfile(getActiveModelId()).agentRecovery;
+  const agentRecovery = modelProfile.agentRecovery;
   let nudgedMissingCall = false;
   let nudgedUnbacked = false;
   let nudgedReadOnlyPin = false;
@@ -282,7 +291,7 @@ export async function runAgentTurnInner(
     }
     // Qwen3 1.7B menjawab pertanyaan stok dari ingatan atau menyalin pesan staf tanpa memanggil
     // alat (Q-06, Q-07, H-15, H-18 pada run 23 Okt 2026; H-18 mengarang "10 unit"). Ditegur sekali.
-    const missing = agentRecovery && reply.calls.length === 0 && !nudgedMissingCall && toolTrace.length === 0 ? missingCallSuggestion(userMessage) : null;
+    const missing = agentRecovery && reply.calls.length === 0 && !nudgedMissingCall && toolTrace.length === 0 ? missingCallSuggestion(userMessage, { catalog: modelProfile.catalogRouting }) : null;
     if (missing && i < MAX_TOOL_ITERATIONS - 1) {
       nudgedMissingCall = true;
       textBeforeNudge = (reply.text || shownContent).trim();
