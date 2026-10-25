@@ -54,6 +54,11 @@ describe("asksSalesTrend", () => {
     expect(asksSalesTrend("stok wiper bosch brp")).toBe(false);
     expect(asksSalesTrend("masih ada wiper bosch? lagi laku banget")).toBe(false);
   });
+
+  it("jumlah terjual yang dicatat bukan pertanyaan tren", () => {
+    expect(asksSalesTrend("hella 240 laku 1 di toko")).toBe(false);
+    expect(asksSalesTrend("wiper bosch laku 3 bulan terakhir berapa?")).toBe(true);
+  });
 });
 
 describe("missingCallSuggestion", () => {

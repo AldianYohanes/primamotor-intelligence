@@ -94,5 +94,12 @@ export function guardRoute(agentType: RoutedAgent, userMessage: string): Guarded
  */
 export function asksSalesTrend(message: string): boolean {
   const text = normalizeShorthand(message);
-  return TREND_RE.test(text) && !STOCK_WORD_RE.test(text) && !AVAILABILITY_RE.test(text);
+  return TREND_RE.test(text) && !STOCK_WORD_RE.test(text) && !AVAILABILITY_RE.test(text) && !SOLD_QUANTITY_RE.test(text);
 }
+
+// "laku 1", "kejual 3": jumlah terjual yang dicatat, bukan pertanyaan penjualan. Angka yang
+// diikuti satuan waktu ("laku 3 bulan") tetap pertanyaan tren.
+const SOLD_QUANTITY_RE = new RegExp(
+  String.raw`(?<![\p{L}\p{N}])(?:laku|kejual|terjual|dijual)\s+(?:sebanyak\s+)?\d{1,4}(?![\p{L}\p{N}.,])(?!\s*(?:${PERIOD_WORDS})(?![\p{L}]))`,
+  "iu",
+);
