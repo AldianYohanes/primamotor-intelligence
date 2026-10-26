@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { AGENT_TOOL_DEFINITIONS } from "@/src/lib/agents/tool-schemas";
+import scenarios from "@/src/lib/eval/scenarios.json";
 import {
   announcesToolCall,
   buildToolInstructions,
@@ -238,5 +240,25 @@ describe("stripThinking", () => {
     expect(visibleStreamText("<think>sedang mikir")).toBe("");
     expect(visibleStreamText("<thi")).toBe("");
     expect(visibleStreamText("<think>x</think>Halo")).toBe("Halo");
+  });
+});
+
+describe("contoh alat tambahan", () => {
+  const tools = AGENT_TOOL_DEFINITIONS;
+  it("hanya muncul bila diminta dan tidak memakai kalimat atau barang skenario evaluasi", () => {
+    expect(buildToolInstructions(tools)).not.toContain("kabel kopling");
+    const text = buildToolInstructions(tools, { extraExamples: true });
+    expect(text).toContain("kabel kopling");
+    const messages = (scenarios as { scenarios: { message: string }[] }).scenarios.map((s) => s.message.toLowerCase());
+    for (const item of ["kabel kopling", "selang rem", "oli samping"]) {
+      expect(messages.some((m) => m.includes(item))).toBe(false);
+    }
+  });
+
+  it("contoh hanya untuk alat yang tersedia", () => {
+    const query = tools.filter((t) => ["getStock", "getSalesTrend"].includes(t.function.name));
+    const text = buildToolInstructions(query, { extraExamples: true });
+    expect(text).toContain("oli samping");
+    expect(text).not.toContain("kabel kopling");
   });
 });

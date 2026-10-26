@@ -39,6 +39,8 @@ interface StreamChunk {
   usage?: StreamChunkUsage;
 }
 
+let grammarUnavailable = false;
+
 /**
  * Konsumsi stream chunk demi chunk. Pemanggilan tool ditulis model sebagai teks
  * (lihat tool-protocol.ts), jadi yang dikirim ke UI lewat onToken hanya bagian
@@ -53,6 +55,8 @@ export async function streamChatCompletion(
   onChunk?: () => void,
   /** Batas token keluaran panggilan ini; kosong = tanpa batas. */
   maxTokens?: number,
+  /** Grammar EBNF yang memaksa bentuk keluaran (tool-grammar.ts); dilepas bila build WebLLM menolaknya. */
+  grammar?: string,
 ): Promise<{
   content: string;
   usage: StreamChunkUsage | null;
@@ -60,7 +64,7 @@ export async function streamChatCompletion(
   if (signal?.aborted) throw new TurnStoppedError();
   const stopListening = interruptOnAbort(engine, signal);
   try {
-    return await consumeStream(engine, messages, onToken, signal, onChunk, maxTokens);
+    return await consumeStream(engine, messages, onToken, signal, onChunk, maxTokens, grammar);
   } finally {
     stopListening();
   }
@@ -73,6 +77,7 @@ async function consumeStream(
   signal?: AbortSignal,
   onChunk?: () => void,
   maxTokens?: number,
+  grammar?: string,
 ): Promise<{
   content: string;
   usage: StreamChunkUsage | null;
@@ -84,7 +89,7 @@ async function consumeStream(
   // melonggarkan ChatMessage global atau menaruh @ts-expect-error yang rawan salah
   // baris tiap kali fungsi ini diedit.
   type CreateParams = Parameters<typeof engine.chat.completions.create>[0];
-  const stream = (await engine.chat.completions.create({
+  const request = {
     messages,
     temperature: 0.2,
     stop: TOOL_STOP_SEQUENCES,
@@ -92,7 +97,21 @@ async function consumeStream(
     stream: true,
     stream_options: { include_usage: true },
     ...thinkingOptions(getActiveModelId()),
-  } as unknown as CreateParams)) as AsyncIterable<StreamChunk>;
+  };
+  const create = (extra: object) => engine.chat.completions.create({ ...request, ...extra } as unknown as CreateParams);
+  let stream: AsyncIterable<StreamChunk>;
+  if (grammar && !grammarUnavailable) {
+    try {
+      stream = (await create({ response_format: { type: "grammar", grammar } })) as AsyncIterable<StreamChunk>;
+    } catch (err) {
+      if (signal?.aborted) throw err;
+      // Build WebLLM menolak grammar ini: balasan jalan seperti model lain dan grammar tidak dicoba lagi.
+      grammarUnavailable = true;
+      stream = (await create({})) as AsyncIterable<StreamChunk>;
+    }
+  } else {
+    stream = (await create({})) as AsyncIterable<StreamChunk>;
+  }
 
   let content = "";
   let usage: StreamChunkUsage | null = null;

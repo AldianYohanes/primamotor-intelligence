@@ -11,6 +11,7 @@ import { TRANSACTION_AGENT_SYSTEM_PROMPT } from "@/src/lib/agents/prompts/transa
 import { SINGLE_AGENT_SYSTEM_PROMPT } from "@/src/lib/agents/prompts/single-agent";
 import { buildNeutralPadding, isPromptPaddingOn, paddingLength } from "@/src/lib/agents/prompt-padding";
 import { AGENT_TOOL_DEFINITIONS } from "@/src/lib/agents/tool-schemas";
+import { toolCallGrammar } from "@/src/lib/agents/tool-grammar";
 import {
   MALFORMED_TOOL_CALL_FEEDBACK,
   MISSING_TOOL_CALL_FEEDBACK,
@@ -189,7 +190,8 @@ export async function runAgentTurnInner(
       : AGENT_TOOLS_BY_TYPE[agentType],
   );
   const tools = AGENT_TOOL_DEFINITIONS.filter((t) => allowedTools.has(t.function.name));
-  let systemContent = `${systemPrompt}\n\n${buildToolInstructions(tools)}`;
+  const toolGrammar = modelProfile.constrainedToolCall ? toolCallGrammar(tools) : undefined;
+  let systemContent = `${systemPrompt}\n\n${buildToolInstructions(tools, { extraExamples: modelProfile.toolExamples })}`;
   if (mode === "multi_agent" && isPromptPaddingOn()) {
     // Ablasi /eval: samakan panjang prompt spesialis dengan prompt single-agent.
     const singleLength = `${SINGLE_AGENT_SYSTEM_PROMPT}\n\n${buildToolInstructions(AGENT_TOOL_DEFINITIONS)}`.length;
@@ -234,6 +236,8 @@ export async function runAgentTurnInner(
       signal,
       agentCall === undefined ? undefined : () => usageAcc.meter?.tick(agentCall),
       modelProfile.maxAgentTokens ?? undefined,
+      // Balasan pertama agent spesialis selalu panggilan alat; sesudah ada hasil alat, model bebas menjawab.
+      modelProfile.constrainedToolCall && mode === "multi_agent" && toolTrace.length === 0 ? toolGrammar : undefined,
     );
     if (agentCall !== undefined) usageAcc.meter?.finishCall(agentCall, usage);
     if (usage) {

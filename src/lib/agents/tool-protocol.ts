@@ -45,7 +45,7 @@ const CLOSE = "</tool_call>";
  */
 export const TOOL_STOP_SEQUENCES = [CLOSE, "<tool_response>"];
 
-export function buildToolInstructions(tools: readonly ToolDefinition[]): string {
+export function buildToolInstructions(tools: readonly ToolDefinition[], opts: { extraExamples?: boolean } = {}): string {
   const schema = tools.map((t) => ({
     name: t.function.name,
     description: t.function.description,
@@ -63,6 +63,20 @@ ${OPEN}
 {"name": "getStock", "arguments": {"query": "busi bosch"}}
 ${CLOSE}`
     : "";
+  const has = (name: string) => tools.some((t) => t.function.name === name);
+  // Contoh tambahan untuk model sangat kecil. Barang dan kalimatnya bukan dari skenario evaluasi
+  // (dijaga tool-protocol.test.ts), supaya tidak membocorkan jawaban kumpulan uji.
+  const extra = opts.extraExamples
+    ? [
+        has("getSalesTrend") &&
+          `Staf: "oli samping laku nggak bulan ini?"\nKamu:\n${OPEN}\n{"name": "getSalesTrend", "arguments": {"product": "oli samping", "months": 1}}\n${CLOSE}`,
+        has("updateStock") &&
+          `Staf: "tadi kejual 3 kabel kopling di toko"\nKamu:\n${OPEN}\n{"name": "updateStock", "arguments": {"product": "kabel kopling", "quantity": 3, "direction": "keluar", "reasoning": "Staf mencatat 3 kabel kopling terjual di toko", "location": "toko"}}\n${CLOSE}`,
+        has("transferStock") &&
+          `Staf: "pindahin 4 selang rem dari gudang ke toko"\nKamu:\n${OPEN}\n{"name": "transferStock", "arguments": {"product": "selang rem", "quantity": 4, "from_location": "gudang", "to_location": "toko", "reasoning": "Staf memindahkan 4 selang rem dari gudang ke toko"}}\n${CLOSE}`,
+      ].filter((x): x is string => typeof x === "string")
+    : [];
+  const more = extra.length > 0 ? `\n\n${extra.join("\n\n")}` : "";
   return `# Alat (tools)
 Kamu dapat memanggil alat berikut. Definisinya dalam JSON Schema:
 <tools>
@@ -72,7 +86,7 @@ ${JSON.stringify(schema)}
 Cara memanggil alat: balas HANYA dengan blok berikut (boleh lebih dari satu), tanpa teks lain:
 ${OPEN}
 {"name": "<nama alat>", "arguments": {<argumen sesuai skema>}}
-${CLOSE}${example}
+${CLOSE}${example}${more}
 
 Kamu sendiri yang memanggil alat. Staf tidak bisa memanggil alat, jadi jangan pernah menyuruh staf memanggilnya.
 Hasil alat akan dikirim kembali di dalam blok <tool_response>. Setelah informasinya cukup, jawab staf dengan teks biasa tanpa blok ${OPEN}. Jangan mengarang hasil alat dan jangan menulis blok <tool_response> sendiri.`;
