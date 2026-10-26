@@ -16,6 +16,12 @@ export interface ModelProfile {
    * tanpa alat ditegur sekali (tool-correction.ts).
    */
   agentRecovery: boolean;
+  /**
+   * Pesan yang jelas soal stok tapi dijawab tanpa memanggil alat ditegur sekali. Aktif untuk semua
+   * model (Qwen2.5-3B dua kali melewatkan getStock pada "stok mud flap belakang berapa?", uji Edge
+   * 26 Okt 2026); isi false untuk mengembalikan perilaku sebelum teguran ini.
+   */
+  nudgeMissingCall: boolean;
   /** Pesan pencatatan yang jelas dirutekan kode ke Transaction Agent tanpa memanggil Router (hasilnya sama, tanpa waktu Router). */
   skipRouterForMovement: boolean;
   /** Nama barang dikenali dari katalog toko di cache perangkat saat pengaman rute menimbang pesan off-topic. */
@@ -27,6 +33,7 @@ export const DEFAULT_PROFILE: ModelProfile = {
   routerPrompt: "default",
   routerRecovery: false,
   agentRecovery: false,
+  nudgeMissingCall: true,
   skipRouterForMovement: false,
   catalogRouting: false,
 };
@@ -40,6 +47,7 @@ const SMALL_QWEN3_PROFILE: ModelProfile = {
   routerPrompt: "compact",
   routerRecovery: true,
   agentRecovery: true,
+  nudgeMissingCall: true,
   skipRouterForMovement: true,
   catalogRouting: true,
 };

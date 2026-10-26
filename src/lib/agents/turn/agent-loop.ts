@@ -291,7 +291,7 @@ export async function runAgentTurnInner(
     }
     // Qwen3 1.7B menjawab pertanyaan stok dari ingatan atau menyalin pesan staf tanpa memanggil
     // alat (Q-06, Q-07, H-15, H-18 pada run 23 Okt 2026; H-18 mengarang "10 unit"). Ditegur sekali.
-    const missing = agentRecovery && reply.calls.length === 0 && !nudgedMissingCall && toolTrace.length === 0 ? missingCallSuggestion(userMessage, { catalog: modelProfile.catalogRouting }) : null;
+    const missing = modelProfile.nudgeMissingCall && reply.calls.length === 0 && !nudgedMissingCall && toolTrace.length === 0 ? missingCallSuggestion(userMessage, { catalog: modelProfile.catalogRouting }) : null;
     if (missing && i < MAX_TOOL_ITERATIONS - 1) {
       nudgedMissingCall = true;
       textBeforeNudge = (reply.text || shownContent).trim();

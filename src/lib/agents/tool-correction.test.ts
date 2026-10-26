@@ -168,3 +168,9 @@ describe("groundProductName", () => {
     expect(groundProductName({ name: "getStock", arguments: { product: "lampu sein" } }, "lampu").note).toBeNull();
   });
 });
+
+describe("missingCallSuggestion tanpa katalog (model non-Qwen3)", () => {
+  it("pesan stok dengan nama barang jarang tetap ditegur", () => {
+    expect(missingCallSuggestion("stok mud flap belakang berapa?")).not.toBeNull();
+  });
+});
