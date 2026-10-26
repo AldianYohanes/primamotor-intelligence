@@ -67,3 +67,19 @@ export function mentionsCatalogProduct(message: string): boolean {
   }
   return false;
 }
+
+/** Kata khas (bukan kata umum) dari sebuah teks, dengan panjang minimal pencocokan. */
+export function distinctiveWords(text: string): string[] {
+  return tokensOf(text).filter((t) => !GENERIC.has(t));
+}
+
+/** Kata ini muncul (atau salah ketik wajar) di salah satu kata `tokens`. */
+export function wordInTokens(word: string, tokens: readonly string[]): boolean {
+  const edits = allowedEdits(word.length);
+  return tokens.some((t) => t === word || (edits > 0 && withinEdits(word, t, edits)));
+}
+
+/** Semua kata pesan (panjang minimal pencocokan), termasuk kata umum, untuk dibandingkan dengan nama barang. */
+export function allMessageWords(text: string): string[] {
+  return tokensOf(text);
+}

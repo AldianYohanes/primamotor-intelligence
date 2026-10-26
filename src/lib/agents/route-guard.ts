@@ -112,3 +112,25 @@ const SOLD_QUANTITY_RE = new RegExp(
   String.raw`(?<![\p{L}\p{N}])(?:laku|kejual|terjual|dijual)\s+(?:sebanyak\s+)?\d{1,4}(?![\p{L}\p{N}.,])(?!\s*(?:${PERIOD_WORDS})(?![\p{L}]))`,
   "iu",
 );
+
+// Kata yang menunjukkan pesan ada kaitannya dengan stok, selain nama barang dan pola ketersediaan.
+const STOCK_TOPIC_RE = /(?<![\p{L}\p{N}])(barang|part|sparepart|spare\s+part|suku\s+cadang|onderdil|produk|item|stok|stock)\w*(?![\p{L}\p{N}])/iu;
+
+/**
+ * Pesan punya kaitan dengan stok, penjualan, atau pencatatan barang: ada nama barang (daftar
+ * kata, atau katalog toko bila diminta), kata stok, pola ketersediaan atau tren, atau pergerakan
+ * barang. Dipakai single-agent, yang tidak punya Router, untuk menahan panggilan alat pada
+ * pesan di luar topik (H-36: "nomor telepon bengkel terdekat").
+ */
+export function looksStockRelated(message: string, options: GuardOptions = {}): boolean {
+  const text = normalizeShorthand(message);
+  return (
+    STOCK_TOPIC_RE.test(text) ||
+    AVAILABILITY_RE.test(text) ||
+    TREND_RE.test(text) ||
+    CHANGE_VERB_RE.test(text) ||
+    STRONG_MOVEMENT_RE.test(text) ||
+    mentionsSparePart(text) ||
+    (options.catalog === true && mentionsCatalogProduct(text))
+  );
+}

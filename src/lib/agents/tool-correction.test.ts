@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applyCorrections, correctQuantity, correctToolCall, inferDirection, missingCallSuggestion, statedQuantity, transferCallFrom } from "@/src/lib/agents/tool-correction";
+import { applyCorrections, correctQuantity, correctToolCall, groundProductName, inferDirection, missingCallSuggestion, statedQuantity, transferCallFrom } from "@/src/lib/agents/tool-correction";
 import { parseFunctionStyleCall } from "@/src/lib/agents/tool-protocol";
 import { asksSalesTrend } from "@/src/lib/agents/route-guard";
 
@@ -148,5 +148,23 @@ describe("applyCorrections", () => {
     expect(result.call.arguments).toMatchObject({ quantity: 1, direction: "keluar" });
     expect(result.note).toContain("Arah");
     expect(result.note).toContain("Jumlah");
+  });
+});
+
+describe("groundProductName", () => {
+  it("membuang kata karangan dari nama barang (T-15)", () => {
+    const fixed = groundProductName({ name: "updateStock", arguments: { product: "lampu sein", quantity: 1 } }, "Kurangin stok lampu");
+    expect(fixed.call.arguments.product).toBe("lampu");
+    expect(fixed.note).toContain("lampu sein");
+  });
+
+  it("membiarkan nama yang sesuai pesan, salah ketik wajar, atau terjemahan", () => {
+    const same = { name: "updateStock", arguments: { product: "v-belt alternator" } };
+    expect(groundProductName(same, "msk 6 v-belt alternatr ke gudng").call).toBe(same);
+    const translated = { name: "updateStock", arguments: { product: "Lampu Belakang Kiri" } };
+    expect(groundProductName(translated, "tail lamp kiri kosong").call).toBe(translated);
+    const single = { name: "updateStock", arguments: { product: "lampu" } };
+    expect(groundProductName(single, "kurangin lampu").call).toBe(single);
+    expect(groundProductName({ name: "getStock", arguments: { product: "lampu sein" } }, "lampu").note).toBeNull();
   });
 });

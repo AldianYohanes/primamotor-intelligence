@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { catalogSize, mentionsCatalogProduct, setCatalogTerms } from "@/src/lib/agents/catalog-match";
-import { guardRoute } from "@/src/lib/agents/route-guard";
+import { guardRoute, looksStockRelated } from "@/src/lib/agents/route-guard";
 import { missingCallSuggestion } from "@/src/lib/agents/tool-correction";
 
 const CATALOG = [
@@ -67,5 +67,22 @@ describe("pola ketersediaan dan singkatan umum", () => {
     setCatalogTerms(["Bilah Wiper Bosch 20 inch", "V-Belt Alternator"]);
     expect(guardRoute("off_topic", "wiper bosch masih banyak gak?", { catalog: true }).agentType).toBe("query");
     expect(guardRoute("off_topic", "msh pgng v-belt alternator ga?", { catalog: true }).agentType).toBe("query");
+  });
+});
+
+describe("looksStockRelated", () => {
+  it("false untuk pesan tanpa kaitan stok", () => {
+    for (const m of ["Tolong cariin nomor telepon bengkel terdekat", "Halo, selamat pagi", "Siapa presiden Indonesia sekarang?", "Hitungin 125 ribu kali 7 dong"]) {
+      expect(looksStockRelated(m)).toBe(false);
+    }
+  });
+
+  it("true untuk pertanyaan stok, tren, pencatatan, dan nama barang katalog", () => {
+    for (const m of ["radiator ada gak", "sisa filter oli berapa", "keluar 2 busi dari toko", "penjualan wiper 3 bulan", "Kurangin stok lampu"]) {
+      expect(looksStockRelated(m)).toBe(true);
+    }
+    setCatalogTerms(["Mud Flap Belakang"]);
+    expect(looksStockRelated("mud flap")).toBe(false);
+    expect(looksStockRelated("mud flap", { catalog: true })).toBe(true);
   });
 });

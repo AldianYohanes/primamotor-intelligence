@@ -1,6 +1,7 @@
 import type { ParsedToolCall, ToolSuggestion } from "@/src/lib/agents/tool-protocol";
 import { asksSalesTrend, guardRoute, type GuardOptions } from "@/src/lib/agents/route-guard";
 import { inferTransferDirection } from "@/src/lib/agents/location-choice";
+import { allMessageWords, distinctiveWords, wordInTokens } from "@/src/lib/agents/catalog-match";
 
 /**
  * Pengaman kode untuk panggilan alat model kecil (profil agentRecovery). Model
@@ -114,12 +115,37 @@ export function transferCallFrom(call: ParsedToolCall, message: string, names: [
   };
 }
 
+/**
+ * T-15 "Kurangin stok lampu" ditulis single-agent Qwen3 sebagai barang "lampu sein": kata 'sein'
+ * karangan (ada di contoh prompt), jadi barang tidak ditemukan. Kata nama barang yang tidak ada di
+ * pesan staf dibuang, hanya bila setidaknya separuh kata khasnya cocok dengan pesan. Terjemahan
+ * wajar ("tail lamp" jadi "lampu belakang") tidak memenuhi syarat itu, jadi dibiarkan.
+ */
+export function groundProductName(call: ParsedToolCall, message: string): CorrectedCall {
+  const product = call.arguments.product;
+  if ((call.name !== "updateStock" && call.name !== "transferStock") || typeof product !== "string") return { call, note: null };
+  const words = product.trim().split(/\s+/);
+  const distinctive = words.filter((w) => distinctiveWords(w).length > 0);
+  const messageWords = allMessageWords(message);
+  const matched = distinctive.filter((w) => wordInTokens(w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, ""), messageWords));
+  if (distinctive.length < 2 || matched.length === 0 || matched.length === distinctive.length || matched.length * 2 < distinctive.length) {
+    return { call, note: null };
+  }
+  const kept = words.filter((w) => distinctiveWords(w).length === 0 || matched.includes(w));
+  const grounded = kept.join(" ");
+  return {
+    call: { ...call, arguments: { ...call.arguments, product: grounded } },
+    note: `Nama barang dicocokkan dengan pesan staf: "${product}" jadi "${grounded}"`,
+  };
+}
+
 /** Semua koreksi argumen berurutan; catatannya digabung untuk "Lihat proses". */
 export function applyCorrections(call: ParsedToolCall, message: string, allowedTools: ReadonlySet<string>): CorrectedCall {
   const first = correctToolCall(call, message, allowedTools);
   const second = correctQuantity(first.call, message);
-  const notes = [first.note, second.note].filter((n): n is string => n !== null);
-  return { call: second.call, note: notes.length > 0 ? notes.join("; ") : null };
+  const third = groundProductName(second.call, message);
+  const notes = [first.note, second.note, third.note].filter((n): n is string => n !== null);
+  return { call: third.call, note: notes.length > 0 ? notes.join("; ") : null };
 }
 
 /**

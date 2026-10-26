@@ -59,7 +59,7 @@ import {
   staffMentionsPin,
 } from "@/src/lib/agents/read-only-reply";
 import { agentInputMessage } from "@/src/lib/agents/normalize-shorthand";
-import { guardRoute, isClearStockMovement } from "@/src/lib/agents/route-guard";
+import { guardRoute, isClearStockMovement, looksStockRelated } from "@/src/lib/agents/route-guard";
 import { agentHistory } from "@/src/lib/agents/router-context";
 import {
   isOfflineNoMatch,
@@ -371,6 +371,20 @@ export async function runAgentTurnInner(
           call = asTransfer.call;
           if (asTransfer.note) rec.add({ kind: "action", label: asTransfer.note, status: "done" });
         }
+      }
+      // H-36: single-agent tidak punya Router dan memanggil getStock untuk "nomor telepon bengkel
+      // terdekat". Sebelum alat baca pertama jalan, pesan tanpa kaitan stok dijawab kode sebagai
+      // off-topic, seperti jalur OFF_TOPIC di multi-agent.
+      if (
+        agentRecovery &&
+        mode === "single_agent" &&
+        toolTrace.length === 0 &&
+        (call.name === "getStock" || call.name === "getSalesTrend") &&
+        !looksStockRelated(userMessage, { catalog: modelProfile.catalogRouting })
+      ) {
+        rec.add({ kind: "route", label: "Pesan tidak berkaitan dengan stok: dijawab kode sebagai di luar topik, alat tidak dipanggil", status: "done" });
+        rec.add(answerStep("code"));
+        return { agentType: "off_topic", assistantText: offTopicReply(userMessage), toolTrace };
       }
       const args = call.arguments;
       const allowed = allowedTools.has(call.name);
