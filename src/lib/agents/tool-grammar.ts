@@ -33,7 +33,7 @@ function callRule(tool: ToolDefinition): string {
 }
 
 export function toolCallGrammar(tools: readonly ToolDefinition[]): string {
-  const calls = tools.map(callRule).join("\n  | ");
+  const calls = tools.map(callRule).join(" | ");
   return [
     `root ::= ${lit("<tool_call>\n")} call`,
     `call ::= ${calls}`,
