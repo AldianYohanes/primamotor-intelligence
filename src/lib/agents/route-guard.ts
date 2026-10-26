@@ -88,7 +88,7 @@ export function guardRoute(agentType: RoutedAgent, userMessage: string, options:
     }
     // Dengan opsi katalog, nama barang juga dikenali dari katalog toko (nama, alias, salah ketik),
     // bukan hanya dari daftar kata suku cadang umum.
-    const namesPart = mentionsSparePart(text) || (options.catalog === true && mentionsCatalogProduct(text));
+    const namesPart = mentionsSparePart(text, options.catalog === true) || (options.catalog === true && mentionsCatalogProduct(text));
     if (namesPart && (AVAILABILITY_RE.test(text) || TREND_RE.test(text))) {
       return { agentType: "query", reason: "Router menilai di luar topik, tapi pesan menanyakan ketersediaan atau penjualan suku cadang: dialihkan ke Query Agent" };
     }
@@ -130,7 +130,7 @@ export function looksStockRelated(message: string, options: GuardOptions = {}): 
     TREND_RE.test(text) ||
     CHANGE_VERB_RE.test(text) ||
     STRONG_MOVEMENT_RE.test(text) ||
-    mentionsSparePart(text) ||
+    mentionsSparePart(text, options.catalog === true) ||
     (options.catalog === true && mentionsCatalogProduct(text))
   );
 }

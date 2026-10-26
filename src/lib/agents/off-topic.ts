@@ -1,3 +1,5 @@
+import { EXTRA_PART_TERMS } from "@/src/lib/agents/part-vocabulary";
+
 /**
  * Balasan untuk pesan di luar urusan stok. Pesan yang menyebut mobil atau
  * suku cadang tapi bukan soal stok toko ini (cara servis, ulasan mobil, harga
@@ -36,14 +38,19 @@ const termRe = (terms: string[]) =>
 
 const AUTOMOTIVE_RE = termRe([...VEHICLE_TERMS, ...PART_TERMS]);
 const PART_RE = termRe(PART_TERMS);
+const PART_RE_EXTENDED = termRe([...PART_TERMS, ...EXTRA_PART_TERMS]);
 
 export function mentionsVehicleOrPart(message: string): boolean {
   return AUTOMOTIVE_RE.test(message);
 }
 
-/** Menyebut nama suku cadang (oli, kampas, radiator, ...), bukan sekadar mobil atau bengkel. */
-export function mentionsSparePart(message: string): boolean {
-  return PART_RE.test(message);
+/**
+ * Menyebut nama suku cadang (oli, kampas, radiator, ...), bukan sekadar mobil atau bengkel.
+ * `extended` menambah kosakata dari korpus istilah (part-vocabulary.ts), dipakai profil model
+ * yang memintanya; tanpa itu daftar lama tetap berlaku.
+ */
+export function mentionsSparePart(message: string, extended = false): boolean {
+  return (extended ? PART_RE_EXTENDED : PART_RE).test(message);
 }
 
 export function offTopicReply(message: string): string {
