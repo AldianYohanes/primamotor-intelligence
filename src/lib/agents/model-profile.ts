@@ -28,6 +28,12 @@ export interface ModelProfile {
    * kurang mengerti" (Qwen3.5 0.8B, Q-01, 26 Okt 2026). Isi false untuk mengembalikan perilaku lama.
    */
   answerFromToolResult: boolean;
+  /**
+   * Batas token tiap panggilan Agent. Tanpa batas, Qwen3.5 0.8B menulis 2.700-3.000 token
+   * ("Toko: 2, Gudang: 3" berulang, Q-01 dan Q-04, 26 Okt 2026) dan satu giliran sampai 230 detik.
+   * null = tanpa batas (perilaku lama).
+   */
+  maxAgentTokens: number | null;
   /** Pesan pencatatan yang jelas dirutekan kode ke Transaction Agent tanpa memanggil Router (hasilnya sama, tanpa waktu Router). */
   skipRouterForMovement: boolean;
   /** Nama barang dikenali dari katalog toko di cache perangkat saat pengaman rute menimbang pesan off-topic. */
@@ -41,6 +47,7 @@ export const DEFAULT_PROFILE: ModelProfile = {
   agentRecovery: false,
   nudgeMissingCall: true,
   answerFromToolResult: true,
+  maxAgentTokens: 400,
   skipRouterForMovement: false,
   catalogRouting: true,
 };
@@ -56,6 +63,7 @@ const SMALL_QWEN3_PROFILE: ModelProfile = {
   agentRecovery: true,
   nudgeMissingCall: true,
   answerFromToolResult: true,
+  maxAgentTokens: 400,
   skipRouterForMovement: true,
   catalogRouting: true,
 };

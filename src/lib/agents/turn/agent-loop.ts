@@ -233,6 +233,7 @@ export async function runAgentTurnInner(
       onToken,
       signal,
       agentCall === undefined ? undefined : () => usageAcc.meter?.tick(agentCall),
+      modelProfile.maxAgentTokens ?? undefined,
     );
     if (agentCall !== undefined) usageAcc.meter?.finishCall(agentCall, usage);
     if (usage) {

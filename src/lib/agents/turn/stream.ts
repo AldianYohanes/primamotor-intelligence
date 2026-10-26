@@ -51,6 +51,8 @@ export async function streamChatCompletion(
   signal?: AbortSignal,
   /** Dipanggil tiap chunk teks, untuk statistik inferensi (inference-stats.ts). */
   onChunk?: () => void,
+  /** Batas token keluaran panggilan ini; kosong = tanpa batas. */
+  maxTokens?: number,
 ): Promise<{
   content: string;
   usage: StreamChunkUsage | null;
@@ -58,7 +60,7 @@ export async function streamChatCompletion(
   if (signal?.aborted) throw new TurnStoppedError();
   const stopListening = interruptOnAbort(engine, signal);
   try {
-    return await consumeStream(engine, messages, onToken, signal, onChunk);
+    return await consumeStream(engine, messages, onToken, signal, onChunk, maxTokens);
   } finally {
     stopListening();
   }
@@ -70,6 +72,7 @@ async function consumeStream(
   onToken?: (partialText: string) => void,
   signal?: AbortSignal,
   onChunk?: () => void,
+  maxTokens?: number,
 ): Promise<{
   content: string;
   usage: StreamChunkUsage | null;
@@ -85,6 +88,7 @@ async function consumeStream(
     messages,
     temperature: 0.2,
     stop: TOOL_STOP_SEQUENCES,
+    ...(maxTokens && { max_tokens: maxTokens }),
     stream: true,
     stream_options: { include_usage: true },
     ...thinkingOptions(getActiveModelId()),

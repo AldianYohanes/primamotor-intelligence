@@ -12,7 +12,7 @@ import scenarios from "@/src/lib/eval/scenarios.json";
 describe("getModelProfile", () => {
   it("Qwen3 kecil memakai Router terbatas dan prompt ringkas", () => {
     for (const id of ["Qwen3-1.7B-q4f16_1-MLC", "Qwen3-1.7B-q4f32_1-MLC", "Qwen3-0.6B-q4f16_1-MLC"]) {
-      expect(getModelProfile(id)).toEqual({ routerGrammar: true, routerPrompt: "compact", routerRecovery: true, agentRecovery: true, nudgeMissingCall: true, answerFromToolResult: true, skipRouterForMovement: true, catalogRouting: true });
+      expect(getModelProfile(id)).toEqual({ routerGrammar: true, routerPrompt: "compact", routerRecovery: true, agentRecovery: true, nudgeMissingCall: true, answerFromToolResult: true, maxAgentTokens: 400, skipRouterForMovement: true, catalogRouting: true });
     }
   });
 
@@ -20,7 +20,7 @@ describe("getModelProfile", () => {
     for (const option of MODEL_OPTIONS.filter((o) => !/qwen3/i.test(o.id))) {
       expect(getModelProfile(option.id)).toBe(DEFAULT_PROFILE);
     }
-    expect(DEFAULT_PROFILE).toEqual({ routerGrammar: false, routerPrompt: "default", routerRecovery: false, agentRecovery: false, nudgeMissingCall: true, answerFromToolResult: true, skipRouterForMovement: false, catalogRouting: true });
+    expect(DEFAULT_PROFILE).toEqual({ routerGrammar: false, routerPrompt: "default", routerRecovery: false, agentRecovery: false, nudgeMissingCall: true, answerFromToolResult: true, maxAgentTokens: 400, skipRouterForMovement: false, catalogRouting: true });
   });
 
   it("Qwen3 ukuran besar belum punya profil khusus", () => {
