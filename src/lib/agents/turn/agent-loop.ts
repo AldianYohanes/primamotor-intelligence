@@ -207,6 +207,11 @@ export async function runAgentTurnInner(
     { role: "user", content: agentMessage },
   ];
 
+  // Balasan yang akan diulang tidak boleh tetap tampil ke staf selama model menyusun ulang.
+  const retry = (kind: Parameters<typeof retryStep>[0]) => {
+    onToken?.("");
+    rec.add(retryStep(kind));
+  };
   const agentRecovery = modelProfile.agentRecovery;
   let nudgedMissingCall = false;
   let nudgedUnbacked = false;
@@ -252,7 +257,7 @@ export async function runAgentTurnInner(
     if (reply.calls.length === 0 && reply.malformed && i < MAX_TOOL_ITERATIONS - 1) {
       messages.push({ role: "assistant", content });
       messages.push({ role: "user", content: MALFORMED_TOOL_CALL_FEEDBACK });
-      rec.add(retryStep("malformed"));
+      retry("malformed");
       sawMalformed = true;
       continue;
     }
@@ -271,7 +276,7 @@ export async function runAgentTurnInner(
       textBeforeNudge = (reply.text || shownContent).trim();
       messages.push({ role: "assistant", content });
       messages.push({ role: "user", content: MISSING_TOOL_CALL_FEEDBACK });
-      rec.add(retryStep("missing_call"));
+      retry("missing_call");
       continue;
     }
     // Sama seperti di atas untuk "Saya akan panggil alat…" tanpa blok tool call.
@@ -286,7 +291,7 @@ export async function runAgentTurnInner(
       textBeforeNudge = (reply.text || shownContent).trim();
       messages.push({ role: "assistant", content });
       messages.push({ role: "user", content: missingToolCallFeedback(suggestedNext) });
-      rec.add(retryStep("missing_call"));
+      retry("missing_call");
       continue;
     }
     // Qwen3 1.7B menjawab pertanyaan stok dari ingatan atau menyalin pesan staf tanpa memanggil
@@ -297,7 +302,7 @@ export async function runAgentTurnInner(
       textBeforeNudge = (reply.text || shownContent).trim();
       messages.push({ role: "assistant", content });
       messages.push({ role: "user", content: missingToolCallFeedback(missing.suggestion ?? suggestedNext) });
-      rec.add(retryStep("missing_call"));
+      retry("missing_call");
       continue;
     }
     // Query Agent menyebut angka tanpa pernah membaca data (uji M4 9 Okt: stok
@@ -310,7 +315,7 @@ export async function runAgentTurnInner(
       nudgedUnbacked = true;
       messages.push({ role: "assistant", content });
       messages.push({ role: "user", content: MISSING_TOOL_CALL_FEEDBACK });
-      rec.add(retryStep("unbacked_numbers"));
+      retry("unbacked_numbers");
       continue;
     }
     if (unbackedNumbers) {
@@ -335,7 +340,7 @@ export async function runAgentTurnInner(
       nudgedReadOnlyPin = true;
       messages.push({ role: "assistant", content });
       messages.push({ role: "user", content: READ_ONLY_PIN_FEEDBACK });
-      rec.add(retryStep("read_only_pin"));
+      retry("read_only_pin");
       continue;
     }
     if (reply.calls.length === 0) {
@@ -404,7 +409,7 @@ export async function runAgentTurnInner(
         const two = locations ? mentionedTwoStoreLocations(agentMessage, locations) : null;
         if (two) {
           suggestedNext = twoLocationsSuggestion(args, two);
-          rec.add(retryStep("two_locations"));
+          retry("two_locations");
           responses.push(twoLocationsFeedback(two));
           continue;
         }
