@@ -156,15 +156,20 @@ export async function runSalesTrend(
   conversationId: string,
   businessId: string,
   userMessage = "",
+  /** Periode yang disebut jelas di pesan staf menang atas angka tulisan model (profil model kecil). */
+  messagePeriodWins = false,
 ): Promise<{ result: unknown; resolvedArgs?: Record<string, unknown> }> {
   const rawMonths = Number(args.months);
   const rawProduct = String(args.product ?? args.product_name ?? "");
   // Q-14: model menaruh "3 bln" di nama barang dan mengosongkan months. Bila months
   // tidak valid, dibaca dari nama barang lalu dari pesan staf; baru default 6.
+  // H-02, H-27: "setahun" ditulis model months=1; dengan messagePeriodWins kata staf yang dipakai.
+  const stated = messagePeriodWins ? parseSalesPeriod(userMessage)?.months : undefined;
   const months =
-    Number.isInteger(rawMonths) && rawMonths >= 1 && rawMonths <= MAX_TREND_MONTHS
+    stated ??
+    (Number.isInteger(rawMonths) && rawMonths >= 1 && rawMonths <= MAX_TREND_MONTHS
       ? rawMonths
-      : (parseSalesPeriod(rawProduct)?.months ?? parseSalesPeriod(userMessage)?.months ?? 6);
+      : (parseSalesPeriod(rawProduct)?.months ?? parseSalesPeriod(userMessage)?.months ?? 6));
   const given = typeof args.product_id === "string" ? args.product_id : null;
   if (given && UUID_RE.test(given)) {
     return {

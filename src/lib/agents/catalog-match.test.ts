@@ -61,3 +61,11 @@ describe("guardRoute dengan katalog", () => {
     expect(missingCallSuggestion("mud flap belakang ready gak di gudang?", { catalog: true })).not.toBeNull();
   });
 });
+
+describe("pola ketersediaan dan singkatan umum", () => {
+  it("masih banyak dan pgng dikenali sebagai pertanyaan ketersediaan barang katalog", () => {
+    setCatalogTerms(["Bilah Wiper Bosch 20 inch", "V-Belt Alternator"]);
+    expect(guardRoute("off_topic", "wiper bosch masih banyak gak?", { catalog: true }).agentType).toBe("query");
+    expect(guardRoute("off_topic", "msh pgng v-belt alternator ga?", { catalog: true }).agentType).toBe("query");
+  });
+});

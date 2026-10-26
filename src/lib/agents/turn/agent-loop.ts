@@ -23,7 +23,7 @@ import {
   parseModelReply,
   stripThinking,
 } from "@/src/lib/agents/tool-protocol";
-import { correctToolCall, missingCallSuggestion } from "@/src/lib/agents/tool-correction";
+import { applyCorrections, missingCallSuggestion, transferCallFrom } from "@/src/lib/agents/tool-correction";
 import { getModelProfile } from "@/src/lib/agents/model-profile";
 import { getActiveModelId } from "@/src/lib/agents/webllm-engine";
 import { streamChatCompletion } from "@/src/lib/agents/turn/stream";
@@ -358,9 +358,20 @@ export async function runAgentTurnInner(
     for (const writtenCall of reply.calls) {
       // Sesudah stop, tidak ada alat yang boleh dijalankan lagi.
       if (signal?.aborted) throw new TurnStoppedError();
-      const corrected = agentRecovery ? correctToolCall(writtenCall, agentMessage, allowedTools) : { call: writtenCall, note: null };
-      const call = corrected.call;
+      const corrected = agentRecovery ? applyCorrections(writtenCall, agentMessage, allowedTools) : { call: writtenCall, note: null };
+      let call = corrected.call;
       if (corrected.note) rec.add({ kind: "action", label: corrected.note, status: "done" });
+      // T-07, H-08: "ambil dari gudang" untuk toko dicatat model sebagai updateStock. Profil model
+      // kecil membacanya dari kata depan dan langsung menjadikannya transferStock.
+      if (agentRecovery && call.name === "updateStock" && allowedTools.has("transferStock")) {
+        const locations = await fetchTenantLocations();
+        const two = locations ? mentionedTwoStoreLocations(agentMessage, locations) : null;
+        const asTransfer = two ? transferCallFrom(call, agentMessage, two) : null;
+        if (asTransfer) {
+          call = asTransfer.call;
+          if (asTransfer.note) rec.add({ kind: "action", label: asTransfer.note, status: "done" });
+        }
+      }
       const args = call.arguments;
       const allowed = allowedTools.has(call.name);
 
@@ -424,7 +435,7 @@ export async function runAgentTurnInner(
       if (!allowed) {
         result = { error: `Tool ${call.name} tidak tersedia untuk agent ini.` };
       } else if (call.name === "getSalesTrend") {
-        ({ result, resolvedArgs } = await runSalesTrend(args, conversationId, businessId, agentMessage));
+        ({ result, resolvedArgs } = await runSalesTrend(args, conversationId, businessId, agentMessage, agentRecovery));
       } else {
         result = await executeTool(call.name, args, conversationId, businessId);
       }

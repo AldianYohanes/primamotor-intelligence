@@ -1,5 +1,6 @@
 import type { ParsedToolCall, ToolSuggestion } from "@/src/lib/agents/tool-protocol";
 import { asksSalesTrend, guardRoute, type GuardOptions } from "@/src/lib/agents/route-guard";
+import { inferTransferDirection } from "@/src/lib/agents/location-choice";
 
 /**
  * Pengaman kode untuk panggilan alat model kecil (profil agentRecovery). Model
@@ -52,6 +53,73 @@ export function correctToolCall(call: ParsedToolCall, message: string, allowedTo
     }
   }
   return { call, note: null };
+}
+
+const PERIOD_AFTER = String.raw`(?!\s*(?:bulan|bln|tahun|thn|hari|minggu|pekan|jam)(?![\p{L}]))`;
+// Jumlah yang jelas: angka tepat sesudah kata kerja pergerakan, atau angka bersatuan barang.
+const VERB_QUANTITY_RE = new RegExp(
+  String.raw`(?<![\p{L}\p{N}])(?:masuk|keluar|pindah\w*|transfer|kejual|terjual|dijual|laku|retur|tambah\w*|kurang\w*)\s+(?:sebanyak\s+)?(\d{1,4})(?![\p{L}\p{N}.,])${PERIOD_AFTER}`,
+  "giu",
+);
+const UNIT_QUANTITY_RE = new RegExp(
+  String.raw`(?<![\p{L}\p{N}])(\d{1,4})\s*(?:pcs|biji|buah|unit|set|pasang|botol|lembar|batang|pak|dus|karton|roll|liter)(?![\p{L}])`,
+  "giu",
+);
+
+/**
+ * Jumlah yang disebut staf bila pesan hanya memuat satu angka jelas (angka dekat kata kerja atau
+ * satuan), selain itu null. Kode model seperti "240" tidak pernah dihitung sebagai jumlah.
+ */
+export function statedQuantity(message: string): number | null {
+  const found = new Set<number>();
+  for (const re of [VERB_QUANTITY_RE, UNIT_QUANTITY_RE]) for (const m of message.matchAll(re)) found.add(Number(m[1]));
+  return found.size === 1 ? [...found][0] : null;
+}
+
+/**
+ * "hella 240 laku 1 di toko" ditulis Qwen3 1.7B dengan jumlah 240 (kode model terbawa jadi
+ * jumlah). Angka yang jelas di pesan staf menang atas tulisan model.
+ */
+export function correctQuantity(call: ParsedToolCall, message: string): CorrectedCall {
+  if (call.name !== "updateStock" && call.name !== "transferStock") return { call, note: null };
+  const stated = statedQuantity(message);
+  if (stated === null || Number(call.arguments.quantity) === stated) return { call, note: null };
+  return {
+    call: { ...call, arguments: { ...call.arguments, quantity: stated } },
+    note: `Jumlah dikoreksi dari pesan staf: ${stated} (model menulis ${String(call.arguments.quantity)})`,
+  };
+}
+
+/**
+ * updateStock dipanggil padahal pesan menyebut toko dan gudang tanpa kata masuk atau keluar:
+ * "Toko butuh 2 lampu, ambil dari gudang" artinya pindah. Kata depan dari/ke menentukan arah.
+ * null bila bukan kasus ini, atau arahnya tidak jelas.
+ */
+export function transferCallFrom(call: ParsedToolCall, message: string, names: [string, string]): CorrectedCall | null {
+  if (call.name !== "updateStock" || inferDirection(message) !== null) return null;
+  const direction = inferTransferDirection(message, names);
+  if (!direction) return null;
+  return {
+    call: {
+      name: "transferStock",
+      arguments: {
+        product: call.arguments.product ?? call.arguments.product_name,
+        quantity: call.arguments.quantity,
+        from_location: direction.from,
+        to_location: direction.to,
+        reasoning: call.arguments.reasoning,
+      },
+    },
+    note: `Pesan menyebut dua lokasi tanpa kata masuk atau keluar: dicatat sebagai pindah dari ${direction.from} ke ${direction.to}`,
+  };
+}
+
+/** Semua koreksi argumen berurutan; catatannya digabung untuk "Lihat proses". */
+export function applyCorrections(call: ParsedToolCall, message: string, allowedTools: ReadonlySet<string>): CorrectedCall {
+  const first = correctToolCall(call, message, allowedTools);
+  const second = correctQuantity(first.call, message);
+  const notes = [first.note, second.note].filter((n): n is string => n !== null);
+  return { call: second.call, note: notes.length > 0 ? notes.join("; ") : null };
 }
 
 /**

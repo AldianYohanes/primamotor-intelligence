@@ -47,7 +47,7 @@ const CHANGE_VERB_RE = /(?<![\p{L}\p{N}])(kurang(?:i|in|kan)|tambah\w*|catat|cat
 
 // "rediator 240 ada ga", "masih pegang gak", "tinggal berapa", "kosong ya".
 const AVAILABILITY_RE =
-  /(?<![\p{L}\p{N}])(masih\s+(ada|pegang)|ada\s+(ga|gak|gk|ngga|nggak|tdk|tidak|kah)|ada\s*\?|ada\s+stok|masih\s+cukup|sisa|tinggal|kosong|habis|tersedia|ready|pegang)(?![\p{L}\p{N}])/iu;
+  /(?<![\p{L}\p{N}])(masih\s+(ada|pegang|banyak)|banyak\s+(ga|gak|gk|ngga|nggak|tdk|tidak|kah)|ada\s+(ga|gak|gk|ngga|nggak|tdk|tidak|kah)|ada\s*\?|ada\s+stok|masih\s+cukup|sisa|tinggal|kosong|habis|tersedia|ready|pegang)(?![\p{L}\p{N}])/iu;
 
 // Pertanyaan tren/penjualan sebuah barang.
 const TREND_RE =

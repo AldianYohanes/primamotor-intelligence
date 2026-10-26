@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { correctToolCall, inferDirection, missingCallSuggestion } from "@/src/lib/agents/tool-correction";
+import { applyCorrections, correctQuantity, correctToolCall, inferDirection, missingCallSuggestion, statedQuantity, transferCallFrom } from "@/src/lib/agents/tool-correction";
 import { parseFunctionStyleCall } from "@/src/lib/agents/tool-protocol";
 import { asksSalesTrend } from "@/src/lib/agents/route-guard";
 
@@ -88,5 +88,65 @@ describe("parseFunctionStyleCall", () => {
     expect(parseFunctionStyleCall("getStock()", TOOLS)).toBeNull();
     expect(parseFunctionStyleCall('getStock(query="belum ditutup)', TOOLS)).toBeNull();
     expect(parseFunctionStyleCall("getStock(wipr bosch)", TOOLS)).toBeNull();
+  });
+});
+
+describe("statedQuantity dan correctQuantity", () => {
+  it("memakai angka yang jelas dan mengabaikan kode model", () => {
+    expect(statedQuantity("hella 240 laku 1 di toko")).toBe(1);
+    expect(statedQuantity("Oli gardan 2 botol kejual barusan dari toko")).toBe(2);
+    expect(statedQuantity("Pindahin 5 filter oli mahle dari gudang ke toko")).toBe(5);
+  });
+
+  it("null bila tidak ada angka jelas, ada dua angka berbeda, atau angka terlalu besar", () => {
+    expect(statedQuantity("Kurangin stok lampu")).toBeNull();
+    expect(statedQuantity("masuk 3 busi lalu keluar 1 aki")).toBeNull();
+    expect(statedQuantity("Masuk 10000 filter oli mahle ke gudang")).toBeNull();
+    expect(statedQuantity("Keluar -5 wiper bosch dari toko")).toBeNull();
+    expect(statedQuantity("wiper bosch laku 3 bulan terakhir berapa")).toBeNull();
+  });
+
+  it("mengoreksi jumlah yang bertentangan dan membiarkan yang sudah sesuai", () => {
+    const wrong = { name: "updateStock", arguments: { product: "hella 240", quantity: 240, direction: "keluar" } };
+    expect(correctQuantity(wrong, "hella 240 laku 1 di toko").call.arguments.quantity).toBe(1);
+    expect(correctQuantity(wrong, "hella 240 laku 1 di toko").note).toContain("1");
+    const right = { name: "updateStock", arguments: { quantity: 1 } };
+    expect(correctQuantity(right, "hella 240 laku 1 di toko").call).toBe(right);
+    expect(correctQuantity({ name: "getStock", arguments: { query: "x" } }, "x laku 1").note).toBeNull();
+  });
+});
+
+describe("transferCallFrom", () => {
+  const names: [string, string] = ["Toko", "Gudang"];
+  const update = { name: "updateStock", arguments: { product: "oli gardan", quantity: 2, direction: "keluar", location: "toko", reasoning: "r" } };
+
+  it("mengubah updateStock menjadi pindah dari kata depan dari dan ke", () => {
+    const fromGudang = transferCallFrom(update, "Stok toko kurang, tarik 2 oli gardan dari gudang", names);
+    expect(fromGudang?.call).toEqual({
+      name: "transferStock",
+      arguments: { product: "oli gardan", quantity: 2, from_location: "Gudang", to_location: "Toko", reasoning: "r" },
+    });
+    expect(transferCallFrom(update, "Toko butuh 2 lampu belakang kiri, ambil dari gudang ya", names)?.call.arguments.from_location).toBe("Gudang");
+    expect(transferCallFrom(update, "ambil 2 mud flap dari gudang buat dipajang di toko", names)?.call.arguments.to_location).toBe("Toko");
+    expect(transferCallFrom(update, "naikin 3 filter ke toko dari stok", names)?.call.arguments.to_location).toBe("Toko");
+  });
+
+  it("tidak mengubah bila ada kata masuk atau keluar, arah tidak jelas, atau bukan updateStock", () => {
+    expect(transferCallFrom(update, "keluar 2 oli gardan dari gudang buat toko", names)).toBeNull();
+    expect(transferCallFrom(update, "oli gardan di toko dan gudang 2 biji", names)).toBeNull();
+    expect(transferCallFrom({ name: "getStock", arguments: {} }, "ambil dari gudang untuk toko", names)).toBeNull();
+  });
+});
+
+describe("applyCorrections", () => {
+  it("menggabungkan koreksi arah dan jumlah", () => {
+    const result = applyCorrections(
+      { name: "updateStock", arguments: { product: "hella 240", quantity: 240, direction: "masuk" } },
+      "hella 240 laku 1 di toko",
+      TOOLS,
+    );
+    expect(result.call.arguments).toMatchObject({ quantity: 1, direction: "keluar" });
+    expect(result.note).toContain("Arah");
+    expect(result.note).toContain("Jumlah");
   });
 });
