@@ -97,7 +97,17 @@ export function PinConfirmDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-[1px] sm:items-center">
-      <div role="dialog" aria-modal="true" aria-labelledby="pin-dialog-title" className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-5 shadow-popover">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pin-dialog-title"
+        aria-describedby="pin-dialog-desc"
+        onKeyDown={(e) => {
+          // Escape menutup dialog seperti Batal, kecuali permintaan sedang diproses.
+          if (e.key === "Escape" && !submitting && !cancelling) void handleCancel();
+        }}
+        className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-5 shadow-popover"
+      >
         <div className="flex items-center gap-2">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-600">
             <ShieldCheck size={16} />
@@ -106,7 +116,7 @@ export function PinConfirmDialog({
             Konfirmasi PIN
           </h2>
         </div>
-        <p className="mt-2 text-sm text-slate-600">{pending.message}</p>
+        <p id="pin-dialog-desc" className="mt-2 text-sm text-slate-600">{pending.message}</p>
         {pending.warning && (
           <p role="alert" className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
             {pending.warning}
@@ -124,6 +134,8 @@ export function PinConfirmDialog({
           }}
           placeholder="Masukkan PIN"
           aria-label="PIN"
+          aria-invalid={error !== null}
+          aria-describedby={error ? "pin-dialog-error" : undefined}
           autoComplete="off"
           enterKeyHint="done"
           maxLength={12}
@@ -136,7 +148,7 @@ export function PinConfirmDialog({
         )}
 
         {error && (
-          <div role="alert" className="mt-3 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <div id="pin-dialog-error" role="alert" className="mt-3 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
             <AlertCircle size={15} className="mt-0.5 shrink-0" />
             <span>{error}</span>
           </div>

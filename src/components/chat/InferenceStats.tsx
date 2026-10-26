@@ -18,6 +18,7 @@ import {
   type ModelCallStats,
 } from "@/src/lib/agents/inference-stats";
 import { MODEL_OPTIONS } from "@/src/lib/agents/model-options";
+import { liveCallText, waitHint } from "./chat-ui";
 
 /** Satu giliran untuk tombol/modal statistik. `startedAt` dari Date.now(). */
 export interface TurnRecord {
@@ -84,18 +85,26 @@ function modelLabel(modelId: string): string {
 export function LiveInferenceLine({ snapshot, startedAt }: { snapshot: InferenceSnapshot | null; startedAt: number }) {
   const now = useNow(true);
   const running = snapshot?.calls.at(-1);
+  const hint = waitHint(now - startedAt);
   return (
-    <p className="px-1 text-xs text-slate-500 tabular-nums">
-      {formatDuration(now - startedAt, { precise: false })}
-      {running?.status === "running" &&
-        ` · ${running.label} ${running.liveTokens > 0 ? `menulis ±${running.liveTokens} token` : "membaca prompt"}`}
-    </p>
+    <>
+      <p className="px-1 text-xs text-slate-500 tabular-nums">
+        {formatDuration(now - startedAt, { precise: false })}
+        {running?.status === "running" && ` · ${liveCallText(running.label, running.liveTokens)}`}
+      </p>
+      {/* role=status: penjelasan muncul sekali setelah 15 detik dan dibacakan pembaca layar. */}
+      {hint && (
+        <p role="status" className="mt-0.5 max-w-[90%] px-1 text-xs leading-snug text-slate-500 sm:max-w-[80%]">
+          {hint}
+        </p>
+      )}
+    </>
   );
 }
 
 /** "Selesai dalam 38s" di bawah jawaban. */
 export function InferenceSummary({ totalMs }: { totalMs: number }) {
-  return <p className="mt-1 px-1 text-[11px] text-slate-400 tabular-nums">Selesai dalam {formatDuration(totalMs)}</p>;
+  return <p className="mt-1 px-1 text-xs text-slate-500 tabular-nums">Selesai dalam {formatDuration(totalMs)}</p>;
 }
 
 function CallRow({ call, index }: { call: ModelCallStats; index: number }) {

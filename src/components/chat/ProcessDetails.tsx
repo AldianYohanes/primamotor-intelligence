@@ -24,7 +24,7 @@ const KIND_ICON: Record<ProcessStep["kind"], LucideIcon> = {
 
 export function ProcessTimeline({ steps }: { steps: ProcessStep[] }) {
   return (
-    <ol className="space-y-2 border-l border-slate-200 pl-3">
+    <ol aria-label="Langkah yang dikerjakan asisten" className="space-y-2 border-l border-slate-200 pl-3">
       {steps.map((step, i) => {
         const Icon = step.status === "running" ? Loader2 : KIND_ICON[step.kind];
         return (
@@ -41,9 +41,12 @@ export function ProcessTimeline({ steps }: { steps: ProcessStep[] }) {
             <div className="min-w-0">
               <p className={clsx("text-xs", step.status === "failed" ? "text-red-700" : "text-slate-700")}>
                 {step.label}
+                {/* Status juga lewat teks, bukan hanya warna atau ikon (pembaca layar, buta warna). */}
+                {step.status === "failed" && <span className="sr-only"> (gagal)</span>}
+                {step.status === "running" && <span className="sr-only"> (berjalan)</span>}
               </p>
               {step.detail && (
-                <p className="mt-0.5 break-words font-mono text-[11px] leading-snug text-slate-500">
+                <p className="mt-0.5 break-words font-mono text-xs leading-snug text-slate-500">
                   {step.detail}
                 </p>
               )}
@@ -68,7 +71,7 @@ export function ProcessDetails({ steps, live = false }: { steps: ProcessStep[]; 
       <button
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex min-h-8 items-center gap-1 px-1 text-xs font-medium text-slate-500 hover:text-slate-700"
+        className="flex min-h-10 items-center gap-1 px-1 text-xs font-medium text-slate-600 hover:text-slate-800"
       >
         {open ? "Sembunyikan proses" : "Lihat proses"}
         <span className="text-slate-400">({steps.length} langkah{live ? ", berjalan" : ""})</span>

@@ -29,3 +29,24 @@ export function turnErrorMessage(online: boolean): string {
 export function pinDigitsLeft(pin: string, min = 6): number {
   return Math.max(0, min - pin.length);
 }
+
+const WAIT_HINT_AFTER_MS = 15_000;
+const LONG_WAIT_AFTER_MS = 120_000;
+
+/**
+ * Penjelasan untuk giliran yang lama. Model jalan di perangkat ini, jadi 30 sampai 90 detik
+ * wajar; tanpa penjelasan staf mengira aplikasi macet. Null selama masih terasa cepat.
+ */
+export function waitHint(elapsedMs: number): string | null {
+  if (elapsedMs < WAIT_HINT_AFTER_MS) return null;
+  if (elapsedMs < LONG_WAIT_AFTER_MS) {
+    return "Model berjalan di perangkat ini, jawaban biasanya butuh 30 sampai 90 detik. Kamu bisa menekan Hentikan kapan saja.";
+  }
+  return "Ini lebih lama dari biasanya. Kalau jawaban belum muncul, tekan Hentikan lalu kirim ulang pertanyaannya.";
+}
+
+/** Apa yang sedang dikerjakan model, dalam kata staf (bukan "Router" atau "token"). */
+export function liveCallText(label: string, liveTokens: number): string {
+  const what = label === "Router" ? "Menentukan jenis pertanyaan" : "Menyusun jawaban";
+  return `${what}${liveTokens > 0 ? "" : ", membaca pesan"}`;
+}
