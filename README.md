@@ -40,7 +40,7 @@ Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS, Supabase (Postgres,
    bun dev
    ```
 
-   Asisten chat butuh browser dengan WebGPU (Chrome/Edge terbaru) dan GPU dengan memori cukup (Qwen2.5-3B q4f16 ±2,5 GB). Model diunduh sekali lalu disimpan di cache browser.
+   Asisten chat butuh browser dengan WebGPU (Chrome/Edge terbaru) dan GPU dengan memori cukup (Qwen2.5-3B q4f16 ±2,5 GB). Model diunduh sekali lalu disimpan di cache browser. Spesifikasi minimal dan rekomendasi: [docs/system-requirements.md](docs/system-requirements.md).
 
 ## Tenant evaluasi
 
