@@ -29,38 +29,11 @@ export interface TurnRecord {
   snapshot: InferenceSnapshot | null;
   /** Kosong selama giliran masih berjalan. */
   totalMs?: number;
+  /** Jawaban akhir yang diterima staf; kosong selama berjalan atau bila giliran gagal. */
+  answer?: string;
 }
 
 const HISTORY_LIMIT = 20;
-
-let gpuLabelPromise: Promise<string | null> | null = null;
-
-/** Nama GPU dari WebGPU (mis. "qualcomm adreno-7xx"); dibaca sekali per halaman. */
-function readGpuLabel(): Promise<string | null> {
-  gpuLabelPromise ??= (async () => {
-    const gpu = (navigator as Navigator & {
-      gpu?: { requestAdapter: () => Promise<{ info?: Record<string, string> } | null> };
-    }).gpu;
-    const adapter = await gpu?.requestAdapter().catch(() => null);
-    const info = adapter?.info;
-    if (!info) return null;
-    return [info.vendor, info.architecture || info.device || info.description].filter(Boolean).join(" ") || null;
-  })();
-  return gpuLabelPromise;
-}
-
-function useGpuLabel(enabled: boolean): string | null {
-  const [label, setLabel] = useState<string | null>(null);
-  useEffect(() => {
-    if (!enabled) return;
-    let alive = true;
-    readGpuLabel().then((l) => alive && setLabel(l));
-    return () => {
-      alive = false;
-    };
-  }, [enabled]);
-  return label;
-}
 
 /** Date.now() yang diperbarui tiap 250 ms selama `active`. */
 function useNow(active: boolean): number {
@@ -155,11 +128,19 @@ export function CallTable({ calls }: { calls: ModelCallStats[] }) {
   );
 }
 
-function TurnDetail({ turn, now, gpu }: { turn: TurnRecord; now: number; gpu: string | null }) {
+function TurnDetail({ turn, now }: { turn: TurnRecord; now: number }) {
   const snapshot = turn.snapshot;
   const totals = snapshot ? inferenceTotals(snapshot) : null;
   return (
     <div className="space-y-3 text-xs text-slate-600">
+      {turn.answer && (
+        <div className="space-y-1">
+          <p className="text-[11px] text-slate-400">Jawaban akhir</p>
+          <p className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-800">
+            {turn.answer}
+          </p>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Stat label="Waktu" value={formatDuration(elapsedOf(turn, now), { precise: turn.totalMs !== undefined })} />
         <Stat label="Panggilan model" value={String(totals?.calls ?? 0)} />
@@ -168,8 +149,7 @@ function TurnDetail({ turn, now, gpu }: { turn: TurnRecord; now: number; gpu: st
       </div>
       <p>
         Model {snapshot ? modelLabel(snapshot.modelId) : "–"}
-        {gpu && ` · GPU ${gpu}`}
-        {totals && ` · ${formatDuration(totals.modelMs)} di model`}
+        {totals && ` · ${formatDuration(totals.modelMs)} dipakai model`}
       </p>
       {snapshot && snapshot.calls.length > 0 ? (
         <div className="overflow-x-auto">
@@ -194,10 +174,6 @@ function TurnDetail({ turn, now, gpu }: { turn: TurnRecord; now: number; gpu: st
       ) : (
         <p className="text-slate-400">Belum ada panggilan model di giliran ini.</p>
       )}
-      <p className="text-[11px] text-slate-400">
-        Waktu, token keluar, kecepatan menulis, dan kata pertama ter-update selama model menulis (tanda ±). Token masuk
-        dan kecepatan baca prompt dikirim WebLLM setelah tiap panggilan selesai.
-      </p>
     </div>
   );
 }
@@ -221,7 +197,6 @@ export function InferenceStatsButton({ turns, className }: { turns: TurnRecord[]
   const latest = turns.at(-1);
   const running = latest !== undefined && latest.totalMs === undefined;
   const now = useNow(running || open);
-  const gpu = useGpuLabel(open);
 
   if (!latest) return null;
   const selected = turns.find((t) => t.id === selectedId) ?? latest;
@@ -250,7 +225,7 @@ export function InferenceStatsButton({ turns, className }: { turns: TurnRecord[]
               {selected.totalMs === undefined && " · sedang berjalan"}
             </DialogDescription>
           </DialogHeader>
-          <TurnDetail turn={selected} now={now} gpu={gpu} />
+          <TurnDetail turn={selected} now={now} />
           {history.length > 1 && (
             <div className="space-y-1 border-t border-slate-100 pt-3">
               <p className="text-xs font-medium text-slate-700">Giliran di sesi ini</p>

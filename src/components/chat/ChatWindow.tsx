@@ -244,6 +244,7 @@ export function ChatWindow({
     // Salinan terakhir dari onStep, dipakai bila giliran gagal di tengah jalan.
     let lastSteps: ProcessStep[] = [];
     let lastInference: InferenceSnapshot | null = null;
+    let finalAnswer: string | undefined;
     const inferenceOf = () => (lastInference ? { inference: { totalMs: Date.now() - startedAt } } : {});
 
     try {
@@ -277,6 +278,7 @@ export function ChatWindow({
       };
       setMessages((prev) => [...prev, assistantMsg]);
       persistMessage("assistant", result.assistantText, result.agentType, trace);
+      finalAnswer = result.assistantText;
 
       if (result.pendingConfirmation) {
         setPendingConfirmation(result.pendingConfirmation);
@@ -309,7 +311,7 @@ export function ChatWindow({
       setDraftText("");
       setLiveSteps([]);
       setLiveInference(null);
-      updateTurn({ snapshot: lastInference, totalMs: Date.now() - startedAt });
+      updateTurn({ snapshot: lastInference, totalMs: Date.now() - startedAt, answer: finalAnswer });
     }
   }
 
@@ -423,15 +425,12 @@ export function ChatWindow({
             Perangkat ini belum bisa menjalankan Asisten AI
           </p>
           <p className="text-sm text-slate-600">
-            Asisten AI berjalan langsung di perangkat (tidak lewat server)
-            supaya gratis dan data toko tidak keluar dari perangkat ini — tapi
-            itu butuh dukungan WebGPU yang belum tersedia di browser/perangkat
-            ini.
+            Asisten AI butuh WebGPU, dan browser atau perangkat ini belum
+            mendukungnya.
           </p>
           <p className="text-xs text-slate-500">
-            Coba: (1) update browser ke versi terbaru, (2) pakai Chrome/Edge
-            kalau belum, atau (3) coba dari laptop/HP lain. Kalau masalah
-            berlanjut, sampaikan ke owner/admin toko.
+            Coba update browser, pakai Chrome atau Edge, atau buka dari
+            perangkat lain. Kalau tetap gagal, hubungi owner toko.
           </p>
         </div>
       </div>
@@ -451,9 +450,7 @@ export function ChatWindow({
           <p className="text-sm text-slate-600">{engineError}</p>
           {/(f16|WGSL|GPU)/i.test(engineError) && (
             <p className="text-xs text-slate-500">
-              Ini biasanya error dukungan GPU/browser terhadap model saat ini.
-              Coba ganti ke model lain di bawah (varian &ldquo;tanpa f16&rdquo;
-              biasanya lebih kompatibel).
+              Coba pilih model lain, misalnya varian &ldquo;tanpa f16&rdquo;.
             </p>
           )}
           <div className="mt-1 flex justify-center gap-2">

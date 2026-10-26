@@ -31,7 +31,17 @@ export function EvalRowDetail({ row }: { row: ScoredRow }) {
   return (
     <div className="grid gap-4 text-xs text-slate-600 lg:grid-cols-2">
       <Block title="Pesan staf">
-        <p className="rounded bg-white px-2 py-1 font-mono text-slate-800">{s.message}</p>
+        <p className="rounded bg-white px-2 py-1 text-sm text-slate-800">{s.message}</p>
+      </Block>
+
+      <Block title="Jawaban akhir ke staf">
+        {o.assistantText.trim() ? (
+          <p className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded bg-white px-2 py-1 text-sm text-slate-800">
+            {o.assistantText}
+          </p>
+        ) : (
+          <p className="text-slate-400">Tidak ada jawaban{o.runError ? `: ${o.runError}` : "."}</p>
+        )}
       </Block>
 
       <Block title="Harapan vs hasil">
@@ -94,7 +104,7 @@ export function EvalRowDetail({ row }: { row: ScoredRow }) {
         )}
       </Block>
 
-      <Block title="Mutu jawaban (ETSR ketat)">
+      <Block title="Mutu jawaban">
         {quality === null ? (
           <p className="text-slate-400">Tidak dinilai (run error atau jawaban kosong).</p>
         ) : quality.ok ? (
@@ -137,7 +147,7 @@ export function EvalRowDetail({ row }: { row: ScoredRow }) {
         )}
       </Block>
 
-      <Block title="Langkah (sama dengan Lihat proses di /chat)">
+      <Block title="Langkah">
         {steps.length > 0 ? <ProcessTimeline steps={steps} /> : <p className="text-slate-400">Tidak ada.</p>}
       </Block>
     </div>

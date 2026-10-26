@@ -647,7 +647,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         }
         collected.push(scoreScenario(scenario, observation, refs));
         setRows([...collected]);
-        updateTurn({ snapshot: latestInference, totalMs: Date.now() - scenarioStartedAt });
+        updateTurn({ snapshot: latestInference, totalMs: Date.now() - scenarioStartedAt, answer: observation.assistantText || undefined });
         durations.push(performance.now() - execStart);
         persist();
         // Server gagal berulang: lanjut hanya membuang jam, karena jawaban stok datang dari cache lama.
@@ -771,164 +771,124 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         </span>
       </div>
 
-      <header className="space-y-1">
-        <h1 className="text-xl font-semibold text-slate-900">Evaluasi Agent (Bab 4)</h1>
-        <p className="text-xs text-slate-500">Kode: {CODE_VERSION.commit} ({CODE_VERSION.branch})</p>
-        <p className="text-sm text-slate-600">
-          Menjalankan {SCENARIOS.length} skenario berlabel terhadap arsitektur multi-agent dan baseline single-agent pada
-          perangkat ini.
-        </p>
+      <header>
+        <h1 className="text-xl font-semibold text-slate-900">Evaluasi Agent</h1>
       </header>
 
       {!isEvalTenant && (
         <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          Halaman ini hanya berjalan di tenant <code>{EVAL_TENANT_SLUG}</code> karena skenario transaksi yang dikonfirmasi PIN
-          benar-benar mengubah stok. Klik <strong>Keluar</strong> di kanan atas, lalu login dengan kode toko{" "}
-          <code>{EVAL_TENANT_SLUG}</code> dan username <code>evaluator</code>.
+          Halaman ini hanya jalan di tenant <code>{EVAL_TENANT_SLUG}</code>, karena skenario transaksi benar-benar mengubah stok.
+          Klik <strong>Keluar</strong>, lalu login dengan kode toko <code>{EVAL_TENANT_SLUG}</code> dan username{" "}
+          <code>evaluator</code>.
         </div>
       )}
       {draftCount > 0 && (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-          {draftCount} skenario masih berlabel <code>draft</code>. Periksa label acuan secara manual sebelum run resmi.
+          {draftCount} skenario masih berlabel <code>draft</code>. Cek label acuannya sebelum run resmi.
         </div>
       )}
       {warning && (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{warning}</div>
       )}
-      {isEvalTenant && (
-        <div className="flex flex-wrap items-center gap-3 rounded-md border border-slate-200 bg-white p-3 text-sm">
-          <button className="btn btn-secondary px-3 py-1.5" onClick={resetEvalData} disabled={running || seeding}>
-            {seeding ? "Mereset…" : "Reset data eval"}
-          </button>
-          <span className="text-slate-600">
-            {seedStatus ?? "Kembalikan stok, riwayat penjualan, percakapan, dan audit log tenant eval ke keadaan awal sebelum run baru."}
-          </span>
-        </div>
-      )}
 
-      <section className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4">
-        <label className="space-y-1 text-sm">
-          <span className="font-medium text-slate-700">Model</span>
-          <select
-            className="field-input w-full"
-            value={modelId}
-            onChange={(e) => setModelId(e.target.value)}
-            disabled={running}
-          >
-            {MODEL_OPTIONS.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label} · ~{(m.vramMB / 1024).toFixed(1).replace(".", ",")} GB
-                {m.id === MODEL_ID ? " (default)" : ""}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="space-y-1 text-sm">
-          <span className="font-medium text-slate-700">Konfigurasi</span>
-          <select
-            className="field-input w-full"
-            value={modeChoice}
-            onChange={(e) => setModeChoice(e.target.value as ModeChoice)}
-            disabled={running}
-          >
-            <option value="both">Keduanya (diselang-seling)</option>
-            <option value="multi_agent">Multi-agent saja</option>
-            <option value="single_agent">Baseline single-agent saja</option>
-          </select>
-        </label>
-        <label className="flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="mt-1"
-            checked={padPrompt}
-            onChange={(e) => {
-              setPadPrompt(e.target.checked);
-              setPromptPadding(e.target.checked);
-            }}
-            disabled={running}
-          />
-          <span>
-            <span className="font-medium text-slate-700">Ablasi: samakan panjang prompt multi-agent dengan single-agent</span>
-            <span className="block text-xs text-slate-500">
-              Hanya memengaruhi mode multi-agent; tercatat di lingkungan run. Pakai hanya untuk run ablasi.
-            </span>
-          </span>
-        </label>
-        <label className="space-y-1 text-sm">
-          <span className="font-medium text-slate-700">Filter ID (awalan)</span>
-          <input
-            className="field-input w-full"
-            placeholder="mis. Q, T-0, atau T-06, T-1"
-            value={idFilter}
-            onChange={(e) => setIdFilter(e.target.value)}
-            disabled={running}
-          />
-        </label>
-        <label className="space-y-1 text-sm">
-          <span className="font-medium text-slate-700">Ulang</span>
-          <select
-            className="field-input w-full"
-            value={repetitions}
-            onChange={(e) => setRepetitions(Number(e.target.value))}
-            disabled={running}
-          >
-            {[1, 2, 3, 4, 5].map((n) => (
-              <option key={n} value={n}>
-                {n === 1 ? "1× (run biasa)" : `${n}× (data eval direset tiap ulangan)`}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="mt-1"
-            checked={autoResume}
-            onChange={(e) => setAutoResume(e.target.checked)}
-          />
-          <span>
-            <span className="font-medium text-slate-700">Lanjut otomatis kalau GPU putus</span>
-            <span className="block text-xs text-slate-500">
-              Tunggu {AUTO_RESUME_DELAY_MS / 1000} detik lalu lanjutkan run, maksimal {AUTO_RESUME_MAX}× per run.
-            </span>
-          </span>
-        </label>
-        <label className="space-y-1 text-sm">
-          <span className="font-medium text-slate-700">PIN evaluator</span>
-          <input
-            className="field-input w-full"
-            type="password"
-            inputMode="numeric"
-            placeholder={needsPin ? "Wajib untuk skenario konfirmasi" : "Tidak diperlukan"}
-            value={pin}
-            onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-            disabled={running}
-          />
-        </label>
-        <label className="space-y-1 text-sm">
-          <span className="font-medium text-slate-700">Potongan prefill (GPU lemah)</span>
-          <select
-            className="field-input w-full"
-            value={prefillChunk ?? ""}
-            onChange={(e) => {
-              const size = e.target.value ? Number(e.target.value) : null;
-              setPrefillChunk(size);
-              setPrefillChunkPreference(size);
-            }}
-            disabled={running}
-          >
-            <option value="">Bawaan model</option>
-            {PREFILL_CHUNK_OPTIONS.map((n) => (
-              <option key={n} value={n}>
-                {n} token
-              </option>
-            ))}
-          </select>
-        </label>
-        <p className="self-end text-xs text-slate-500 sm:col-span-1 lg:col-span-3">
-          Kecilkan bila GPU di-reset Windows (DXGI_ERROR_DEVICE_HUNG) saat pemanasan. Tersimpan di perangkat ini,
-          berlaku juga untuk /chat, dan dicatat di JSON hasil.
-        </p>
+      <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-slate-900">Pengaturan</h2>
+          {isEvalTenant && (
+            <div className="flex items-center gap-2 text-sm text-slate-600">
+              {seedStatus && <span>{seedStatus}</span>}
+              <button className="btn btn-secondary px-3 py-1.5" onClick={resetEvalData} disabled={running || seeding}>
+                {seeding ? "Mereset…" : "Reset data eval"}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-slate-700">Model</span>
+            <select className="field-input w-full" value={modelId} onChange={(e) => setModelId(e.target.value)} disabled={running}>
+              {MODEL_OPTIONS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label} · ~{(m.vramMB / 1024).toFixed(1).replace(".", ",")} GB
+                  {m.id === MODEL_ID ? " (default)" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-slate-700">Mode</span>
+            <select
+              className="field-input w-full"
+              value={modeChoice}
+              onChange={(e) => setModeChoice(e.target.value as ModeChoice)}
+              disabled={running}
+            >
+              <option value="both">Keduanya (diselang-seling)</option>
+              <option value="multi_agent">Multi-agent saja</option>
+              <option value="single_agent">Single-agent saja</option>
+            </select>
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-slate-700">Filter ID</span>
+            <input
+              className="field-input w-full"
+              placeholder="mis. Q, T-0, atau T-06, T-1"
+              value={idFilter}
+              onChange={(e) => setIdFilter(e.target.value)}
+              disabled={running}
+            />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-slate-700">Ulangan</span>
+            <select
+              className="field-input w-full"
+              value={repetitions}
+              onChange={(e) => setRepetitions(Number(e.target.value))}
+              disabled={running}
+            >
+              {[1, 2, 3, 4, 5].map((n) => (
+                <option key={n} value={n}>
+                  {n === 1 ? "1× (run biasa)" : `${n}× (data direset tiap ulangan)`}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-slate-700">PIN evaluator</span>
+            <input
+              className="field-input w-full"
+              type="password"
+              inputMode="numeric"
+              placeholder={needsPin ? "Wajib untuk skenario konfirmasi" : "Tidak diperlukan"}
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
+              disabled={running}
+            />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-slate-700">Potongan prefill</span>
+            <select
+              className="field-input w-full"
+              value={prefillChunk ?? ""}
+              onChange={(e) => {
+                const size = e.target.value ? Number(e.target.value) : null;
+                setPrefillChunk(size);
+                setPrefillChunkPreference(size);
+              }}
+              disabled={running}
+            >
+              <option value="">Bawaan model</option>
+              {PREFILL_CHUNK_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {n} token
+                </option>
+              ))}
+            </select>
+            <span className="block text-xs text-slate-500">Kecilkan kalau GPU hang saat pemanasan.</span>
+          </label>
+        </div>
+
         <GpuChoice
           probes={gpuProbes}
           recommendation={gpuRecommendation}
@@ -941,30 +901,37 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             setGpuPrefChanged(true);
           }}
         />
-        <p className="text-xs text-slate-500 sm:col-span-2 lg:col-span-4">
-          {gpuInfo === "loading"
-            ? "Membaca info GPU…"
-            : gpuInfo === null
-              ? "WebGPU tidak tersedia di browser ini."
-              : `GPU: ${gpuInfo.description || gpuInfo.vendor || "tidak diketahui"} · batas buffer ${gpuInfo.maxStorageBufferBindingSizeMB} MB · shader-f16 ${gpuInfo.shaderF16 ? "ada" : "tidak ada"}`}
-          {gpuInfo && gpuInfo !== "loading" && !gpuInfo.shaderF16 && modelId.includes("q4f16") && (
-            <span className="text-amber-700"> · Model q4f16 butuh shader-f16, pilih varian q4f32.</span>
-          )}
-        </p>
-        <div className="flex flex-wrap items-center gap-3 text-sm sm:col-span-2 lg:col-span-4">
-          <label className="flex items-center gap-2 text-slate-700">
-            <input type="checkbox" checked={alertsOn} onChange={(e) => setAlertsOn(e.target.checked)} />
-            Bunyikan suara & kirim notifikasi saat selesai atau error
+        {(gpuInfo === "loading" || gpuInfo === null || (!gpuInfo.shaderF16 && modelId.includes("q4f16"))) && (
+          <p className="text-xs text-slate-500">
+            {gpuInfo === "loading"
+              ? "Membaca info GPU…"
+              : gpuInfo === null
+                ? "WebGPU tidak tersedia di browser ini."
+                : "GPU ini tidak punya shader-f16. Model q4f16 butuh itu, pilih varian tanpa f16."}
+          </p>
+        )}
+
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-slate-100 pt-3 text-sm text-slate-700">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={padPrompt}
+              onChange={(e) => {
+                setPadPrompt(e.target.checked);
+                setPromptPadding(e.target.checked);
+              }}
+              disabled={running}
+            />
+            Ablasi: samakan panjang prompt multi-agent dengan single-agent
           </label>
-          <span className="text-xs text-slate-500">
-            {notifPermission === "granted"
-              ? "Notifikasi diizinkan."
-              : notifPermission === "denied"
-                ? "Notifikasi diblokir browser (hanya suara). Izinkan lewat ikon gembok di address bar."
-                : notifPermission === "unsupported"
-                  ? "Browser tidak mendukung notifikasi (hanya suara)."
-                  : "Izin notifikasi akan diminta saat klik Jalankan."}
-          </span>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={autoResume} onChange={(e) => setAutoResume(e.target.checked)} />
+            Lanjut otomatis kalau GPU putus
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={alertsOn} onChange={(e) => setAlertsOn(e.target.checked)} />
+            Suara & notifikasi saat selesai atau error
+          </label>
           <button
             type="button"
             className="btn btn-secondary px-3 py-1 text-xs"
@@ -973,10 +940,15 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
               alertUser("done", "Tes notifikasi evaluasi", "Kalau ini muncul dan terdengar bunyi, pemberitahuan sudah siap.");
             }}
           >
-            Tes
+            Tes notifikasi
           </button>
+          {notifPermission === "denied" && <span className="text-xs text-amber-700">Notifikasi diblokir browser (hanya suara).</span>}
+          {notifPermission === "unsupported" && <span className="text-xs text-slate-500">Browser tidak mendukung notifikasi.</span>}
         </div>
-        <div className="flex flex-wrap items-center gap-2 sm:col-span-2 lg:col-span-4">
+      </section>
+
+      <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             className="btn btn-primary px-4 py-2"
             onClick={() => run()}
@@ -989,21 +961,22 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
               Hentikan
             </button>
           )}
-          <button className="btn btn-secondary px-4 py-2" onClick={() => download(`eval-${startedAt ?? "run"}.csv`, toCsv(rows), "text/csv")} disabled={rows.length === 0}>
+          <span className="mx-1 hidden h-6 w-px bg-slate-200 sm:block" />
+          <button className="btn btn-secondary px-3 py-2" onClick={() => download(`eval-${startedAt ?? "run"}.csv`, toCsv(rows), "text/csv")} disabled={rows.length === 0}>
             Unduh CSV
           </button>
-          <button className="btn btn-secondary px-4 py-2" onClick={exportJson} disabled={rows.length === 0 && !stoppedReason}>
+          <button className="btn btn-secondary px-3 py-2" onClick={exportJson} disabled={rows.length === 0 && !stoppedReason}>
             Unduh JSON
           </button>
-          <span className="text-sm text-slate-600">{status}</span>
         </div>
+        <p className="text-sm text-slate-600">{status}</p>
         {savedRun && !running && (
-          <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 sm:col-span-2 lg:col-span-4">
+          <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
             <p>
               Ada run tersimpan: {savedRun.rows.length}/{savedRun.plan.length} eksekusi selesai (mulai{" "}
               {new Date(savedRun.startedAt).toLocaleString("id-ID")}, model {savedRun.modelId}
-              {savedRun.interruptions.length > 0 && `, ${savedRun.interruptions.length}× berhenti`}). Melanjutkan memakai
-              skenario & mode yang sama dan menggabungkan hasilnya ke satu JSON. Menjalankan run baru akan menimpanya.
+              {savedRun.interruptions.length > 0 && `, ${savedRun.interruptions.length}× berhenti`}). Run baru akan
+              menimpanya.
             </p>
             <div className="flex flex-wrap gap-2">
               <button
@@ -1171,71 +1144,72 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         <section className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-slate-500">
-                <th className="pr-3">ID</th>
-                <th className="pr-3">Mode</th>
-                <th className="pr-3">Acuan</th>
-                <th className="pr-3">Prediksi</th>
-                <th className="pr-3">Tool</th>
-                <th className="pr-3">Konfirmasi</th>
-                <th className="pr-3">Hasil</th>
-                <th className="pr-3">Latensi</th>
+              <tr className="text-left text-xs font-medium text-slate-500">
+                <th className="pb-2 pr-3">Skenario</th>
+                <th className="pb-2 pr-3">Rute (acuan → hasil)</th>
+                <th className="pb-2 pr-3">Alat</th>
+                <th className="pb-2 pr-3">Hasil</th>
+                <th className="pb-2 pr-3 text-right">Waktu</th>
+                <th className="pb-2" />
               </tr>
             </thead>
             <tbody>
               {rows.map((r, idx) => (
                 <Fragment key={idx}>
-                <tr className="border-t border-slate-100 align-top">
-                  <td className="pr-3 font-mono">{r.scenario.id}</td>
-                  <td className="pr-3">{r.observation.mode === "multi_agent" ? "multi" : "single"}</td>
-                  <td className="pr-3">{r.scenario.expected_route}</td>
-                  <td className="pr-3">
-                    {r.observation.predictedRoute ?? "–"}
-                    {r.observation.routerPredictedRoute &&
-                      r.observation.routerPredictedRoute !== r.observation.predictedRoute && (
-                        <span className="text-slate-400"> (Router: {r.observation.routerPredictedRoute})</span>
+                  <tr className="border-t border-slate-100 align-top">
+                    <td className="py-2 pr-3 whitespace-nowrap">
+                      <span className="font-mono">{r.scenario.id}</span>{" "}
+                      <span className="text-xs text-slate-500">{r.observation.mode === "multi_agent" ? "multi" : "single"}</span>
+                    </td>
+                    <td className="py-2 pr-3 whitespace-nowrap">
+                      {r.scenario.expected_route} → {r.observation.predictedRoute ?? "–"}
+                      {r.observation.routerPredictedRoute &&
+                        r.observation.routerPredictedRoute !== r.observation.predictedRoute && (
+                          <div className="text-xs text-slate-400">Router: {r.observation.routerPredictedRoute}</div>
+                        )}
+                    </td>
+                    <td className="py-2 pr-3">{r.observation.toolTrace.map((t) => t.name).join(", ") || "–"}</td>
+                    <td className={`py-2 pr-3 ${r.success ? "text-emerald-700" : "text-red-700"}`}>
+                      {r.success ? "berhasil" : `gagal: ${r.failedStage}`}
+                      {(r.observation.locationPrompt || r.observation.productPrompt || r.observation.confirmOutcome !== "none") && (
+                        <div className="text-xs text-slate-500">
+                          {r.observation.locationPrompt
+                            ? "tanya lokasi"
+                            : r.observation.productPrompt
+                              ? "tanya barang"
+                              : r.observation.confirmOutcome}
+                        </div>
                       )}
-                  </td>
-                  <td className="pr-3">{r.observation.toolTrace.map((t) => t.name).join(", ") || "–"}</td>
-                  <td className="pr-3">
-                    {r.observation.locationPrompt
-                      ? "tanya lokasi"
-                      : r.observation.productPrompt
-                        ? "tanya barang"
-                        : r.observation.confirmOutcome}
-                  </td>
-                  <td className={`pr-3 ${r.success ? "text-emerald-700" : "text-red-700"}`}>
-                    {r.success ? "berhasil" : `gagal: ${r.failedStage}`}
-                    {r.observation.runError && <div className="text-xs">{r.observation.runError}</div>}
-                    {r.success && answerQualityOf(r)?.ok === false && (
-                      <div className="text-xs text-amber-700">jawaban bermasalah: {answerQualityOf(r)!.issues.join("; ")}</div>
-                    )}
-                  </td>
-                  <td className="pr-3">
-                    {ms(r.observation.latencyMs)}
-                    <button
-                      type="button"
-                      className="mt-1 block text-xs text-slate-500 underline hover:text-slate-700"
-                      aria-expanded={openRows.has(idx)}
-                      onClick={() =>
-                        setOpenRows((prev) => {
-                          const next = new Set(prev);
-                          if (!next.delete(idx)) next.add(idx);
-                          return next;
-                        })
-                      }
-                    >
-                      {openRows.has(idx) ? "Tutup detail" : "Lihat detail"}
-                    </button>
-                  </td>
-                </tr>
-                {openRows.has(idx) && (
-                  <tr className="bg-slate-50">
-                    <td colSpan={8} className="p-3">
-                      <EvalRowDetail row={r} />
+                      {r.observation.runError && <div className="text-xs">{r.observation.runError}</div>}
+                      {r.success && answerQualityOf(r)?.ok === false && (
+                        <div className="text-xs text-amber-700">jawaban bermasalah: {answerQualityOf(r)!.issues.join("; ")}</div>
+                      )}
+                    </td>
+                    <td className="py-2 pr-3 text-right tabular-nums whitespace-nowrap">{ms(r.observation.latencyMs)}</td>
+                    <td className="py-2 text-right">
+                      <button
+                        type="button"
+                        className="text-xs text-slate-500 underline hover:text-slate-700"
+                        aria-expanded={openRows.has(idx)}
+                        onClick={() =>
+                          setOpenRows((prev) => {
+                            const next = new Set(prev);
+                            if (!next.delete(idx)) next.add(idx);
+                            return next;
+                          })
+                        }
+                      >
+                        {openRows.has(idx) ? "Tutup" : "Detail"}
+                      </button>
                     </td>
                   </tr>
-                )}
+                  {openRows.has(idx) && (
+                    <tr className="bg-slate-50">
+                      <td colSpan={6} className="p-3">
+                        <EvalRowDetail row={r} />
+                      </td>
+                    </tr>
+                  )}
                 </Fragment>
               ))}
             </tbody>
@@ -1336,7 +1310,7 @@ function GpuChoice({
   };
 
   return (
-    <div className="space-y-1 text-sm sm:col-span-2 lg:col-span-4">
+    <div className="space-y-1 text-sm">
       {recommendation.kind === "choose" ? (
         <label className="block space-y-1">
           <span className="font-medium text-slate-700">GPU</span>
@@ -1356,9 +1330,7 @@ function GpuChoice({
       )}
       <p className="text-xs text-slate-500">
         {recommendation.kind === "choose" && <>Disarankan: {recommendation.reason} </>}
-        {recommendation.kind === "single" && "Browser hanya melihat satu GPU di perangkat ini."}
-        {recommendation.kind === "browser_ignores" &&
-          "Browser memberi GPU yang sama untuk kedua pilihan (Chrome/Edge di Windows dikenal mengabaikan pilihan ini). Bila laptop punya dua GPU, pilih lewat Windows Settings > System > Display > Graphics > Microsoft Edge, lalu muat ulang halaman."}
+        {recommendation.kind === "browser_ignores" && "Laptop dua GPU? Pilih GPU Edge di Windows Settings > Display > Graphics."}
         {changed && <span className="text-amber-700"> Muat ulang halaman agar GPU baru dipakai.</span>}
       </p>
     </div>
