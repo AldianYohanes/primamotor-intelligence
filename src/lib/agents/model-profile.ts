@@ -35,7 +35,7 @@ export const DEFAULT_PROFILE: ModelProfile = {
   agentRecovery: false,
   nudgeMissingCall: true,
   skipRouterForMovement: false,
-  catalogRouting: false,
+  catalogRouting: true,
 };
 
 /**

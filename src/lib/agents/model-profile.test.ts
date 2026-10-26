@@ -20,7 +20,7 @@ describe("getModelProfile", () => {
     for (const option of MODEL_OPTIONS.filter((o) => !/qwen3/i.test(o.id))) {
       expect(getModelProfile(option.id)).toBe(DEFAULT_PROFILE);
     }
-    expect(DEFAULT_PROFILE).toEqual({ routerGrammar: false, routerPrompt: "default", routerRecovery: false, agentRecovery: false, nudgeMissingCall: true, skipRouterForMovement: false, catalogRouting: false });
+    expect(DEFAULT_PROFILE).toEqual({ routerGrammar: false, routerPrompt: "default", routerRecovery: false, agentRecovery: false, nudgeMissingCall: true, skipRouterForMovement: false, catalogRouting: true });
   });
 
   it("Qwen3 ukuran besar belum punya profil khusus", () => {
