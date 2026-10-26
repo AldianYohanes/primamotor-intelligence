@@ -1,4 +1,5 @@
 import type { AgentMode, AgentTurnResult, ProcessStep } from "@/src/lib/agents/orchestrator";
+import type { ModelCallStats } from "@/src/lib/agents/inference-stats";
 
 export type Route = AgentTurnResult["agentType"];
 export const ROUTES: Route[] = ["query", "transaction", "off_topic"];
@@ -73,6 +74,8 @@ export interface Observation {
   modelReplies?: string[];
   /** Langkah "Lihat proses" yang sama dengan /chat. */
   processSteps?: ProcessStep[];
+  /** Waktu, token, dan kecepatan tiap panggilan model (Router, Agent) pada eksekusi ini. */
+  modelCalls?: ModelCallStats[];
   toolTrace: AgentTurnResult["toolTrace"];
   pending: boolean;
   /** Ada saat updateStock ditahan untuk pemilihan lokasi. */

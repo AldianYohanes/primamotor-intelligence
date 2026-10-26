@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { MLCEngineInterface } from "@mlc-ai/web-llm";
 import { createClient } from "@/src/lib/supabase/client";
 import { refreshCatalog } from "@/src/lib/cache/indexeddb";
@@ -8,7 +8,8 @@ import { isWebGPUAvailable } from "@/src/lib/agents/webgpu-support";
 import { MODEL_ID, MODEL_OPTIONS } from "@/src/lib/agents/model-options";
 import type { AgentMode, ProcessStep } from "@/src/lib/agents/orchestrator";
 import { ProcessTimeline } from "@/src/components/chat/ProcessDetails";
-import { InferenceStatsButton, LiveInferenceLine, type TurnRecord } from "@/src/components/chat/InferenceStats";
+import { EvalRowDetail } from "@/src/components/eval/EvalRowDetail";
+import { CallTable, InferenceStatsButton, LiveInferenceLine, type TurnRecord } from "@/src/components/chat/InferenceStats";
 import type { InferenceSnapshot } from "@/src/lib/agents/inference-stats";
 import scenarioFile from "@/src/lib/eval/scenarios.json";
 import { scoreScenario, stockKey, summarize, toCsv, type ModeSummary } from "@/src/lib/eval/scoring";
@@ -163,6 +164,8 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   const [alertsOn, setAlertsOn] = useState(true);
   const [notifPermission, setNotifPermission] = useState<ReturnType<typeof notificationPermission>>("default");
   const [liveSteps, setLiveSteps] = useState<ProcessStep[]>([]);
+  // Baris hasil yang detailnya terbuka (kunci: indeks baris).
+  const [openRows, setOpenRows] = useState<Set<number>>(new Set());
   // Statistik model skenario terakhir (maks. 20) untuk tombol/modal statistik.
   const [evalTurns, setEvalTurns] = useState<TurnRecord[]>([]);
   const [prefillChunk, setPrefillChunk] = useState<number | null>(null);
@@ -611,6 +614,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             assistantText: result.assistantText,
             modelReplies: result.modelReplies,
             processSteps: result.processSteps,
+            ...(result.inferenceStats && { modelCalls: result.inferenceStats.calls }),
             toolTrace: result.toolTrace,
             ...(hasServerFallback(result.toolTrace) && { serverFallback: true }),
             pending: Boolean(result.pendingConfirmation),
@@ -1080,6 +1084,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             <h2 className="text-sm font-semibold text-slate-900">Proses saat ini · {status}</h2>
             <InferenceStatsButton turns={evalTurns} className="shrink-0 px-3 py-1 text-xs" />
           </div>
+          {evalTurns.length > 0 && <p className="break-words font-mono text-xs text-slate-700">{evalTurns.at(-1)!.title}</p>}
           {liveSteps.length === 0 ? (
             <p className="text-xs text-slate-500">Asisten sedang berpikir…</p>
           ) : (
@@ -1088,6 +1093,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
           {evalTurns.at(-1)?.totalMs === undefined && evalTurns.length > 0 && (
             <LiveInferenceLine snapshot={evalTurns.at(-1)!.snapshot} startedAt={evalTurns.at(-1)!.startedAt} />
           )}
+          {(evalTurns.at(-1)?.snapshot?.calls.length ?? 0) > 0 && <CallTable calls={evalTurns.at(-1)!.snapshot!.calls} />}
         </section>
       )}
 
@@ -1174,7 +1180,8 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             </thead>
             <tbody>
               {rows.map((r, idx) => (
-                <tr key={idx} className="border-t border-slate-100 align-top">
+                <Fragment key={idx}>
+                <tr className="border-t border-slate-100 align-top">
                   <td className="pr-3 font-mono">{r.scenario.id}</td>
                   <td className="pr-3">{r.observation.mode === "multi_agent" ? "multi" : "single"}</td>
                   <td className="pr-3">{r.scenario.expected_route}</td>
@@ -1199,18 +1206,30 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
                   </td>
                   <td className="pr-3">
                     {ms(r.observation.latencyMs)}
-                    {r.observation.processSteps && r.observation.processSteps.length > 0 && (
-                      <details className="mt-1 text-xs">
-                        <summary className="cursor-pointer text-slate-500 hover:text-slate-700">
-                          Lihat proses ({r.observation.processSteps.length})
-                        </summary>
-                        <div className="mt-1.5 w-72">
-                          <ProcessTimeline steps={r.observation.processSteps} />
-                        </div>
-                      </details>
-                    )}
+                    <button
+                      type="button"
+                      className="mt-1 block text-xs text-slate-500 underline hover:text-slate-700"
+                      aria-expanded={openRows.has(idx)}
+                      onClick={() =>
+                        setOpenRows((prev) => {
+                          const next = new Set(prev);
+                          if (!next.delete(idx)) next.add(idx);
+                          return next;
+                        })
+                      }
+                    >
+                      {openRows.has(idx) ? "Tutup detail" : "Lihat detail"}
+                    </button>
                   </td>
                 </tr>
+                {openRows.has(idx) && (
+                  <tr className="bg-slate-50">
+                    <td colSpan={8} className="p-3">
+                      <EvalRowDetail row={r} />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>

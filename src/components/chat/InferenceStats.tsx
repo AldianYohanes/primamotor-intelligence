@@ -130,6 +130,31 @@ function CallRow({ call, index }: { call: ModelCallStats; index: number }) {
   );
 }
 
+/** Tabel panggilan model; dipakai di /chat, live /eval, dan detail baris /eval. */
+export function CallTable({ calls }: { calls: ModelCallStats[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[480px] text-left text-xs text-slate-600">
+        <thead className="text-slate-400">
+          <tr>
+            <th className="py-1 pr-2 font-normal">Panggilan</th>
+            <th className="py-1 pr-2 font-normal">Waktu</th>
+            <th className="py-1 pr-2 font-normal">Token masuk → keluar</th>
+            <th className="py-1 pr-2 font-normal">Baca prompt</th>
+            <th className="py-1 pr-2 font-normal">Menulis</th>
+            <th className="py-1 font-normal">Kata pertama</th>
+          </tr>
+        </thead>
+        <tbody>
+          {calls.map((c, i) => (
+            <CallRow key={i} call={c} index={i} />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function TurnDetail({ turn, now, gpu }: { turn: TurnRecord; now: number; gpu: string | null }) {
   const snapshot = turn.snapshot;
   const totals = snapshot ? inferenceTotals(snapshot) : null;
