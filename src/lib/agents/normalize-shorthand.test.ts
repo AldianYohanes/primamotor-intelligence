@@ -21,6 +21,7 @@ describe("normalizeShorthand", () => {
     ["pindahin 3 busi, udh sdh blm", "pindahkan 3 busi, sudah sudah belum"],
     ["trend jual 3 bln, 1 thn", "trend jual 3 bulan, 1 tahun"],
     ["trf 2 saringan gudng -> toko", "transfer 2 saringan gudang -> toko"],
+    ["ad ga stoplamp 740 di gdg", "ada ga stoplamp 740 di gudang"],
   ])("%s", (input, expected) => {
     expect(normalizeShorthand(input)).toBe(expected);
   });

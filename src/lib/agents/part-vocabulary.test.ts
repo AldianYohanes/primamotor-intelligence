@@ -41,3 +41,9 @@ describe("pelipatan ejaan", () => {
     expect(wordInTokens("radiator", ["bearing"])).toBe(false);
   });
 });
+
+describe("singkatan 'ad' (ada)", () => {
+  it("pesan 'ad ga stoplamp 740 di gdg' tidak lagi ditolak sebagai off-topic", () => {
+    expect(guardRoute("off_topic", "ad ga stoplamp 740 di gdg", { catalog: true }).agentType).toBe("query");
+  });
+});

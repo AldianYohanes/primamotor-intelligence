@@ -24,6 +24,7 @@ const SHORTHAND: Record<string, string> = {
   udh: "sudah",
   blm: "belum",
   msh: "masih",
+  ad: "ada",
   pgng: "pegang",
   pindahin: "pindahkan",
   kirimin: "kirimkan",

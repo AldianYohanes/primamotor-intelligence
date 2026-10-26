@@ -1037,7 +1037,7 @@
       "expected_entity": "EVAL-016",
       "expect_pending": false,
       "label_status": "draft",
-      "notes": "Held-out putaran 4 (26 Okt 2026): pesan ditulis baru sesudah perbaikan putaran 3, sebelum hasilnya dilihat. Kode dan prompt tidak boleh disetel ke skenario ini. Pertanyaan stok dengan singkatan 'ad ga' dan 'gdg'."
+      "notes": "DIPAKAI UNTUK PERBAIKAN (26 Okt 2026): run Router menolak 'ad ga ...' sebagai off-topic dan single-agent menyalin pesan; singkatan 'ad' (ada) ditambahkan ke normalisasi. Bukan held-out lagi; pengganti H-63. Held-out putaran 4 (26 Okt 2026): pesan ditulis baru sesudah perbaikan putaran 3, sebelum hasilnya dilihat. Kode dan prompt tidak boleh disetel ke skenario ini. Pertanyaan stok dengan singkatan 'ad ga' dan 'gdg'."
     },
     {
       "id": "H-41",
@@ -1290,6 +1290,17 @@
       "expected_stock_delta": [{"product":"EVAL-021","location":"Gudang","delta":-2},{"product":"EVAL-021","location":"Toko","delta":2}],
       "label_status": "draft",
       "notes": "Held-out putaran 5b (26 Okt 2026): pesan ditulis dari istilah glosarium/korpus dan barang baru di seed eval, sebelum hasilnya dilihat. Kode dan prompt tidak boleh disetel ke skenario ini. Pindah barang baru."
+    },
+    {
+      "id": "H-63",
+      "message": "ada gak termostat wahler di gdg?",
+      "expected_route": "query",
+      "variant": "typo",
+      "expected_tools": ["getStock"],
+      "expected_entity": "EVAL-021",
+      "expect_pending": false,
+      "label_status": "draft",
+      "notes": "Held-out putaran 6 (26 Okt 2026): pengganti H-40, ditulis sebelum hasilnya dilihat. Kode dan prompt tidak boleh disetel ke skenario ini. Pertanyaan ketersediaan dengan 'gdg'."
     }
   ]
 }
