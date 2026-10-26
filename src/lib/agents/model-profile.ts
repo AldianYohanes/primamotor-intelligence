@@ -7,9 +7,15 @@ export interface ModelProfile {
   /** Router dipaksa menulis salah satu dari tiga label lewat response_format grammar. */
   routerGrammar: boolean;
   /** Prompt Router ringkas dengan contoh berpasangan, untuk model yang gagal mengikuti prompt panjang. */
-  routerPrompt: "default" | "compact";
+  routerPrompt: "default" | "compact" | "tiny";
   /** Balasan Router tanpa label dirutekan lewat pengaman kode (guardRoute), bukan otomatis OFF_TOPIC. */
   routerRecovery: boolean;
+  /**
+   * Router menjawab TRANSACTION_AGENT untuk pesan yang jelas hanya bertanya (tanpa kata pergerakan
+   * atau perubahan): kode mengalihkannya ke Query Agent (route-guard.ts). Qwen3.5 0.8B salah
+   * begitu di 17 dari 54 pertanyaan stok (26 Okt 2026).
+   */
+  routerQueryGuard: boolean;
   /**
    * Pengaman panggilan alat di loop agent: panggilan gaya fungsi dibaca, arah updateStock dan
    * pilihan getStock/getSalesTrend dicocokkan dengan pesan staf, dan pesan soal stok yang dijawab
@@ -52,6 +58,7 @@ export const DEFAULT_PROFILE: ModelProfile = {
   routerGrammar: false,
   routerPrompt: "default",
   routerRecovery: false,
+  routerQueryGuard: false,
   agentRecovery: false,
   nudgeMissingCall: true,
   answerFromToolResult: true,
@@ -70,6 +77,7 @@ const SMALL_QWEN3_PROFILE: ModelProfile = {
   routerGrammar: true,
   routerPrompt: "compact",
   routerRecovery: true,
+  routerQueryGuard: false,
   agentRecovery: true,
   nudgeMissingCall: true,
   answerFromToolResult: true,
@@ -85,7 +93,13 @@ const SMALL_QWEN3_PROFILE: ModelProfile = {
  * giliran, dan model menulis sampai batas token. Profil model kecil ditambah keluaran alat yang
  * dipaksa valid dan contoh alat tambahan.
  */
-const TINY_QWEN3_PROFILE: ModelProfile = { ...SMALL_QWEN3_PROFILE, constrainedToolCall: true, toolExamples: true };
+const TINY_QWEN3_PROFILE: ModelProfile = {
+  ...SMALL_QWEN3_PROFILE,
+  routerPrompt: "tiny",
+  routerQueryGuard: true,
+  constrainedToolCall: true,
+  toolExamples: true,
+};
 
 /**
  * Semua pengaman profil dimatikan: dipakai /eval untuk mengukur kemampuan model sendiri
@@ -96,6 +110,7 @@ export const RAW_PROFILE: ModelProfile = {
   routerGrammar: false,
   routerPrompt: "default",
   routerRecovery: false,
+  routerQueryGuard: false,
   agentRecovery: false,
   nudgeMissingCall: false,
   answerFromToolResult: false,

@@ -138,7 +138,7 @@ export async function runAgentTurnInner(
       rec.finish(routing, routeStep(agentType, stripThinking(routed.text)));
       // Pengaman kode: pesan yang jelas berisi pencatatan barang tidak boleh berhenti
       // di Query Agent karena Router salah menebak (T-10).
-      const guarded = guardRoute(agentType, userMessage, { catalog: modelProfile.catalogRouting });
+      const guarded = guardRoute(agentType, userMessage, { catalog: modelProfile.catalogRouting, queryGuard: modelProfile.routerQueryGuard });
       if (guarded.reason) {
         agentType = guarded.agentType;
         rec.add({ kind: "route", label: guarded.reason, status: "done", assist: "route" });

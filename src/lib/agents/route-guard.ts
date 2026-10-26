@@ -56,6 +56,8 @@ const TREND_RE =
 export interface GuardOptions {
   /** Kenali nama barang dari katalog toko di cache perangkat (profil model, model-profile.ts). */
   catalog?: boolean;
+  /** Router TRANSACTION_AGENT untuk pesan yang jelas hanya bertanya dialihkan ke Query Agent. */
+  queryGuard?: boolean;
 }
 
 export interface GuardedRoute {
@@ -72,7 +74,11 @@ export interface GuardedRoute {
  * saja tidak cukup: "cara ganti busi" tetap off-topic.
  */
 export function guardRoute(agentType: RoutedAgent, userMessage: string, options: GuardOptions = {}): GuardedRoute {
-  if (agentType === "transaction") return { agentType, reason: null };
+  if (agentType === "transaction") {
+    return options.queryGuard && looksLikeQuestionOnly(userMessage)
+      ? { agentType: "query", reason: "Router memilih transaksi, tapi pesan hanya bertanya dan tanpa kata pergerakan barang: dialihkan ke Query Agent" }
+      : { agentType, reason: null };
+  }
   if (isClearStockMovement(userMessage)) {
     return agentType === "query"
       ? { agentType: "transaction", reason: "Pesan berisi kata pergerakan barang dan jumlah, dialihkan ke Transaction Agent" }
@@ -101,6 +107,20 @@ export function guardRoute(agentType: RoutedAgent, userMessage: string, options:
  * lagi rame gak?"). Kata stok atau ketersediaan di pesan membatalkannya: "penjualan
  * dan sisa stok" tetap dibaca sebagai pertanyaan stok.
  */
+// "tarik 2 oli dari gudang", "naikin 3 filter ke toko": perpindahan antar lokasi tanpa kata pindah.
+const MOVE_BETWEEN_RE = /(?<![\p{L}\p{N}])(dari|ke)\s+(stok\s+)?(toko|gudang)(?![\p{L}\p{N}])/iu;
+
+/**
+ * Pesan bertanya soal stok atau penjualan dan tidak memuat kata pergerakan, perubahan, atau jumlah
+ * terjual ("laku 1"). Butuh bukti pertanyaan (ketersediaan, tren, kata stok, "berapa", tanda tanya),
+ * jadi pesan pencatatan yang terselip nama barang tetap transaksi.
+ */
+function looksLikeQuestionOnly(message: string): boolean {
+  const text = normalizeShorthand(message);
+  if (STRONG_MOVEMENT_RE.test(text) || CHANGE_VERB_RE.test(text) || SOLD_QUANTITY_RE.test(text) || MOVE_BETWEEN_RE.test(text)) return false;
+  return AVAILABILITY_RE.test(text) || TREND_RE.test(text) || STOCK_WORD_RE.test(text) || /(?<![\p{L}\p{N}])(berapa|brp)(?![\p{L}\p{N}])|\?/iu.test(text);
+}
+
 export function asksSalesTrend(message: string): boolean {
   const text = normalizeShorthand(message);
   return TREND_RE.test(text) && !STOCK_WORD_RE.test(text) && !AVAILABILITY_RE.test(text) && !SOLD_QUANTITY_RE.test(text);

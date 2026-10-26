@@ -246,11 +246,11 @@ describe("stripThinking", () => {
 describe("contoh alat tambahan", () => {
   const tools = AGENT_TOOL_DEFINITIONS;
   it("hanya muncul bila diminta dan tidak memakai kalimat atau barang skenario evaluasi", () => {
-    expect(buildToolInstructions(tools)).not.toContain("kabel kopling");
+    expect(buildToolInstructions(tools)).not.toContain("oli samping");
     const text = buildToolInstructions(tools, { extraExamples: true });
-    expect(text).toContain("kabel kopling");
+    expect(text).toContain("oli samping");
     const messages = (scenarios as { scenarios: { message: string }[] }).scenarios.map((s) => s.message.toLowerCase());
-    for (const item of ["kabel kopling", "selang rem", "oli samping"]) {
+    for (const item of ["oli samping"]) {
       expect(messages.some((m) => m.includes(item))).toBe(false);
     }
   });
@@ -259,6 +259,6 @@ describe("contoh alat tambahan", () => {
     const query = tools.filter((t) => ["getStock", "getSalesTrend"].includes(t.function.name));
     const text = buildToolInstructions(query, { extraExamples: true });
     expect(text).toContain("oli samping");
-    expect(text).not.toContain("kabel kopling");
+    expect(text).not.toContain("transferStock");
   });
 });

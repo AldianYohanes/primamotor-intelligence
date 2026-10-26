@@ -70,10 +70,6 @@ ${CLOSE}`
     ? [
         has("getSalesTrend") &&
           `Staf: "oli samping laku nggak bulan ini?"\nKamu:\n${OPEN}\n{"name": "getSalesTrend", "arguments": {"product": "oli samping", "months": 1}}\n${CLOSE}`,
-        has("updateStock") &&
-          `Staf: "tadi kejual 3 kabel kopling di toko"\nKamu:\n${OPEN}\n{"name": "updateStock", "arguments": {"product": "kabel kopling", "quantity": 3, "direction": "keluar", "reasoning": "Staf mencatat 3 kabel kopling terjual di toko", "location": "toko"}}\n${CLOSE}`,
-        has("transferStock") &&
-          `Staf: "pindahin 4 selang rem dari gudang ke toko"\nKamu:\n${OPEN}\n{"name": "transferStock", "arguments": {"product": "selang rem", "quantity": 4, "from_location": "gudang", "to_location": "toko", "reasoning": "Staf memindahkan 4 selang rem dari gudang ke toko"}}\n${CLOSE}`,
       ].filter((x): x is string => typeof x === "string")
     : [];
   const more = extra.length > 0 ? `\n\n${extra.join("\n\n")}` : "";

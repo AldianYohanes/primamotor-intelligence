@@ -106,3 +106,23 @@ describe("guardRoute: jaring pengaman OFF_TOPIC", () => {
     expect(guardRoute("transaction", "Kurangin stok lampu").agentType).toBe("transaction");
   });
 });
+
+describe("guardRoute queryGuard (Router salah memilih transaksi)", () => {
+  const guard = (m: string, queryGuard = true) => guardRoute("transaction", m, { queryGuard });
+
+  it("pertanyaan stok dan tren dialihkan ke Query Agent", () => {
+    for (const m of ["aki gs 70ah masih ada ga?", "sisa busi ngk tinggal berapa", "tren jual kampas kopling 3 bulan", "stok seal klep brp"]) {
+      expect(guard(m).agentType).toBe("query");
+    }
+  });
+
+  it("pencatatan tetap transaksi, termasuk tanpa kata pindah", () => {
+    for (const m of ["masuk 6 busi ngk ke gudang", "kurangin 1 kampas kopling", "tarik 2 seal klep dari gudang", "naikin 3 aki ke toko dari stok gudang", "seal klep laku 1 di toko"]) {
+      expect(guard(m).agentType).toBe("transaction");
+    }
+  });
+
+  it("tanpa opsi queryGuard perilaku lama (transaksi tidak diubah)", () => {
+    expect(guard("aki gs 70ah masih ada ga?", false).agentType).toBe("transaction");
+  });
+});

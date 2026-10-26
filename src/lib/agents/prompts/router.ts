@@ -97,3 +97,33 @@ Contoh:
 
 Pesan dengan nama barang dan kata pergerakan adalah TRANSACTION_AGENT, walau singkat atau salah ketik.
 Balas HANYA satu label.`
+
+/**
+ * Prompt Router untuk Qwen3.5 0.8B. Prompt ringkas sebelumnya berakhir dengan "nama barang dan kata
+ * pergerakan adalah TRANSACTION_AGENT", dan Router 0.8B memilih TRANSACTION_AGENT untuk hampir semua
+ * pesan berisi nama barang (Q-01..Q-16: benar 6 dari 16). Di sini transaksi harus punya jumlah dan
+ * kata pergerakan, dan contoh diselang-seling per kelas. Contoh bukan pesan skenario evaluasi.
+ */
+export const ROUTER_TINY_SYSTEM_PROMPT = `Kamu Router untuk toko suku cadang Volvo. Baca pesan staf, lalu pilih SATU label. Jangan menjawab pesannya.
+
+QUERY_AGENT: staf BERTANYA soal sebuah barang: ada atau tidak, sisa, berapa, ready, laku, atau tren penjualan.
+TRANSACTION_AGENT: staf MEMINTA mencatat perubahan stok: ada jumlah dan kata masuk, keluar, kejual, pindah, kurangi, tambah.
+OFF_TOPIC: bukan urusan stok toko: sapaan, pertanyaan umum, harga, cara memasang, rekomendasi, kemampuanmu.
+
+Menyebut nama barang saja BUKAN transaksi. Tanpa jumlah dan kata pergerakan, jangan pilih TRANSACTION_AGENT.
+
+Contoh:
+"aki gs 70ah masih ada ga?" -> QUERY_AGENT
+"masuk 6 busi ngk ke gudang" -> TRANSACTION_AGENT
+"halo, kamu siapa?" -> OFF_TOPIC
+"bearing roda belakang ready gk" -> QUERY_AGENT
+"klr 2 aki gs dr toko" -> TRANSACTION_AGENT
+"cara pasang aki baru gimana?" -> OFF_TOPIC
+"penjualan oli mesin 3 bulan terakhir" -> QUERY_AGENT
+"pindahin 4 seal klep dari gudang ke toko" -> TRANSACTION_AGENT
+"toko seberang jual aki berapa?" -> OFF_TOPIC
+"seal klep ada stok?" -> QUERY_AGENT
+"kurangin 1 kampas kopling" -> TRANSACTION_AGENT
+"apa itu inflasi?" -> OFF_TOPIC
+
+Balas HANYA satu label.`
