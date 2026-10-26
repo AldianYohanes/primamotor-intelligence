@@ -1,5 +1,6 @@
 import type { AgentMode } from "@/src/lib/agents/orchestrator";
 import { assessAnswerQuality, type AnswerQuality } from "@/src/lib/eval/answer-quality";
+import { codeAssistLabels, codeAssistOf } from "@/src/lib/eval/code-assist";
 import {
   ROUTES,
   type ExpectedAction,
@@ -286,6 +287,10 @@ export interface ModeSummary {
   etsr: { success: number; total: number; byRoute: Record<Route, { success: number; total: number }> };
   /** ETSR yang juga menggugurkan jawaban ngelantur; ETSR di atas tidak berubah. */
   etsrStrict: { success: number; total: number; flagged: number };
+  /** Berhasil tanpa bantuan kode sedikit pun (rute, alat, ulang, jawaban); "ETSR murni model". */
+  etsrRaw: { success: number; total: number };
+  /** Eksekusi yang dibantu kode, per jenis bantuan. */
+  codeAssist: { any: number; route: number; tool: number; retry: number; answer: number; total: number };
   failedStages: Partial<Record<FailedStage, number>>;
   latency: Record<Route | "all", ReturnType<typeof latencyStats>>;
   /**
@@ -372,6 +377,18 @@ export function summarize(mode: AgentMode, rows: ScoredRow[]): ModeSummary {
       total: functional.length,
       flagged: functional.filter((r) => r.success && !strictSuccess(r)).length,
     },
+    etsrRaw: {
+      success: functional.filter((r) => r.success && !codeAssistOf(r.observation).any).length,
+      total: functional.length,
+    },
+    codeAssist: {
+      any: functional.filter((r) => codeAssistOf(r.observation).any).length,
+      route: functional.filter((r) => codeAssistOf(r.observation).route).length,
+      tool: functional.filter((r) => codeAssistOf(r.observation).tool).length,
+      retry: functional.filter((r) => codeAssistOf(r.observation).retry).length,
+      answer: functional.filter((r) => codeAssistOf(r.observation).answer).length,
+      total: functional.length,
+    },
     failedStages,
     latency: {
       all: latencyOf(() => true),
@@ -407,7 +424,7 @@ export function toCsv(rows: ScoredRow[]): string {
     "param_correct", "param_total", "entity_found",
     "pending", "location_prompt", "confirm_outcome", "pending_correct", "stock_correct",
     "success", "failed_stage", "security_invariant_held", "faithfulness", "latency_ms", "prompt_tokens", "completion_tokens", "prompt_padding",
-    "answer_issues", "run_error", "confirm_error", "assistant_text", "tool_trace",
+    "answer_issues", "code_assist", "code_guards_off", "run_error", "confirm_error", "assistant_text", "tool_trace",
   ];
   const lines = rows.map((r) => {
     const o = r.observation;
@@ -418,7 +435,7 @@ export function toCsv(rows: ScoredRow[]): string {
       r.paramCorrectFields, r.paramTotalFields, r.entityFound,
       o.pending, o.locationPrompt ?? "", o.confirmOutcome, r.pendingCorrect, r.stockCorrect,
       r.success, r.failedStage, r.securityInvariantHeld, r.faithfulness, o.latencyMs, o.promptTokens, o.completionTokens, o.promptPadding ?? "",
-      answerQualityOf(r)?.issues.join(" | ") ?? "", o.runError, o.confirmError, o.assistantText, o.toolTrace,
+      answerQualityOf(r)?.issues.join(" | ") ?? "", codeAssistLabels(codeAssistOf(o)).join("|"), o.codeGuardsOff ?? "", o.runError, o.confirmError, o.assistantText, o.toolTrace,
     ].map(csvCell).join(",");
   });
   return [header.join(","), ...lines].join("\n");

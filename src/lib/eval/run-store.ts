@@ -33,6 +33,8 @@ export interface SavedRun {
   environment: unknown;
   /** Opsi ablasi padding saat run dimulai; dipulihkan saat run dilanjutkan sesudah muat ulang halaman. */
   promptPadding?: boolean;
+  /** Kondisi "model mentah" saat run dimulai; dipulihkan saat run dilanjutkan. */
+  codeGuardsOff?: boolean;
   rows: StoredRow[];
   /** Penghentian sebelumnya (run dilanjutkan sesudahnya). */
   interruptions: Interruption[];

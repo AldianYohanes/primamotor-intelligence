@@ -24,7 +24,7 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
 export function EvalRowDetail({ row }: { row: ScoredRow }) {
   const { scenario: s, observation: o } = row;
   const steps = o.processSteps ?? [];
-  const intervened = steps.filter((st) => st.kind === "action" || st.kind === "retry");
+  const intervened = steps.filter((st) => st.assist);
   const quality = answerQualityOf(row);
   const routerOverridden = o.routerPredictedRoute && o.routerPredictedRoute !== o.predictedRoute;
 

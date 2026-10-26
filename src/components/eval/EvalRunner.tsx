@@ -12,6 +12,7 @@ import { EvalRowDetail } from "@/src/components/eval/EvalRowDetail";
 import { CallTable, InferenceStatsButton, LiveInferenceLine, type TurnRecord } from "@/src/components/chat/InferenceStats";
 import type { InferenceSnapshot } from "@/src/lib/agents/inference-stats";
 import scenarioFile from "@/src/lib/eval/scenarios.json";
+import { codeAssistLabels, codeAssistOf } from "@/src/lib/eval/code-assist";
 import { answerQualityOf, scoreScenario, stockKey, summarize, toCsv, type ModeSummary } from "@/src/lib/eval/scoring";
 import {
   buildPlan,
@@ -56,6 +57,7 @@ import {
   setPrefillChunkPreference,
 } from "@/src/lib/agents/prefill-preference";
 import { isPromptPaddingOn, setPromptPadding } from "@/src/lib/agents/prompt-padding";
+import { isCodeGuardsOff, setCodeGuardsOff } from "@/src/lib/agents/model-profile";
 
 const fixedDevicePosition = () => Promise.resolve(EVAL_DEVICE_POSITION);
 const SCENARIOS = scenarioFile.scenarios as unknown as Scenario[];
@@ -129,6 +131,8 @@ async function collectEnvironment(modelId: string) {
     prefillChunkSize: null as { effective: number | null; modelDefault: number | null } | null,
     /** Ablasi: prompt agent spesialis diisi sampai sepanjang prompt single-agent; lihat prompt-padding.ts. */
     promptPadding: isPromptPaddingOn(),
+    /** Kondisi "model mentah": pengaman profil model dimatikan; lihat model-profile.ts. */
+    codeGuardsOff: isCodeGuardsOff(),
   };
 }
 
@@ -164,6 +168,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   const [alertsOn, setAlertsOn] = useState(true);
   const [notifPermission, setNotifPermission] = useState<ReturnType<typeof notificationPermission>>("default");
   const [liveSteps, setLiveSteps] = useState<ProcessStep[]>([]);
+  const [guardsOff, setGuardsOff] = useState(false);
   // Baris hasil yang detailnya terbuka (kunci: indeks baris).
   const [openRows, setOpenRows] = useState<Set<number>>(new Set());
   // Statistik model skenario terakhir (maks. 20) untuk tombol/modal statistik.
@@ -171,7 +176,10 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   const [prefillChunk, setPrefillChunk] = useState<number | null>(null);
   const [padPrompt, setPadPrompt] = useState(false);
   // Opsi ablasi selalu mulai mati di setiap kunjungan halaman.
-  useEffect(() => setPromptPadding(false), []);
+  useEffect(() => {
+    setPromptPadding(false);
+    setCodeGuardsOff(false);
+  }, []);
   const [gpuProbes, setGpuProbes] = useState<GpuProbe[] | null>(null);
   const [gpuPref, setGpuPref] = useState<GpuPowerPreference | null>(null);
   // Ganti GPU baru berlaku untuk engine baru; engine yang sudah dimuat tetap di GPU lama.
@@ -420,6 +428,10 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
       setPadPrompt(resume.promptPadding);
       setPromptPadding(resume.promptPadding);
     }
+    if (resume && typeof resume.codeGuardsOff === "boolean" && resume.codeGuardsOff !== isCodeGuardsOff()) {
+      setGuardsOff(resume.codeGuardsOff);
+      setCodeGuardsOff(resume.codeGuardsOff);
+    }
     if (alertsOn) enableAlerts();
     let resetEngine: (() => void) | undefined;
     const releaseWake = holdWakeLock();
@@ -434,6 +446,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
     let runEnvironment: unknown = resume?.environment ?? null;
     // Dikunci di awal run: nilai awal dipertahankan sepanjang run, juga lintas resume.
     const runPadding = typeof resume?.promptPadding === "boolean" ? resume.promptPadding : isPromptPaddingOn();
+    const runGuardsOff = typeof resume?.codeGuardsOff === "boolean" ? resume.codeGuardsOff : isCodeGuardsOff();
     let autosaveOk = true;
     const persist = () => {
       autosaveOk = saveRun({
@@ -443,6 +456,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         plan,
         environment: runEnvironment,
         promptPadding: runPadding,
+        codeGuardsOff: runGuardsOff,
         rows: collected.map(toStoredRow),
         interruptions,
         resumed,
@@ -563,6 +577,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
           promptTokens: null,
           completionTokens: null,
           promptPadding: isPromptPaddingOn(),
+          ...(isCodeGuardsOff() && { codeGuardsOff: true }),
         };
         let observation: Observation;
         setLiveSteps([]);
@@ -925,6 +940,18 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             Ablasi: samakan panjang prompt multi-agent dengan single-agent
           </label>
           <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={guardsOff}
+              onChange={(e) => {
+                setGuardsOff(e.target.checked);
+                setCodeGuardsOff(e.target.checked);
+              }}
+              disabled={running}
+            />
+            Model mentah: matikan pengaman model kecil
+          </label>
+          <label className="flex items-center gap-2">
             <input type="checkbox" checked={autoResume} onChange={(e) => setAutoResume(e.target.checked)} />
             Lanjut otomatis kalau GPU putus
           </label>
@@ -1086,6 +1113,11 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             <div>Akurasi tool: <strong>{pct(s.toolAccuracy.correct, s.toolAccuracy.total)}</strong></div>
             <div>Akurasi parameter: <strong>{pct(s.parameterAccuracy.correct, s.parameterAccuracy.total)}</strong></div>
             <div>ETSR: <strong>{pct(s.etsr.success, s.etsr.total)}</strong> ({s.etsr.success}/{s.etsr.total})</div>
+            <div title="Berhasil tanpa bantuan kode sedikit pun (rute, alat, ulang, jawaban)">
+              ETSR murni model: <strong>{pct(s.etsrRaw.success, s.etsrRaw.total)}</strong> ({s.etsrRaw.success}/{s.etsrRaw.total})
+              {s.codeAssist.any > 0 &&
+                ` · dibantu kode ${s.codeAssist.any}/${s.codeAssist.total} (rute ${s.codeAssist.route}, alat ${s.codeAssist.tool}, ulang ${s.codeAssist.retry}, jawaban ${s.codeAssist.answer})`}
+            </div>
             <div title="Berhasil dan jawabannya tidak ngelantur (berulang, kepanjangan, barang di luar hasil alat, dst.)">
               ETSR ketat: <strong>{pct(s.etsrStrict.success, s.etsrStrict.total)}</strong> ({s.etsrStrict.success}/{s.etsrStrict.total})
               {s.etsrStrict.flagged > 0 && ` · ${s.etsrStrict.flagged} jawaban bermasalah`}
@@ -1181,6 +1213,9 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
                         </div>
                       )}
                       {r.observation.runError && <div className="text-xs">{r.observation.runError}</div>}
+                      {codeAssistOf(r.observation).any && (
+                        <div className="text-xs text-slate-500">dibantu kode: {codeAssistLabels(codeAssistOf(r.observation)).join(", ")}</div>
+                      )}
                       {r.success && answerQualityOf(r)?.ok === false && (
                         <div className="text-xs text-amber-700">jawaban bermasalah: {answerQualityOf(r)!.issues.join("; ")}</div>
                       )}

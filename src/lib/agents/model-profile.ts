@@ -34,6 +34,14 @@ export interface ModelProfile {
    * null = tanpa batas (perilaku lama).
    */
   maxAgentTokens: number | null;
+  /**
+   * Balasan agent pertama (belum ada hasil alat) dipaksa berupa panggilan alat yang valid lewat
+   * response_format grammar WebLLM, jadi "format rusak" dan lupa memanggil alat tidak mungkin
+   * terjadi. Hanya dipakai di multi-agent untuk agent yang pasti memakai alat.
+   */
+  constrainedToolCall: boolean;
+  /** Contoh tambahan (tren penjualan, pencatatan) di instruksi alat; contohnya bukan barang atau kalimat skenario eval. */
+  toolExamples: boolean;
   /** Pesan pencatatan yang jelas dirutekan kode ke Transaction Agent tanpa memanggil Router (hasilnya sama, tanpa waktu Router). */
   skipRouterForMovement: boolean;
   /** Nama barang dikenali dari katalog toko di cache perangkat saat pengaman rute menimbang pesan off-topic. */
@@ -48,6 +56,8 @@ export const DEFAULT_PROFILE: ModelProfile = {
   nudgeMissingCall: true,
   answerFromToolResult: true,
   maxAgentTokens: 400,
+  constrainedToolCall: false,
+  toolExamples: false,
   skipRouterForMovement: false,
   catalogRouting: true,
 };
@@ -64,11 +74,52 @@ const SMALL_QWEN3_PROFILE: ModelProfile = {
   nudgeMissingCall: true,
   answerFromToolResult: true,
   maxAgentTokens: 400,
+  constrainedToolCall: false,
+  toolExamples: false,
   skipRouterForMovement: true,
   catalogRouting: true,
 };
 
+/**
+ * Qwen3.5 0.8B (Q-01..Q-16, 26 Okt 2026): panggilan alat sering rusak, Router salah di 9 dari 16
+ * giliran, dan model menulis sampai batas token. Profil model kecil ditambah keluaran alat yang
+ * dipaksa valid dan contoh alat tambahan.
+ */
+const TINY_QWEN3_PROFILE: ModelProfile = { ...SMALL_QWEN3_PROFILE, constrainedToolCall: true, toolExamples: true };
+
+/**
+ * Semua pengaman profil dimatikan: dipakai /eval untuk mengukur kemampuan model sendiri
+ * (kondisi "model mentah"). Pengaman yang berlaku untuk semua model (guardRoute, cek isi
+ * jawaban terhadap hasil alat) tetap menyala, jadi ini batas bawah yang bersih, bukan model polos.
+ */
+export const RAW_PROFILE: ModelProfile = {
+  routerGrammar: false,
+  routerPrompt: "default",
+  routerRecovery: false,
+  agentRecovery: false,
+  nudgeMissingCall: false,
+  answerFromToolResult: false,
+  maxAgentTokens: null,
+  constrainedToolCall: false,
+  toolExamples: false,
+  skipRouterForMovement: false,
+  catalogRouting: false,
+};
+
+let codeGuardsOff = false;
+
+/** Hanya dipanggil halaman /eval; default hidup. */
+export function setCodeGuardsOff(off: boolean): void {
+  codeGuardsOff = off;
+}
+
+export function isCodeGuardsOff(): boolean {
+  return codeGuardsOff;
+}
+
 export function getModelProfile(modelId: string): ModelProfile {
-  if (/qwen3(\.5)?-(0\.6|0\.8|1\.7)b/i.test(modelId)) return SMALL_QWEN3_PROFILE;
+  if (codeGuardsOff) return RAW_PROFILE;
+  if (/qwen3\.5-0\.8b/i.test(modelId)) return TINY_QWEN3_PROFILE;
+  if (/qwen3-(0\.6|1\.7)b/i.test(modelId)) return SMALL_QWEN3_PROFILE;
   return DEFAULT_PROFILE;
 }

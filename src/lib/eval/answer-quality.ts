@@ -81,6 +81,15 @@ function missesAskedLocation(s: Scenario, o: Observation, rows: StockRow[]): str
   return asked;
 }
 
+/** Jawaban stok memuat minimal satu angka dari hasil alat, atau menyatakan kosong bila semuanya nol. */
+function mentionsAnyStock(text: string, rows: StockRow[]): boolean {
+  const quantities = rows.flatMap((r) => r.locations.map((l) => l.quantity));
+  if (quantities.length === 0) return true;
+  const numbers = (text.match(/\d+/g) ?? []).map(Number);
+  if (quantities.some((q) => numbers.includes(q))) return true;
+  return quantities.every((q) => q === 0) && /\b(kosong|habis|tidak ada|tidak tersedia|belum ada|nol)\b/i.test(text);
+}
+
 export function assessAnswerQuality(s: Scenario, o: Observation): AnswerQuality | null {
   if (o.runError || !o.assistantText.trim()) return null;
   const text = o.assistantText;
@@ -96,6 +105,7 @@ export function assessAnswerQuality(s: Scenario, o: Observation): AnswerQuality 
     if (rows.length > 0) {
       const foreign = foreignLabels(text, rows, s.message);
       if (foreign.length > 0) issues.push(`menyebut barang di luar hasil alat: ${foreign.slice(0, 2).join(", ")}`);
+      if (!mentionsAnyStock(o.assistantText, rows)) issues.push("tidak menyebut angka stok dari hasil alat");
       const missed = missesAskedLocation(s, o, rows);
       if (missed) issues.push(`tidak menyebut stok ${missed} yang ditanya`);
     }

@@ -69,6 +69,11 @@ describe("assessAnswerQuality", () => {
     expect(assessAnswerQuality(q02, obs("Stok Filter Oli Mahle: Gudang 60, Toko 25.", [filter]))?.ok).toBe(true);
   });
 
+  it("menangkap jawaban stok tanpa angka dari hasil alat (Q-02 multi: 'saya akan mencoba lagi')", () => {
+    const r = assessAnswerQuality(q01, obs("Saya mengerti, saya akan mencoba lagi dengan format yang benar:"));
+    expect(r?.issues.join()).toContain("angka stok");
+  });
+
   it("tidak dinilai bila run error atau jawaban kosong", () => {
     expect(assessAnswerQuality(q01, { ...obs("x"), runError: "boom" })).toBeNull();
     expect(assessAnswerQuality(q01, obs("  "))).toBeNull();
