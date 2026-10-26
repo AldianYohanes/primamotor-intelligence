@@ -119,6 +119,23 @@ const ALIASES: [number, string][] = [
   [25, "wheel bearing"],
   [26, "head gasket"],
   [28, "muffler"],
+  [18, "bougie"],
+  [20, "waterpump"],
+  [22, "sokbreaker"],
+  [22, "shockbreaker"],
+  [22, "shock breaker"],
+  [23, "pegas ulir"],
+  [24, "plat kopling"],
+  [24, "matahari kopling"],
+  [25, "laher roda"],
+  [26, "paking"],
+  [26, "gasket silinder head"],
+  [27, "engine mounting"],
+  [27, "dudukan mesin"],
+  [28, "silencer"],
+  [29, "cairan radiator"],
+  [29, "cairan pendingin"],
+  [30, "spion"],
 ];
 
 export const EVAL_PRODUCTS = PRODUCTS.map((p) => ({

@@ -139,7 +139,24 @@ insert into product_aliases (product_id, alias, source) values
   ('e0000000-0d0c-0000-0000-000000000023', 'coil spring', 'eval'),
   ('e0000000-0d0c-0000-0000-000000000025', 'wheel bearing', 'eval'),
   ('e0000000-0d0c-0000-0000-000000000026', 'head gasket', 'eval'),
-  ('e0000000-0d0c-0000-0000-000000000028', 'muffler', 'eval');
+  ('e0000000-0d0c-0000-0000-000000000028', 'muffler', 'eval'),
+  ('e0000000-0d0c-0000-0000-000000000018', 'bougie', 'eval'),
+  ('e0000000-0d0c-0000-0000-000000000020', 'waterpump', 'eval'),
+  ('e0000000-0d0c-0000-0000-000000000022', 'sokbreaker', 'eval'),
+  ('e0000000-0d0c-0000-0000-000000000022', 'shockbreaker', 'eval'),
+  ('e0000000-0d0c-0000-0000-000000000022', 'shock breaker', 'eval'),
+  ('e0000000-0d0c-0000-0000-000000000023', 'pegas ulir', 'eval'),
+  ('e0000000-0d0c-0000-0000-000000000024', 'plat kopling', 'eval'),
+  ('e0000000-0d0c-0000-0000-000000000024', 'matahari kopling', 'eval'),
+  ('e0000000-0d0c-0000-0000-000000000025', 'laher roda', 'eval'),
+  ('e0000000-0d0c-0000-0000-000000000026', 'paking', 'eval'),
+  ('e0000000-0d0c-0000-0000-000000000026', 'gasket silinder head', 'eval'),
+  ('e0000000-0d0c-0000-0000-000000000027', 'engine mounting', 'eval'),
+  ('e0000000-0d0c-0000-0000-000000000027', 'dudukan mesin', 'eval'),
+  ('e0000000-0d0c-0000-0000-000000000028', 'silencer', 'eval'),
+  ('e0000000-0d0c-0000-0000-000000000029', 'cairan radiator', 'eval'),
+  ('e0000000-0d0c-0000-0000-000000000029', 'cairan pendingin', 'eval'),
+  ('e0000000-0d0c-0000-0000-000000000030', 'spion', 'eval');
 
 -- ============================================================
 -- Stok akhir + riwayat keluar 6 bulan di Toko (untuk getSalesTrend).
