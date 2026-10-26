@@ -1,5 +1,6 @@
 import { ProcessTimeline } from "@/src/components/chat/ProcessDetails";
 import { CallTable } from "@/src/components/chat/InferenceStats";
+import { answerQualityOf } from "@/src/lib/eval/scoring";
 import type { ScoredRow } from "@/src/lib/eval/types";
 
 function json(value: unknown): string {
@@ -24,6 +25,7 @@ export function EvalRowDetail({ row }: { row: ScoredRow }) {
   const { scenario: s, observation: o } = row;
   const steps = o.processSteps ?? [];
   const intervened = steps.filter((st) => st.kind === "action" || st.kind === "retry");
+  const quality = answerQualityOf(row);
   const routerOverridden = o.routerPredictedRoute && o.routerPredictedRoute !== o.predictedRoute;
 
   return (
@@ -89,6 +91,20 @@ export function EvalRowDetail({ row }: { row: ScoredRow }) {
           </ol>
         ) : (
           <p className="text-slate-400">Tidak tersimpan (run lama atau rute diputuskan kode).</p>
+        )}
+      </Block>
+
+      <Block title="Mutu jawaban (ETSR ketat)">
+        {quality === null ? (
+          <p className="text-slate-400">Tidak dinilai (run error atau jawaban kosong).</p>
+        ) : quality.ok ? (
+          <p className="text-emerald-700">Tidak ada masalah terdeteksi.</p>
+        ) : (
+          <ul className="list-disc space-y-0.5 pl-4 text-amber-700">
+            {quality.issues.map((issue, i) => (
+              <li key={i}>{issue}</li>
+            ))}
+          </ul>
         )}
       </Block>
 

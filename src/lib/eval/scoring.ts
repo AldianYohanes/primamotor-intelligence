@@ -1,4 +1,5 @@
 import type { AgentMode } from "@/src/lib/agents/orchestrator";
+import { assessAnswerQuality, type AnswerQuality } from "@/src/lib/eval/answer-quality";
 import {
   ROUTES,
   type ExpectedAction,
@@ -229,6 +230,16 @@ export function scoreScenario(s: Scenario, o: Observation, refs: RefMap): Scored
   };
 }
 
+/** Mutu jawaban baris ini; dihitung dari teks, jadi berlaku juga untuk berkas run lama. */
+export function answerQualityOf(r: ScoredRow): AnswerQuality | null {
+  return assessAnswerQuality(r.scenario, r.observation);
+}
+
+/** Berhasil menurut ETSR DAN jawabannya tidak ngelantur (lihat answer-quality.ts). */
+export function strictSuccess(r: ScoredRow): boolean {
+  return r.success && answerQualityOf(r)?.ok !== false;
+}
+
 export function quantile(sorted: number[], q: number): number | null {
   if (sorted.length === 0) return null;
   const pos = (sorted.length - 1) * q;
@@ -273,6 +284,8 @@ export interface ModeSummary {
   toolAccuracy: { correct: number; total: number };
   parameterAccuracy: { correct: number; total: number };
   etsr: { success: number; total: number; byRoute: Record<Route, { success: number; total: number }> };
+  /** ETSR yang juga menggugurkan jawaban ngelantur; ETSR di atas tidak berubah. */
+  etsrStrict: { success: number; total: number; flagged: number };
   failedStages: Partial<Record<FailedStage, number>>;
   latency: Record<Route | "all", ReturnType<typeof latencyStats>>;
   /**
@@ -354,6 +367,11 @@ export function summarize(mode: AgentMode, rows: ScoredRow[]): ModeSummary {
       total: functional.length,
       byRoute,
     },
+    etsrStrict: {
+      success: functional.filter(strictSuccess).length,
+      total: functional.length,
+      flagged: functional.filter((r) => r.success && !strictSuccess(r)).length,
+    },
     failedStages,
     latency: {
       all: latencyOf(() => true),
@@ -389,7 +407,7 @@ export function toCsv(rows: ScoredRow[]): string {
     "param_correct", "param_total", "entity_found",
     "pending", "location_prompt", "confirm_outcome", "pending_correct", "stock_correct",
     "success", "failed_stage", "security_invariant_held", "faithfulness", "latency_ms", "prompt_tokens", "completion_tokens", "prompt_padding",
-    "run_error", "confirm_error", "assistant_text", "tool_trace",
+    "answer_issues", "run_error", "confirm_error", "assistant_text", "tool_trace",
   ];
   const lines = rows.map((r) => {
     const o = r.observation;
@@ -400,7 +418,7 @@ export function toCsv(rows: ScoredRow[]): string {
       r.paramCorrectFields, r.paramTotalFields, r.entityFound,
       o.pending, o.locationPrompt ?? "", o.confirmOutcome, r.pendingCorrect, r.stockCorrect,
       r.success, r.failedStage, r.securityInvariantHeld, r.faithfulness, o.latencyMs, o.promptTokens, o.completionTokens, o.promptPadding ?? "",
-      o.runError, o.confirmError, o.assistantText, o.toolTrace,
+      answerQualityOf(r)?.issues.join(" | ") ?? "", o.runError, o.confirmError, o.assistantText, o.toolTrace,
     ].map(csvCell).join(",");
   });
   return [header.join(","), ...lines].join("\n");

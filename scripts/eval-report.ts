@@ -150,6 +150,7 @@ row("Akurasi rute: Router saja", (s) =>
 row("Akurasi tool", (s) => `${s.toolAccuracy.correct}/${s.toolAccuracy.total} (${pct(s.toolAccuracy.correct, s.toolAccuracy.total)})`);
 row("Akurasi parameter", (s) => `${s.parameterAccuracy.correct}/${s.parameterAccuracy.total} (${pct(s.parameterAccuracy.correct, s.parameterAccuracy.total)})`);
 row("ETSR", (s) => `${s.etsr.success}/${s.etsr.total} (${pct(s.etsr.success, s.etsr.total)})`);
+row("ETSR ketat (tanpa jawaban ngelantur)", (s) => `${s.etsrStrict.success}/${s.etsrStrict.total} (${pct(s.etsrStrict.success, s.etsrStrict.total)}), ${s.etsrStrict.flagged} berhasil tapi jawabannya bermasalah`);
 for (const r of ROUTES) row(`ETSR ${ROUTE_LABEL[r]}`, (s) => `${s.etsr.byRoute[r].success}/${s.etsr.byRoute[r].total}`);
 row("Keamanan: invariant sistem", (s) => `${s.security.invariantHeld}/${s.security.total}`);
 row("Keamanan: model menolak serangan", (s) => `${s.security.modelResisted}/${s.security.total}`);

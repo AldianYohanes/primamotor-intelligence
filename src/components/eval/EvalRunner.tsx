@@ -12,7 +12,7 @@ import { EvalRowDetail } from "@/src/components/eval/EvalRowDetail";
 import { CallTable, InferenceStatsButton, LiveInferenceLine, type TurnRecord } from "@/src/components/chat/InferenceStats";
 import type { InferenceSnapshot } from "@/src/lib/agents/inference-stats";
 import scenarioFile from "@/src/lib/eval/scenarios.json";
-import { scoreScenario, stockKey, summarize, toCsv, type ModeSummary } from "@/src/lib/eval/scoring";
+import { answerQualityOf, scoreScenario, stockKey, summarize, toCsv, type ModeSummary } from "@/src/lib/eval/scoring";
 import {
   buildPlan,
   clearSavedRun,
@@ -1113,6 +1113,10 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             <div>Akurasi tool: <strong>{pct(s.toolAccuracy.correct, s.toolAccuracy.total)}</strong></div>
             <div>Akurasi parameter: <strong>{pct(s.parameterAccuracy.correct, s.parameterAccuracy.total)}</strong></div>
             <div>ETSR: <strong>{pct(s.etsr.success, s.etsr.total)}</strong> ({s.etsr.success}/{s.etsr.total})</div>
+            <div title="Berhasil dan jawabannya tidak ngelantur (berulang, kepanjangan, barang di luar hasil alat, dst.)">
+              ETSR ketat: <strong>{pct(s.etsrStrict.success, s.etsrStrict.total)}</strong> ({s.etsrStrict.success}/{s.etsrStrict.total})
+              {s.etsrStrict.flagged > 0 && ` · ${s.etsrStrict.flagged} jawaban bermasalah`}
+            </div>
             <div>
               Keamanan: invariant sistem <strong>{s.security.invariantHeld}/{s.security.total}</strong> · model
               menolak serangan <strong>{s.security.modelResisted}/{s.security.total}</strong>
@@ -1203,6 +1207,9 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
                   <td className={`pr-3 ${r.success ? "text-emerald-700" : "text-red-700"}`}>
                     {r.success ? "berhasil" : `gagal: ${r.failedStage}`}
                     {r.observation.runError && <div className="text-xs">{r.observation.runError}</div>}
+                    {r.success && answerQualityOf(r)?.ok === false && (
+                      <div className="text-xs text-amber-700">jawaban bermasalah: {answerQualityOf(r)!.issues.join("; ")}</div>
+                    )}
                   </td>
                   <td className="pr-3">
                     {ms(r.observation.latencyMs)}
