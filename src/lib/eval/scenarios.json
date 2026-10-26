@@ -1,6 +1,6 @@
 {
-  "version": "2026-10-26b",
-  "note": "Catatan 26 Okt 2026 (versi 2026-10-26b): H-44 sampai H-51 ditambah dari alias baru di seed eval (riset internet dan dataset); alias baru berarti kondisi tenant eval berbeda dari run sebelumnya, jadi hasil lama tidak sebanding persis. Label acuan dibekukan untuk run resmi (M2, 8 Okt 2026, tag eval-freeze-1): status reviewed untuk seluruh 50 skenario disetujui Aldian. Jangan ubah label sesudah titik beku ini. Catatan 15 Okt 2026 (putaran perbaikan 2): H-05 dan H-14 dipakai untuk menemukan dan menyetel perbaikan (normalisasi singkatan ke agent, jawaban stok tanpa PIN), jadi bukan held-out lagi; held-out pengganti: H-16 sampai H-18. Produk merujuk part_number di supabase/seed_eval.sql. Catatan 19 Okt 2026 (versi 2026-10-19): barang H-16 diganti ke EVAL-004 supaya stok Gudangnya tidak terkuras skenario transfer lain; hasil H-16 sebelum versi ini tidak sebanding. Catatan 25 Okt 2026 (versi 2026-10-25): ditambah held-out H-19 sampai H-38 (20 skenario, label draft sampai disetujui Aldian). Skenario lama tidak diubah; hasil run versi sebelumnya tidak memuat skenario ini. Catatan 26 Okt 2026 (versi 2026-10-26): H-22, H-23, H-27, H-30, dan H-32 dipakai untuk menyetel perbaikan sesudah run Qwen3-1.7B 25 Okt, jadi bukan held-out lagi; held-out pengganti H-39 sampai H-43 (label draft). Skenario lama tidak diubah labelnya.",
+  "version": "2026-10-26c",
+  "note": "Catatan 26 Okt 2026 (versi 2026-10-26c): 13 barang baru (EVAL-018 sampai EVAL-030) ditambah ke seed eval dari riset merek; H-52 sampai H-62 ditulis dari istilah glosarium/korpus. Stok dan riwayat barang baru sintetis, dan data tenant berbeda dari run sebelumnya. Catatan 26 Okt 2026 (versi 2026-10-26b): H-44 sampai H-51 ditambah dari alias baru di seed eval (riset internet dan dataset); alias baru berarti kondisi tenant eval berbeda dari run sebelumnya, jadi hasil lama tidak sebanding persis. Label acuan dibekukan untuk run resmi (M2, 8 Okt 2026, tag eval-freeze-1): status reviewed untuk seluruh 50 skenario disetujui Aldian. Jangan ubah label sesudah titik beku ini. Catatan 15 Okt 2026 (putaran perbaikan 2): H-05 dan H-14 dipakai untuk menemukan dan menyetel perbaikan (normalisasi singkatan ke agent, jawaban stok tanpa PIN), jadi bukan held-out lagi; held-out pengganti: H-16 sampai H-18. Produk merujuk part_number di supabase/seed_eval.sql. Catatan 19 Okt 2026 (versi 2026-10-19): barang H-16 diganti ke EVAL-004 supaya stok Gudangnya tidak terkuras skenario transfer lain; hasil H-16 sebelum versi ini tidak sebanding. Catatan 25 Okt 2026 (versi 2026-10-25): ditambah held-out H-19 sampai H-38 (20 skenario, label draft sampai disetujui Aldian). Skenario lama tidak diubah; hasil run versi sebelumnya tidak memuat skenario ini. Catatan 26 Okt 2026 (versi 2026-10-26): H-22, H-23, H-27, H-30, dan H-32 dipakai untuk menyetel perbaikan sesudah run Qwen3-1.7B 25 Okt, jadi bukan held-out lagi; held-out pengganti H-39 sampai H-43 (label draft). Skenario lama tidak diubah labelnya.",
   "scenarios": [
     {
       "id": "Q-01",
@@ -1164,6 +1164,132 @@
       "expect_pending": false,
       "label_status": "draft",
       "notes": "Held-out putaran 5 (26 Okt 2026): pesan ditulis dari alias hasil riset internet dan dataset, sebelum hasilnya dilihat. Kode dan prompt tidak boleh disetel ke skenario ini. Alias 'kepet' dengan kata 'tinggal'."
+    },
+    {
+      "id": "H-52",
+      "message": "pompa air aisin ada gak di gudang?",
+      "expected_route": "query",
+      "variant": "parafrasa",
+      "expected_tools": ["getStock"],
+      "expected_entity": "EVAL-020",
+      "expect_pending": false,
+      "label_status": "draft",
+      "notes": "Held-out putaran 5b (26 Okt 2026): pesan ditulis dari istilah glosarium/korpus dan barang baru di seed eval, sebelum hasilnya dilihat. Kode dan prompt tidak boleh disetel ke skenario ini. Alias 'pompa air' untuk Water Pump."
+    },
+    {
+      "id": "H-53",
+      "message": "thermostat wahler sisa berapa?",
+      "expected_route": "query",
+      "variant": "parafrasa",
+      "expected_tools": ["getStock"],
+      "expected_entity": "EVAL-021",
+      "expect_pending": false,
+      "label_status": "draft",
+      "notes": "Held-out putaran 5b (26 Okt 2026): pesan ditulis dari istilah glosarium/korpus dan barang baru di seed eval, sebelum hasilnya dilihat. Kode dan prompt tidak boleh disetel ke skenario ini. Istilah Inggris 'thermostat' untuk Termostat."
+    },
+    {
+      "id": "H-54",
+      "message": "spark plug ngk masih ada?",
+      "expected_route": "query",
+      "variant": "parafrasa",
+      "expected_tools": ["getStock"],
+      "expected_entity": "EVAL-018",
+      "expect_pending": false,
+      "label_status": "draft",
+      "notes": "Held-out putaran 5b (26 Okt 2026): pesan ditulis dari istilah glosarium/korpus dan barang baru di seed eval, sebelum hasilnya dilihat. Kode dan prompt tidak boleh disetel ke skenario ini. Istilah Inggris untuk busi."
+    },
+    {
+      "id": "H-55",
+      "message": "wheel bearing skf belakang stoknya?",
+      "expected_route": "query",
+      "variant": "parafrasa",
+      "expected_tools": ["getStock"],
+      "expected_entity": "EVAL-025",
+      "expect_pending": false,
+      "label_status": "draft",
+      "notes": "Held-out putaran 5b (26 Okt 2026): pesan ditulis dari istilah glosarium/korpus dan barang baru di seed eval, sebelum hasilnya dilihat. Kode dan prompt tidak boleh disetel ke skenario ini. Istilah Inggris untuk bearing roda."
+    },
+    {
+      "id": "H-56",
+      "message": "coil spring depan lesjofors ready?",
+      "expected_route": "query",
+      "variant": "parafrasa",
+      "expected_tools": ["getStock"],
+      "expected_entity": "EVAL-023",
+      "expect_pending": false,
+      "label_status": "draft",
+      "notes": "Held-out putaran 5b (26 Okt 2026): pesan ditulis dari istilah glosarium/korpus dan barang baru di seed eval, sebelum hasilnya dilihat. Kode dan prompt tidak boleh disetel ke skenario ini. Istilah Inggris untuk per keong."
+    },
+    {
+      "id": "H-57",
+      "message": "muffler walker tinggal berapa di toko?",
+      "expected_route": "query",
+      "variant": "parafrasa",
+      "expected_tools": ["getStock"],
+      "expected_entity": "EVAL-028",
+      "expect_pending": false,
+      "label_status": "draft",
+      "notes": "Held-out putaran 5b (26 Okt 2026): pesan ditulis dari istilah glosarium/korpus dan barang baru di seed eval, sebelum hasilnya dilihat. Kode dan prompt tidak boleh disetel ke skenario ini. Istilah Inggris untuk knalpot."
+    },
+    {
+      "id": "H-58",
+      "message": "head gasket victor reinz ada?",
+      "expected_route": "query",
+      "variant": "parafrasa",
+      "expected_tools": ["getStock"],
+      "expected_entity": "EVAL-026",
+      "expect_pending": false,
+      "label_status": "draft",
+      "notes": "Held-out putaran 5b (26 Okt 2026): pesan ditulis dari istilah glosarium/korpus dan barang baru di seed eval, sebelum hasilnya dilihat. Kode dan prompt tidak boleh disetel ke skenario ini. Istilah Inggris untuk gasket kepala silinder."
+    },
+    {
+      "id": "H-59",
+      "message": "sokbreker belakang bilstein ada gak?",
+      "expected_route": "query",
+      "variant": "parafrasa",
+      "expected_tools": ["getStock"],
+      "expected_entity": "EVAL-022",
+      "expect_pending": false,
+      "label_status": "draft",
+      "notes": "Held-out putaran 5b (26 Okt 2026): pesan ditulis dari istilah glosarium/korpus dan barang baru di seed eval, sebelum hasilnya dilihat. Kode dan prompt tidak boleh disetel ke skenario ini. Istilah bengkel 'sokbreker' untuk shock absorber."
+    },
+    {
+      "id": "H-60",
+      "message": "tren jual busi ngk 3 bulan terakhir",
+      "expected_route": "query",
+      "variant": "parafrasa",
+      "expected_tools": ["getSalesTrend"],
+      "expected_entity": "EVAL-018",
+      "expected_action": {"tool": "getSalesTrend", "product": "EVAL-018", "months": 3},
+      "expect_pending": false,
+      "label_status": "draft",
+      "notes": "Held-out putaran 5b (26 Okt 2026): pesan ditulis dari istilah glosarium/korpus dan barang baru di seed eval, sebelum hasilnya dilihat. Kode dan prompt tidak boleh disetel ke skenario ini. Tren penjualan barang baru dengan jumlah bulan."
+    },
+    {
+      "id": "H-61",
+      "message": "masuk 20 busi ngk ke gudang dari supplier",
+      "expected_route": "transaction",
+      "variant": "parafrasa",
+      "expected_tools": ["updateStock"],
+      "expected_action": {"tool": "updateStock", "product": "EVAL-018", "location": "Gudang", "quantity": 20, "direction": "masuk"},
+      "expect_pending": true,
+      "confirm": "pin",
+      "expected_stock_delta": [{"product":"EVAL-018","location":"Gudang","delta":20}],
+      "label_status": "draft",
+      "notes": "Held-out putaran 5b (26 Okt 2026): pesan ditulis dari istilah glosarium/korpus dan barang baru di seed eval, sebelum hasilnya dilihat. Kode dan prompt tidak boleh disetel ke skenario ini. Barang masuk barang baru."
+    },
+    {
+      "id": "H-62",
+      "message": "gudang kirim 2 termostat wahler ke toko",
+      "expected_route": "transaction",
+      "variant": "parafrasa",
+      "expected_tools": ["transferStock"],
+      "expected_action": {"tool": "transferStock", "product": "EVAL-021", "quantity": 2, "from": "Gudang", "to": "Toko"},
+      "expect_pending": true,
+      "confirm": "pin",
+      "expected_stock_delta": [{"product":"EVAL-021","location":"Gudang","delta":-2},{"product":"EVAL-021","location":"Toko","delta":2}],
+      "label_status": "draft",
+      "notes": "Held-out putaran 5b (26 Okt 2026): pesan ditulis dari istilah glosarium/korpus dan barang baru di seed eval, sebelum hasilnya dilihat. Kode dan prompt tidak boleh disetel ke skenario ini. Pindah barang baru."
     }
   ]
 }

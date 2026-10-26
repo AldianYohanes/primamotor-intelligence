@@ -131,7 +131,15 @@ insert into product_aliases (product_id, alias, source) values
   ('e0000000-0d0c-0000-0000-000000000016', 'stop lamp', 'eval'),
   ('e0000000-0d0c-0000-0000-000000000016', 'lampu rem', 'eval'),
   ('e0000000-0d0c-0000-0000-000000000017', 'carburator', 'eval'),
-  ('e0000000-0d0c-0000-0000-000000000017', 'carburetor', 'eval');
+  ('e0000000-0d0c-0000-0000-000000000017', 'carburetor', 'eval'),
+  ('e0000000-0d0c-0000-0000-000000000018', 'spark plug', 'eval'),
+  ('e0000000-0d0c-0000-0000-000000000020', 'pompa air', 'eval'),
+  ('e0000000-0d0c-0000-0000-000000000021', 'thermostat', 'eval'),
+  ('e0000000-0d0c-0000-0000-000000000022', 'sokbreker', 'eval'),
+  ('e0000000-0d0c-0000-0000-000000000023', 'coil spring', 'eval'),
+  ('e0000000-0d0c-0000-0000-000000000025', 'wheel bearing', 'eval'),
+  ('e0000000-0d0c-0000-0000-000000000026', 'head gasket', 'eval'),
+  ('e0000000-0d0c-0000-0000-000000000028', 'muffler', 'eval');
 
 -- ============================================================
 -- Stok akhir + riwayat keluar 6 bulan di Toko (untuk getSalesTrend).

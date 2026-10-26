@@ -111,6 +111,14 @@ const ALIASES: [number, string][] = [
   [16, "lampu rem"],
   [17, "carburator"],
   [17, "carburetor"],
+  [18, "spark plug"],
+  [20, "pompa air"],
+  [21, "thermostat"],
+  [22, "sokbreker"],
+  [23, "coil spring"],
+  [25, "wheel bearing"],
+  [26, "head gasket"],
+  [28, "muffler"],
 ];
 
 export const EVAL_PRODUCTS = PRODUCTS.map((p) => ({
