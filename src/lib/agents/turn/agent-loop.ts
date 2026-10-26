@@ -126,7 +126,7 @@ export async function runAgentTurnInner(
       // jadi memanggil Router hanya menambah waktu (sekitar 13 detik di Qwen3 1.7B).
       agentType = "transaction";
       meta.routedByCode = true;
-      rec.add({ kind: "route", label: "Pesan jelas berisi pencatatan barang dan jumlah: dirutekan kode ke Transaction Agent, Router dilewati", status: "done" });
+      rec.add({ kind: "route", label: "Pesan jelas berisi pencatatan barang dan jumlah: dirutekan kode ke Transaction Agent, Router dilewati", status: "done", assist: "route" });
     } else {
       const routing = rec.add({ kind: "route", label: "Router menentukan agent…", status: "running" });
       const routerCall = usageAcc.meter?.startCall("Router");
@@ -140,7 +140,7 @@ export async function runAgentTurnInner(
       const guarded = guardRoute(agentType, userMessage, { catalog: modelProfile.catalogRouting });
       if (guarded.reason) {
         agentType = guarded.agentType;
-        rec.add({ kind: "route", label: guarded.reason, status: "done" });
+        rec.add({ kind: "route", label: guarded.reason, status: "done", assist: "route" });
       }
       modelReplies.push(`[router] ${routed.text}`);
       if (routed.usage) {
@@ -250,7 +250,7 @@ export async function runAgentTurnInner(
       const styled = parseFunctionStyleCall(shownContent, allowedTools);
       if (styled) {
         reply = { text: "", calls: [styled], malformed: false };
-        rec.add({ kind: "action", label: `Panggilan ${styled.name} ditulis seperti kode, dibaca sebagai tool call`, status: "done" });
+        rec.add({ kind: "action", label: `Panggilan ${styled.name} ditulis seperti kode, dibaca sebagai tool call`, status: "done", assist: "tool" });
       }
     }
     // Model kecil kadang menulis JSON tool call yang rusak; beri satu kesempatan
@@ -367,7 +367,7 @@ export async function runAgentTurnInner(
       if (signal?.aborted) throw new TurnStoppedError();
       const corrected = agentRecovery ? applyCorrections(writtenCall, agentMessage, allowedTools) : { call: writtenCall, note: null };
       let call = corrected.call;
-      if (corrected.note) rec.add({ kind: "action", label: corrected.note, status: "done" });
+      if (corrected.note) rec.add({ kind: "action", label: corrected.note, status: "done", assist: "tool" });
       // T-07, H-08: "ambil dari gudang" untuk toko dicatat model sebagai updateStock. Profil model
       // kecil membacanya dari kata depan dan langsung menjadikannya transferStock.
       if (agentRecovery && call.name === "updateStock" && allowedTools.has("transferStock")) {
@@ -376,7 +376,7 @@ export async function runAgentTurnInner(
         const asTransfer = two ? transferCallFrom(call, agentMessage, two) : null;
         if (asTransfer) {
           call = asTransfer.call;
-          if (asTransfer.note) rec.add({ kind: "action", label: asTransfer.note, status: "done" });
+          if (asTransfer.note) rec.add({ kind: "action", label: asTransfer.note, status: "done", assist: "tool" });
         }
       }
       // H-36: single-agent tidak punya Router dan memanggil getStock untuk "nomor telepon bengkel
@@ -389,7 +389,7 @@ export async function runAgentTurnInner(
         (call.name === "getStock" || call.name === "getSalesTrend") &&
         !looksStockRelated(userMessage, { catalog: modelProfile.catalogRouting })
       ) {
-        rec.add({ kind: "route", label: "Pesan tidak berkaitan dengan stok: dijawab kode sebagai di luar topik, alat tidak dipanggil", status: "done" });
+        rec.add({ kind: "route", label: "Pesan tidak berkaitan dengan stok: dijawab kode sebagai di luar topik, alat tidak dipanggil", status: "done", assist: "route" });
         rec.add(answerStep("code"));
         return { agentType: "off_topic", assistantText: offTopicReply(userMessage), toolTrace };
       }
@@ -427,7 +427,7 @@ export async function runAgentTurnInner(
         toolTrace.some((t) => t.name === call.name && JSON.stringify(t.args) === JSON.stringify(args)) &&
         hasCodeAnswer(toolTrace)
       ) {
-        rec.add({ kind: "action", label: `Model memanggil ${call.name} lagi dengan argumen sama, dijawab dari hasil sebelumnya`, status: "done" });
+        rec.add({ kind: "action", label: `Model memanggil ${call.name} lagi dengan argumen sama, dijawab dari hasil sebelumnya`, status: "done", assist: "tool" });
         return composeFinalAnswer({
           agentType,
           toolTrace,

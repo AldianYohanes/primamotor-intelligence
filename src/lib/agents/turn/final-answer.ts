@@ -40,7 +40,7 @@ export function composeFinalAnswer({
   // di routerAgentType (akurasi "Router saja").
   if (agentType === "transaction" && (readOnlyPinSeen || isReadOnlyTurn(toolTrace))) {
     agentType = "query";
-    rec.add({ kind: "route", label: "Tidak ada pencatatan stok, giliran dibaca sebagai pertanyaan stok (Query Agent)", status: "done" });
+    rec.add({ kind: "route", label: "Tidak ada pencatatan stok, giliran dibaca sebagai pertanyaan stok (Query Agent)", status: "done", assist: "route" });
   }
   // Balasan kosong (Run 19, S-03 single: model diam sesudah diingatkan) tidak
   // boleh sampai ke staf sebagai pesan kosong.
@@ -54,7 +54,7 @@ export function composeFinalAnswer({
   const trendTrace = [...toolTrace].reverse().find((t) => t.name === "getSalesTrend");
   const trendSummary = trendTrace ? summarizeTrend(trendTrace.result) : null;
   if (modelText && trendSummary && contradictsTrend(modelText, trendSummary)) {
-    rec.add(answerStep("code"));
+    rec.add(answerStep("code", true));
     const productName = String((trendTrace?.result as { product_name?: unknown })?.product_name ?? "");
     return { agentType, assistantText: trendReply(trendSummary, productName), toolTrace };
   }
@@ -64,19 +64,19 @@ export function composeFinalAnswer({
   const stockSummary = stockTrace && !trendTrace ? summarizeStock(stockTrace.result) : null;
   // Semua kalimat jawaban ternyata permintaan PIN: datanya diambil dari getStock.
   if (!modelText && (readOnlyPin || answerFromToolResult) && stockSummary) {
-    rec.add(answerStep("code"));
+    rec.add(answerStep("code", true));
     const stockText = stockReply(stockSummary);
     const note = cacheNoteFor(toolTrace);
     return { agentType, assistantText: note ? `${stockText}\n\n${note}` : stockText, toolTrace };
   }
   // Sama untuk tren penjualan: model diam atau rusak sesudah getSalesTrend.
   if (!modelText && answerFromToolResult && trendTrace && trendSummary) {
-    rec.add(answerStep("code"));
+    rec.add(answerStep("code", true));
     const productName = String((trendTrace.result as { product_name?: unknown })?.product_name ?? "");
     return { agentType, assistantText: trendReply(trendSummary, productName), toolTrace };
   }
   if (modelText && stockSummary && contradictsStock(modelText, stockSummary)) {
-    rec.add(answerStep("code"));
+    rec.add(answerStep("code", true));
     const reply = stockReply(stockSummary, { notRecorded: claimsRecorded(modelText) });
     return { agentType, assistantText: cacheNote ? `${reply}
 
