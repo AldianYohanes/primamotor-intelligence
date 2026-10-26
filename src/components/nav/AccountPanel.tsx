@@ -212,8 +212,7 @@ function DeviceSettings() {
           ))}
         </select>
         <p className="mt-1 text-[11px] text-slate-400">
-          Kalau asisten sering berhenti karena error GPU, coba varian
-          &ldquo;tanpa f16&rdquo;. Model baru perlu diunduh ulang.
+          Sering error? Coba varian &ldquo;tanpa f16&rdquo;.
         </p>
       </div>
     </>

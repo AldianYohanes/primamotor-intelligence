@@ -203,7 +203,7 @@ export function ModelSetupPanel({ shortcuts }: { shortcuts: AppModule[] }) {
             </>
           ) : (
             <p className="text-sm text-slate-600">
-              Asisten AI berjalan langsung di perangkat ini, jadi modelnya perlu diunduh sekali
+              Modelnya perlu diunduh sekali
               {totalBytes ? <> (sekitar <b>{formatBytes(totalBytes)}</b>)</> : null}.
             </p>
           )}
