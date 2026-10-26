@@ -5,7 +5,7 @@ import {
   type AgentTurnResult,
   type ChatMessage,
 } from "@/src/lib/agents/turn/types";
-import { composeFinalAnswer } from "@/src/lib/agents/turn/final-answer";
+import { composeFinalAnswer, hasCodeAnswer } from "@/src/lib/agents/turn/final-answer";
 import { QUERY_AGENT_SYSTEM_PROMPT } from "@/src/lib/agents/prompts/query-agent";
 import { TRANSACTION_AGENT_SYSTEM_PROMPT } from "@/src/lib/agents/prompts/transaction-agent";
 import { SINGLE_AGENT_SYSTEM_PROMPT } from "@/src/lib/agents/prompts/single-agent";
@@ -354,6 +354,7 @@ export async function runAgentTurnInner(
         pinProductNames,
         textBeforeNudge,
         rec,
+        answerFromToolResult: modelProfile.answerFromToolResult,
       });
     }
 
@@ -413,6 +414,31 @@ export async function runAgentTurnInner(
           responses.push(twoLocationsFeedback(two));
           continue;
         }
+      }
+
+      // Qwen3.5 0.8B (Q-01): sesudah hasil getStock, model menulis ulang percakapan dan memanggil alat
+      // yang sama lagi sampai iterasi habis. Alat baca yang sama persis tidak dijalankan ulang; hasil
+      // sebelumnya sudah cukup, jadi giliran dijawab dari hasil itu.
+      if (
+        modelProfile.answerFromToolResult &&
+        allowed &&
+        (call.name === "getStock" || call.name === "getSalesTrend") &&
+        toolTrace.some((t) => t.name === call.name && JSON.stringify(t.args) === JSON.stringify(args)) &&
+        hasCodeAnswer(toolTrace)
+      ) {
+        rec.add({ kind: "action", label: `Model memanggil ${call.name} lagi dengan argumen sama, dijawab dari hasil sebelumnya`, status: "done" });
+        return composeFinalAnswer({
+          agentType,
+          toolTrace,
+          reply: { text: "", calls: [], malformed: false },
+          content: "",
+          readOnlyPin: false,
+          readOnlyPinSeen,
+          pinProductNames: [],
+          textBeforeNudge: "",
+          rec,
+          answerFromToolResult: true,
+        });
       }
 
       // Mutasi mengakhiri giliran: sisa alur (produk, lokasi, validasi, PIN)

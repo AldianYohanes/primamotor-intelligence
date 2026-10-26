@@ -20,6 +20,7 @@ export function composeFinalAnswer({
   pinProductNames,
   textBeforeNudge,
   rec,
+  answerFromToolResult = true,
 }: {
   agentType: AgentTurnResult["agentType"];
   toolTrace: AgentTurnResult["toolTrace"];
@@ -30,6 +31,8 @@ export function composeFinalAnswer({
   pinProductNames: string[];
   textBeforeNudge: string;
   rec: ProcessRecorder;
+  /** Profil model: jawaban kosong sesudah alat baca dijawab dari hasil alat (model-profile.ts). */
+  answerFromToolResult?: boolean;
 }): Pick<AgentTurnResult, "agentType" | "assistantText" | "toolTrace"> {
   // Giliran transaksi yang ternyata hanya membaca stok dilabeli "query", dengan
   // atau tanpa jawaban yang menyebut PIN. Tebakan asli Router tetap tersimpan
@@ -57,11 +60,17 @@ export function composeFinalAnswer({
   const stockTrace = [...toolTrace].reverse().find((t) => t.name === "getStock");
   const stockSummary = stockTrace && !trendTrace ? summarizeStock(stockTrace.result) : null;
   // Semua kalimat jawaban ternyata permintaan PIN: datanya diambil dari getStock.
-  if (!modelText && readOnlyPin && stockSummary) {
+  if (!modelText && (readOnlyPin || answerFromToolResult) && stockSummary) {
     rec.add(answerStep("code"));
     const stockText = stockReply(stockSummary);
     const note = cacheNoteFor(toolTrace);
     return { agentType, assistantText: note ? `${stockText}\n\n${note}` : stockText, toolTrace };
+  }
+  // Sama untuk tren penjualan: model diam atau rusak sesudah getSalesTrend.
+  if (!modelText && answerFromToolResult && trendTrace && trendSummary) {
+    rec.add(answerStep("code"));
+    const productName = String((trendTrace.result as { product_name?: unknown })?.product_name ?? "");
+    return { agentType, assistantText: trendReply(trendSummary, productName), toolTrace };
   }
   if (modelText && stockSummary && contradictsStock(modelText, stockSummary)) {
     rec.add(answerStep("code"));
@@ -78,4 +87,11 @@ ${cacheNote}` : reply, toolTrace };
       : modelText || "Maaf, saya kurang mengerti maksudnya. Bisa diulang?",
     toolTrace,
   };
+}
+
+/** Hasil alat baca terakhir cukup untuk disusun jadi jawaban oleh kode (stok atau tren). */
+export function hasCodeAnswer(toolTrace: AgentTurnResult["toolTrace"]): boolean {
+  const last = [...toolTrace].reverse().find((t) => t.name === "getStock" || t.name === "getSalesTrend");
+  if (!last) return false;
+  return last.name === "getStock" ? summarizeStock(last.result) !== null : summarizeTrend(last.result) !== null;
 }

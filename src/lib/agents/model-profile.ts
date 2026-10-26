@@ -22,6 +22,12 @@ export interface ModelProfile {
    * 26 Okt 2026); isi false untuk mengembalikan perilaku sebelum teguran ini.
    */
   nudgeMissingCall: boolean;
+  /**
+   * Alat baca sudah memberi hasil tapi model tidak menulis jawaban yang bisa dipakai (kosong, rusak,
+   * atau mengulang panggilan alat yang sama): jawaban disusun kode dari hasil alat, bukan "Maaf, saya
+   * kurang mengerti" (Qwen3.5 0.8B, Q-01, 26 Okt 2026). Isi false untuk mengembalikan perilaku lama.
+   */
+  answerFromToolResult: boolean;
   /** Pesan pencatatan yang jelas dirutekan kode ke Transaction Agent tanpa memanggil Router (hasilnya sama, tanpa waktu Router). */
   skipRouterForMovement: boolean;
   /** Nama barang dikenali dari katalog toko di cache perangkat saat pengaman rute menimbang pesan off-topic. */
@@ -34,6 +40,7 @@ export const DEFAULT_PROFILE: ModelProfile = {
   routerRecovery: false,
   agentRecovery: false,
   nudgeMissingCall: true,
+  answerFromToolResult: true,
   skipRouterForMovement: false,
   catalogRouting: true,
 };
@@ -48,6 +55,7 @@ const SMALL_QWEN3_PROFILE: ModelProfile = {
   routerRecovery: true,
   agentRecovery: true,
   nudgeMissingCall: true,
+  answerFromToolResult: true,
   skipRouterForMovement: true,
   catalogRouting: true,
 };
