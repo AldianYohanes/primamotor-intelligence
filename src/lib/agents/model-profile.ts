@@ -53,6 +53,6 @@ const SMALL_QWEN3_PROFILE: ModelProfile = {
 };
 
 export function getModelProfile(modelId: string): ModelProfile {
-  if (/qwen3-(0\.6|1\.7)b/i.test(modelId)) return SMALL_QWEN3_PROFILE;
+  if (/qwen3(\.5)?-(0\.6|0\.8|1\.7)b/i.test(modelId)) return SMALL_QWEN3_PROFILE;
   return DEFAULT_PROFILE;
 }
