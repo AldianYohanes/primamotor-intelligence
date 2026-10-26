@@ -44,11 +44,19 @@ function allowedEdits(length: number): number {
   return 0;
 }
 
+/**
+ * Lipat ejaan yang sering beda antara tulisan staf dan nama barang: c dan k ("carburator" dan
+ * "karburator"), ph dan f, huruf ganda ("koppling"). Kedua sisi dilipat dengan cara sama.
+ */
+export function foldSpelling(word: string): string {
+  return word.replace(/ph/g, "f").replace(/c(?!h)/g, "k").replace(/(.)\1+/g, "$1");
+}
+
 let index = new Set<string>();
 
 /** Ganti katalog yang dipakai pencocok; terima nama produk dan alias apa adanya. */
 export function setCatalogTerms(terms: readonly string[]): void {
-  index = new Set(terms.flatMap(tokensOf).filter((t) => !GENERIC.has(t)));
+  index = new Set(terms.flatMap(tokensOf).filter((t) => !GENERIC.has(t)).map(foldSpelling));
 }
 
 export function catalogSize(): number {
@@ -58,8 +66,9 @@ export function catalogSize(): number {
 /** Pesan menyebut (atau salah ketik) kata khas dari nama atau alias sebuah produk. */
 export function mentionsCatalogProduct(message: string): boolean {
   if (index.size === 0) return false;
-  for (const word of tokensOf(message)) {
-    if (GENERIC.has(word)) continue;
+  for (const raw of tokensOf(message)) {
+    if (GENERIC.has(raw)) continue;
+    const word = foldSpelling(raw);
     if (index.has(word)) return true;
     const edits = allowedEdits(word.length);
     if (edits === 0) continue;
@@ -76,7 +85,11 @@ export function distinctiveWords(text: string): string[] {
 /** Kata ini muncul (atau salah ketik wajar) di salah satu kata `tokens`. */
 export function wordInTokens(word: string, tokens: readonly string[]): boolean {
   const edits = allowedEdits(word.length);
-  return tokens.some((t) => t === word || (edits > 0 && withinEdits(word, t, edits)));
+  const folded = foldSpelling(word);
+  return tokens.some((t) => {
+    const other = foldSpelling(t);
+    return other === folded || (edits > 0 && withinEdits(folded, other, edits));
+  });
 }
 
 /** Semua kata pesan (panjang minimal pencocokan), termasuk kata umum, untuk dibandingkan dengan nama barang. */

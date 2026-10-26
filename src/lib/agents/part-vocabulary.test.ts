@@ -29,3 +29,15 @@ describe("kosakata suku cadang tambahan", () => {
     expect(changed).toEqual([]);
   });
 });
+
+describe("pelipatan ejaan", () => {
+  it("c dan k, ph dan f, huruf ganda dianggap sama", async () => {
+    const { foldSpelling, wordInTokens } = await import("@/src/lib/agents/catalog-match");
+    expect(foldSpelling("carburator")).toBe(foldSpelling("karburator"));
+    expect(foldSpelling("phanbelt")).toBe(foldSpelling("fanbelt"));
+    expect(foldSpelling("koppling")).toBe(foldSpelling("kopling"));
+    expect(foldSpelling("chrome")).toBe("chrome");
+    expect(wordInTokens("cambelt", ["kambelt"])).toBe(true);
+    expect(wordInTokens("radiator", ["bearing"])).toBe(false);
+  });
+});

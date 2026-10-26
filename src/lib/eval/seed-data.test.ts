@@ -65,3 +65,13 @@ describe("EVAL_PRODUCTS", () => {
     }
   });
 });
+
+describe("seed_eval.sql", () => {
+  it("memuat produk dan alias yang sama dengan seed-data.ts", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { EVAL_ALIASES } = await import("@/src/lib/eval/seed-data");
+    const sql = readFileSync("supabase/seed_eval.sql", "utf8");
+    for (const p of EVAL_PRODUCTS) expect(sql, p.part_number).toContain(`'${p.part_number}', '${p.name}'`);
+    for (const a of EVAL_ALIASES) expect(sql, a.alias).toContain(`('${a.product_id}', '${a.alias}'`);
+  });
+});

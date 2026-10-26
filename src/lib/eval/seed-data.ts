@@ -58,6 +58,19 @@ const PRODUCTS: ProductSeed[] = [
   { n: 15, name: "Mud Flap Belakang", category: "Bodi/eksterior", unit: "pasang", minThreshold: 2, unitCost: 150000, sellingPrice: 220000, toko: 6, gudang: 10, sales: [1, 2, 1, 1, 2, 1] },
   { n: 16, name: "Stoplamp Volvo 740", category: "Kelistrikan/pencahayaan", unit: "unit", minThreshold: 1, unitCost: 600000, sellingPrice: 840000, toko: 2, gudang: 2, sales: [0, 1, 0, 0, 0, 1] },
   { n: 17, name: "Karburator Volvo 240", category: "Bahan bakar", unit: "unit", minThreshold: 1, unitCost: 2100000, sellingPrice: 2900000, toko: 1, gudang: 1, sales: [0, 0, 0, 1, 0, 0] },
+  { n: 18, name: "Busi NGK Copper", category: "Pengapian", unit: "pcs", minThreshold: 12, unitCost: 28000, sellingPrice: 45000, toko: 30, gudang: 80, sales: [14, 18, 16, 20, 19, 10] },
+  { n: 19, name: "Kabel Busi Denso", category: "Pengapian", unit: "set", minThreshold: 2, unitCost: 220000, sellingPrice: 310000, toko: 3, gudang: 5, sales: [1, 2, 1, 1, 2, 1] },
+  { n: 20, name: "Water Pump Aisin", category: "Sistem pendingin", unit: "unit", minThreshold: 2, unitCost: 480000, sellingPrice: 680000, toko: 4, gudang: 6, sales: [1, 2, 1, 2, 1, 1] },
+  { n: 21, name: "Termostat Wahler", category: "Sistem pendingin", unit: "pcs", minThreshold: 3, unitCost: 130000, sellingPrice: 195000, toko: 5, gudang: 9, sales: [2, 1, 3, 2, 2, 1] },
+  { n: 22, name: "Shock Absorber Belakang Bilstein", category: "Suspensi/karet", unit: "pcs", minThreshold: 2, unitCost: 850000, sellingPrice: 1180000, toko: 4, gudang: 6, sales: [1, 1, 2, 1, 2, 1] },
+  { n: 23, name: "Per Keong Depan Lesjofors", category: "Suspensi/karet", unit: "pcs", minThreshold: 2, unitCost: 420000, sellingPrice: 590000, toko: 3, gudang: 4, sales: [1, 0, 1, 1, 1, 0] },
+  { n: 24, name: "Kopling Kit Sachs", category: "Transmisi", unit: "set", minThreshold: 1, unitCost: 1900000, sellingPrice: 2650000, toko: 2, gudang: 2, sales: [0, 1, 0, 1, 0, 1] },
+  { n: 25, name: "Bearing Roda Belakang SKF", category: "Suspensi/karet", unit: "set", minThreshold: 3, unitCost: 310000, sellingPrice: 440000, toko: 6, gudang: 8, sales: [2, 3, 2, 2, 3, 1] },
+  { n: 26, name: "Gasket Kepala Silinder Victor Reinz", category: "Mesin", unit: "set", minThreshold: 2, unitCost: 650000, sellingPrice: 910000, toko: 3, gudang: 3, sales: [1, 0, 1, 1, 0, 1] },
+  { n: 27, name: "Engine Mount Corteco", category: "Mesin", unit: "pcs", minThreshold: 2, unitCost: 360000, sellingPrice: 510000, toko: 4, gudang: 5, sales: [1, 2, 1, 1, 2, 1] },
+  { n: 28, name: "Knalpot Walker", category: "Knalpot", unit: "unit", minThreshold: 1, unitCost: 1100000, sellingPrice: 1550000, toko: 2, gudang: 3, sales: [0, 1, 1, 0, 1, 0] },
+  { n: 29, name: "Cairan Pendingin Prestone Biru", category: "Cairan/pelumas", unit: "botol", minThreshold: 6, unitCost: 95000, sellingPrice: 140000, toko: 12, gudang: 24, sales: [6, 8, 7, 9, 8, 5] },
+  { n: 30, name: "Kaca Spion Kiri OEM", category: "Bodi/eksterior", unit: "pcs", minThreshold: 2, unitCost: 320000, sellingPrice: 450000, toko: 3, gudang: 4, sales: [1, 1, 0, 1, 1, 0] },
 ];
 
 const ALIASES: [number, string][] = [
