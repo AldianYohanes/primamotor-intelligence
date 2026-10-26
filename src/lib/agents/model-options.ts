@@ -28,6 +28,48 @@ export const MODEL_OPTIONS = [
 ] as const;
 
 /**
+ * Tiga tingkat untuk pengguna, supaya staf memilih "Saga / Ballad / Tanka" dan bukan nama model.
+ * Urutan teliti ke cepat berdasarkan ukuran model; belum dibuktikan satu per satu di /eval.
+ * Tiap tingkat punya varian f16 (hemat memori) dan f32 (untuk GPU yang menolak f16); staf tidak diminta memilih.
+ */
+export const MODEL_TIERS = [
+  { id: "saga", name: "Saga", note: "paling teliti, agak lambat", f16: "Qwen2.5-3B-Instruct-q4f16_1-MLC", f32: "Qwen2.5-3B-Instruct-q4f32_1-MLC" },
+  { id: "ballad", name: "Ballad", note: "seimbang", f16: "Qwen3-1.7B-q4f16_1-MLC", f32: "Qwen3-1.7B-q4f32_1-MLC" },
+  { id: "tanka", name: "Tanka", note: "paling cepat, lebih sering keliru", f16: "Qwen3.5-0.8B-q4f16_1-MLC", f32: "Qwen3.5-0.8B-q4f32_1-MLC" },
+] as const;
+
+export type ModelTier = (typeof MODEL_TIERS)[number];
+
+/** Tingkat awal di perangkat baru. */
+export const DEFAULT_TIER: ModelTier = MODEL_TIERS[1];
+
+export function tierOfModel(modelId: string): ModelTier | undefined {
+  return MODEL_TIERS.find((t) => t.f16 === modelId || t.f32 === modelId);
+}
+
+export function isF32Model(modelId: string): boolean {
+  return modelId.includes("q4f32");
+}
+
+/** Model tingkat ini; f32 bila GPU perangkat tidak bisa memakai f16. */
+export function tierModelId(tier: ModelTier, f32: boolean): string {
+  return f32 ? tier.f32 : tier.f16;
+}
+
+/** Padanan f32 dari model f16; null bila bukan model q4f16. */
+export function f32Variant(modelId: string): string | null {
+  return modelId.includes("q4f16_1") ? modelId.replace("q4f16_1", "q4f32_1") : null;
+}
+
+/** Nama untuk pengguna: nama tingkat bila model termasuk tiga tingkat, selain itu label teknis. */
+export function userModelLabel(modelId: string): string {
+  return tierOfModel(modelId)?.name ?? MODEL_OPTIONS.find((m) => m.id === modelId)?.label ?? modelId;
+}
+
+/** Model di luar tiga tingkat (Llama, Gemma, Hermes, dst.); tampil di bagian "Lainnya". */
+export const OTHER_MODEL_OPTIONS = MODEL_OPTIONS.filter((m) => !tierOfModel(m.id));
+
+/**
  * Opsi WebLLM untuk mematikan mode berpikir. Hanya model Qwen3 yang mengenalnya
  * (di model lain WebLLM tidak memeriksa, tapi menyisipkan tag <think> kosong).
  * Teks <think> yang tetap muncul dibuang oleh stripThinking (tool-protocol.ts).

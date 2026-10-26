@@ -17,7 +17,7 @@ import {
   type InferenceSnapshot,
   type ModelCallStats,
 } from "@/src/lib/agents/inference-stats";
-import { MODEL_OPTIONS } from "@/src/lib/agents/model-options";
+import { userModelLabel } from "@/src/lib/agents/model-options";
 import { liveCallText, waitHint } from "./chat-ui";
 
 /** Satu giliran untuk tombol/modal statistik. `startedAt` dari Date.now(). */
@@ -51,7 +51,7 @@ function elapsedOf(turn: TurnRecord, now: number): number {
 }
 
 function modelLabel(modelId: string): string {
-  return MODEL_OPTIONS.find((m) => m.id === modelId)?.label ?? modelId;
+  return userModelLabel(modelId);
 }
 
 /** "42s · Agent menulis ±37 token" di bawah indikator "lagi mikir". */

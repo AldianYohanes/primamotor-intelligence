@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import type { InitProgressReport, MLCEngineInterface } from "@mlc-ai/web-llm";
-import { MODEL_ID } from "@/src/lib/agents/model-options";
+import { MODEL_OPTIONS, DEFAULT_TIER, f32Variant, tierModelId } from "@/src/lib/agents/model-options";
 import { isWebGPUAvailable } from "@/src/lib/agents/webgpu-support";
 import {
   estimateSecondsLeft,
@@ -101,6 +101,32 @@ function isNetworkError(err: unknown) {
   return !navigator.onLine || err instanceof TypeError;
 }
 
+const MODEL_KEY = "pm.modelId";
+const NO_F16_KEY = "pm.noF16";
+
+function readStored(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStored(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // penyimpanan diblokir: pilihan hanya berlaku sampai halaman ditutup
+  }
+}
+
+/** Pilihan tersimpan; bila belum ada, tingkat awal (varian f32 kalau GPU pernah menolak f16). */
+function savedModelId(): string {
+  const saved = readStored(MODEL_KEY);
+  if (saved && MODEL_OPTIONS.some((m) => m.id === saved)) return saved;
+  return tierModelId(DEFAULT_TIER, readStored(NO_F16_KEY) === "1");
+}
+
 export const useModelStore = create<ModelState>((set, get) => {
   async function refreshDownloadInfo() {
     const mod = await loadEngineModule();
@@ -153,10 +179,24 @@ export const useModelStore = create<ModelState>((set, get) => {
     }
   }
 
+  /**
+   * GPU menolak f16 padahal adapter melaporkannya (Adreno + Edge): pindah ke varian f32 sekali.
+   * Model f32 perlu diunduh, jadi staf diminta menekan tombol unduh lagi (bukan diam-diam memakai kuota).
+   */
+  function fallbackToF32(message: string): boolean {
+    const alt = f32Variant(get().modelId);
+    if (!alt || !/f16|wgsl|shader/i.test(message)) return false;
+    writeStored(NO_F16_KEY, "1");
+    get()
+      .setModelId(alt)
+      .then(() => set({ notice: "GPU perangkat ini butuh versi model yang lain. Modelnya perlu diunduh ulang." }));
+    return true;
+  }
+
   return {
     status: "idle",
     phase: "preparing",
-    modelId: MODEL_ID,
+    modelId: tierModelId(DEFAULT_TIER, false),
     totalBytes: null,
     cachedBytes: 0,
     downloadedBytes: 0,
@@ -183,6 +223,14 @@ export const useModelStore = create<ModelState>((set, get) => {
         set({ status: "unsupported" });
         return;
       }
+      // Pilihan terakhir staf; GPU tanpa shader-f16 langsung memakai varian f32.
+      let wanted = savedModelId();
+      const f32 = f32Variant(wanted);
+      if (f32 && !(adapter as { features?: { has(f: string): boolean } }).features?.has("shader-f16")) {
+        writeStored(NO_F16_KEY, "1");
+        wanted = f32;
+      }
+      if (wanted !== get().modelId) set({ modelId: wanted });
       installListeners();
       const info = await refreshDownloadInfo();
       if (get().status !== "checking") return;
@@ -230,6 +278,7 @@ export const useModelStore = create<ModelState>((set, get) => {
               mod.resetWebLLMEngine();
               resettingSelf = false;
               releaseWakeLock();
+              if (fallbackToF32(err.message)) return;
               set({ status: "error", engine: null, error: err.message });
             },
             get().modelId,
@@ -264,6 +313,7 @@ export const useModelStore = create<ModelState>((set, get) => {
           // Tidak ada fallback ke API berbayar (keputusan produk), jadi kalau
           // WebLLM gagal dimuat tampilkan error yang jelas.
           console.error("Gagal memuat model WebLLM:", err);
+          if (fallbackToF32(err instanceof Error ? err.message : String(err))) return;
           set({
             status: "error",
             error:
@@ -310,6 +360,7 @@ export const useModelStore = create<ModelState>((set, get) => {
 
     setModelId: async (modelId: string) => {
       if (modelId === get().modelId) return;
+      writeStored(MODEL_KEY, modelId);
       attempt += 1;
       pausedByNetwork = false;
       releaseWakeLock();

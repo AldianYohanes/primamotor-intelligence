@@ -23,7 +23,7 @@ import { enablePushNotifications, getPushSupportStatus } from "@/src/lib/notific
 import { isStandalone, useInstallPrompt } from "@/src/lib/pwa/install-prompt";
 import { useModelStore } from "@/src/lib/stores/model-store";
 import { formatBytes } from "@/src/lib/agents/model-progress";
-import { MODEL_OPTIONS } from "@/src/lib/agents/model-options";
+import { ModelPicker } from "@/src/components/model/ModelPicker";
 import { ChangePinForm } from "@/src/modules/account/ChangePinForm";
 
 export interface AccountInfo {
@@ -194,23 +194,17 @@ function DeviceSettings() {
         <label htmlFor="account-model-switch" className="mb-1 block text-[11px] font-medium text-slate-500">
           Ganti model AI {modelBusy && "(tunggu sampai selesai dulu)"}
         </label>
-        <select
+        <ModelPicker
           id="account-model-switch"
-          value={modelId}
+          modelId={modelId}
           disabled={modelBusy || switchingModel}
-          onChange={async (e) => {
+          onChange={async (next) => {
             setSwitchingModel(true);
-            await setModelId(e.target.value).catch(() => {});
+            await setModelId(next).catch(() => {});
             setSwitchingModel(false);
           }}
           className="field-input w-full !py-1.5 text-xs disabled:opacity-60"
-        >
-          {MODEL_OPTIONS.map((opt) => (
-            <option key={opt.id} value={opt.id}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+        />
         <p className="mt-1 text-[11px] text-slate-400">
           Sering error? Coba varian &ldquo;tanpa f16&rdquo;.
         </p>

@@ -13,7 +13,7 @@ import {
 import { createClient } from "@/src/lib/supabase/client";
 import type { Database, Json } from "@/src/lib/db/types";
 import { useModelStore } from "@/src/lib/stores/model-store";
-import { MODEL_OPTIONS } from "@/src/lib/agents/model-options";
+import { ModelPicker } from "@/src/components/model/ModelPicker";
 import { ModelSetupPanel } from "@/src/components/model/ModelSetupPanel";
 import { AppHeader } from "@/src/components/nav/AppHeader";
 import type { AppModule } from "@/src/lib/auth/rbac";
@@ -469,24 +469,18 @@ export function ChatWindow({
             <label htmlFor="model-switch" className="mb-1 block text-xs font-medium text-slate-600">
               Atau ganti model AI
             </label>
-            <select
+            <ModelPicker
               id="model-switch"
-              value={modelId}
+              modelId={modelId}
               disabled={switchingModel || !isOnline}
               title={isOnline ? undefined : OFFLINE_HINT}
-              onChange={async (e) => {
+              onChange={async (next) => {
                 setSwitchingModel(true);
-                await setModelId(e.target.value).catch(() => {});
+                await setModelId(next).catch(() => {});
                 setSwitchingModel(false);
               }}
               className="field-input w-full !py-1.5 text-xs disabled:opacity-60"
-            >
-              {MODEL_OPTIONS.map((opt) => (
-                <option key={opt.id} value={opt.id}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+            />
             <p className="mt-1 text-[11px] text-slate-400">
               {!isOnline
                 ? "Ganti model butuh koneksi internet untuk mengunduh model."
