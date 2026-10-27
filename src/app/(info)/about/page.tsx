@@ -86,6 +86,10 @@ export default function AboutPage() {
       <Section title="Batasan">
         <ul className="list-disc space-y-1 pl-5">
           <li>Jawaban model bahasa bisa keliru. Periksa angka stok penting sebelum bertindak.</li>
+          <li>
+            Data contoh memakai nomor part, merek, dan kompatibilitas asli dari sumber web terbuka. Jumlah stok, harga, dan
+            riwayat penjualan adalah simulasi, karena pemilik toko tidak mengizinkan pengumpulan data.
+          </li>
           <li>Hasil evaluasi dibahas di naskah skripsi, bukan di halaman ini.</li>
           <li>Logo Universitas Tarumanagara dan FTI adalah milik institusinya dan dipakai untuk keperluan akademik.</li>
         </ul>
