@@ -111,6 +111,11 @@ export async function POST() {
     if (imports.error) throw new Error(`baca impor nota: ${imports.error.message}`);
     const importIds = (imports.data ?? []).map((r) => r.id as string);
     if (importIds.length) await step("hapus baris impor nota", () => admin.from("receipt_import_items").delete().in("import_id", importIds));
+    // Riwayat aksi agent dan ledger saling menunjuk (related_transaction_id dan agent_audit_log_id): putuskan dulu, baru hapus.
+    await step("lepas tautan audit di ledger", () =>
+      admin.from("stock_transactions").update({ agent_audit_log_id: null }).eq("business_id", EVAL_BUSINESS_ID),
+    );
+    await step("hapus agent_audit_log", () => admin.from("agent_audit_log").delete().eq("business_id", EVAL_BUSINESS_ID));
     for (const table of [
       "warranty_claims", "customer_payments", "sale_payments", "sale_items", "sales", "shifts", "customers", "sale_counters",
       "receipt_imports", "stock_opname", "reorder_suggestions", "notifications", "stock_transactions",
