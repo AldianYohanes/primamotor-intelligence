@@ -99,6 +99,7 @@ export async function PATCH(
         product_id: id,
         error,
       });
+      if (error.code === "23505") return NextResponse.json({ error: "Nomor part sudah dipakai produk lain di toko ini" }, { status: 409 });
       return NextResponse.json({ error: error.message }, { status: 422 });
     }
     product = data;
