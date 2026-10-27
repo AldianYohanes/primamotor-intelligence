@@ -179,6 +179,11 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   useEffect(() => {
     setPromptPadding(false);
     setCodeGuardsOff(false);
+    // Opsi ablasi dan model mentah tidak boleh ikut ke /chat bila halaman ini ditutup tanpa muat ulang.
+    return () => {
+      setPromptPadding(false);
+      setCodeGuardsOff(false);
+    };
   }, []);
   const [gpuProbes, setGpuProbes] = useState<GpuProbe[] | null>(null);
   const [gpuPref, setGpuPref] = useState<GpuPowerPreference | null>(null);
