@@ -18,6 +18,9 @@ const { commit, branch } = gitInfo();
 const nextConfig = {
   reactStrictMode: true,
 
+  // Build uji (NEXT_DIST_DIR) memakai folder terpisah supaya tidak merusak server dev yang sedang jalan.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
+
   env: {
     NEXT_PUBLIC_GIT_COMMIT: commit,
     NEXT_PUBLIC_GIT_BRANCH: branch,
