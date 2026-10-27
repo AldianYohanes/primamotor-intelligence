@@ -125,6 +125,10 @@ md.push(`- Kode: ${env.codeCommit ?? "tidak tercatat"} (${env.codeBranch ?? "–
 md.push(`- Model: ${env.model ?? "–"} · GPU: ${gpu.description || gpu.architecture || "–"} · prefill: ${JSON.stringify(env.prefillChunkSize ?? null)}`);
 md.push(`- Eksekusi: ${rows.length} dari ${SCENARIOS.length * MODES.length}${missing.length ? ` (belum ada: ${missing.join(", ")})` : ""}`);
 const serverFallbacks = rows.filter((r) => r.observation.serverFallback).length;
+const confirmFailed = rows.filter((r) => r.observation.confirmOutcome === "confirm_failed").length;
+if (confirmFailed > 0) {
+  md.push(`- **PERINGATAN: ${confirmFailed} eksekusi gagal pada langkah konfirmasi PIN di server (bukan keputusan model), jadi ETSR transaksi tidak valid. Cek server dan akun evaluator, lalu ulangi skenario transaksi.**`);
+}
 if (serverFallbacks > 0) {
   md.push(`- **PERINGATAN: ${serverFallbacks} eksekusi memakai cache perangkat atau gagal mencari produk ke server, jadi ETSR dan akurasi parameternya tidak valid.**`);
 }
