@@ -74,7 +74,7 @@ export function ProcessDetails({ steps, live = false }: { steps: ProcessStep[]; 
         className="flex min-h-10 items-center gap-1 px-1 text-xs font-medium text-slate-600 hover:text-slate-800"
       >
         {open ? "Sembunyikan proses" : "Lihat proses"}
-        <span className="text-slate-400">({steps.length} langkah{live ? ", berjalan" : ""})</span>
+        <span className="text-slate-500">({steps.length} langkah{live ? ", berjalan" : ""})</span>
         <ChevronDown size={12} className={clsx("transition-transform", open && "rotate-180")} />
       </button>
       {open && (

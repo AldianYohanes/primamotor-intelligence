@@ -91,7 +91,7 @@ export default function SignupPage() {
             <Field label="Username" value={form.owner_username} onChange={(v) => update('owner_username', v)} required />
             <div>
               <label className="field-label">PIN (minimal 6 digit)</label>
-              <input
+              <input aria-label="PIN (minimal 6 digit)"
                 type="password"
                 inputMode="numeric"
                 value={form.pin}

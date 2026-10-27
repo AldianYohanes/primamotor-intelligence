@@ -83,7 +83,7 @@ function LoginForm() {
           <div className="space-y-3.5">
             <div>
               <label className="field-label">Kode Toko</label>
-              <input
+              <input aria-label="Kode Toko"
                 value={businessSlug}
                 onChange={(e) => setBusinessSlug(e.target.value)}
                 placeholder="prima-motor-volvo"
@@ -93,7 +93,7 @@ function LoginForm() {
             </div>
             <div>
               <label className="field-label">Username</label>
-              <input
+              <input aria-label="Username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="field-input mt-1"
@@ -102,7 +102,7 @@ function LoginForm() {
             </div>
             <div>
               <label className="field-label">PIN</label>
-              <input
+              <input aria-label="PIN"
                 type="password"
                 inputMode="numeric"
                 value={pin}

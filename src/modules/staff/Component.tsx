@@ -101,7 +101,7 @@ export function StaffModule() {
             <label className="field-label">
               Nama Lengkap
             </label>
-            <input
+            <input aria-label="Nama Lengkap"
               value={form.full_name}
               onChange={(e) => setForm({ ...form, full_name: e.target.value })}
               required
@@ -112,7 +112,7 @@ export function StaffModule() {
             <label className="field-label">
               Username
             </label>
-            <input
+            <input aria-label="Username"
               value={form.username}
               onChange={(e) => setForm({ ...form, username: e.target.value })}
               required
@@ -121,7 +121,7 @@ export function StaffModule() {
           </div>
           <div>
             <label className="field-label">Role</label>
-            <Select
+            <Select aria-label="Role"
               value={form.role}
               onValueChange={(value) =>
                 setForm({ ...form, role: value as "owner" | "staff" })
@@ -136,7 +136,7 @@ export function StaffModule() {
             <label className="field-label">
               PIN Awal
             </label>
-            <input
+            <input aria-label="PIN Awal"
               type="password"
               inputMode="numeric"
               value={form.pin}

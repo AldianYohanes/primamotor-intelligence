@@ -136,15 +136,15 @@ function AddCustomerDialog({ onClose, onCreated }: { onClose: () => void; onCrea
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <label className="field-label">Nama</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} required className="field-input mt-1" />
+            <input aria-label="Nama" value={name} onChange={(e) => setName(e.target.value)} required className="field-input mt-1" />
           </div>
           <div>
             <label className="field-label">No. Telepon (opsional)</label>
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} className="field-input mt-1" />
+            <input aria-label="No. Telepon (opsional)" value={phone} onChange={(e) => setPhone(e.target.value)} className="field-input mt-1" />
           </div>
           <div>
             <label className="field-label">Limit Piutang (Rp)</label>
-            <input
+            <input aria-label="Limit Piutang (Rp)"
               type="number"
               min={0}
               value={creditLimit || ""}
@@ -154,7 +154,7 @@ function AddCustomerDialog({ onClose, onCreated }: { onClose: () => void; onCrea
           </div>
           <div>
             <label className="field-label">Catatan (opsional)</label>
-            <input value={notes} onChange={(e) => setNotes(e.target.value)} className="field-input mt-1" />
+            <input aria-label="Catatan (opsional)" value={notes} onChange={(e) => setNotes(e.target.value)} className="field-input mt-1" />
           </div>
           {error && (
             <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -276,7 +276,7 @@ function CustomerDetailDialog({
           <form onSubmit={handleSubmitPayment} className="space-y-3">
             <div>
               <label className="field-label">Jumlah Pelunasan (Rp)</label>
-              <input
+              <input aria-label="Jumlah Pelunasan (Rp)"
                 type="number"
                 min={1}
                 value={amount || ""}
@@ -286,7 +286,7 @@ function CustomerDetailDialog({
             </div>
             <div>
               <label className="field-label">Metode</label>
-              <Select value={method} onValueChange={(value) => setMethod(value as typeof method)} className="field-input mt-1">
+              <Select aria-label="Metode" value={method} onValueChange={(value) => setMethod(value as typeof method)} className="field-input mt-1">
                 {Object.entries(PAYMENT_LABELS).map(([value, label]) => (
                   <option key={value} value={value}>
                     {label}

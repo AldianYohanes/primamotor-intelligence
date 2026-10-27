@@ -481,7 +481,7 @@ export function ChatWindow({
               }}
               className="field-input w-full !py-1.5 text-xs disabled:opacity-60"
             />
-            <p className="mt-1 text-[11px] text-slate-400">
+            <p className="mt-1 text-xs text-slate-500">
               {!isOnline
                 ? "Ganti model butuh koneksi internet untuk mengunduh model."
                 : switchingModel
@@ -537,11 +537,8 @@ export function ChatWindow({
         <div className="flex items-start gap-2 border-b border-slate-200 bg-slate-100 px-4 py-2 text-xs text-slate-600">
           <WifiOff size={14} className="mt-0.5 shrink-0" />
           <span>
-            Sedang offline — cari stok masih bisa pakai data terakhir yang
-            tersimpan, tapi catat barang masuk/keluar/transfer butuh koneksi
-            untuk verifikasi PIN. Riwayat dan percakapan baru juga menunggu
-            koneksi. Pesan tetap tersimpan dan otomatis terkirim begitu sinyal
-            kembali.
+            Sedang offline. Cari stok memakai data tersimpan terakhir; mencatat barang masuk, keluar, atau
+            transfer butuh koneksi untuk verifikasi PIN. Pesan baru menunggu sinyal kembali.
           </span>
         </div>
       )}
@@ -554,7 +551,7 @@ export function ChatWindow({
         className="flex-1 space-y-3 overflow-y-auto p-4"
       >
         {loadingHistory && (
-          <p className="mt-8 text-center text-sm text-slate-400">
+          <p className="mt-8 text-center text-sm text-slate-500">
             Memuat riwayat percakapan…
           </p>
         )}
@@ -564,7 +561,7 @@ export function ChatWindow({
               <Send size={15} />
             </div>
             <p className="text-sm font-medium text-slate-600">Mau cek atau catat apa?</p>
-            <p className="mt-1 text-xs text-slate-400">Ketuk salah satu contoh, atau ketik sendiri.</p>
+            <p className="mt-1 text-xs text-slate-500">Ketuk salah satu contoh, atau ketik sendiri.</p>
             <div className="mt-3 flex flex-col gap-2">
               {EXAMPLE_QUESTIONS.map((q) => (
                 <button

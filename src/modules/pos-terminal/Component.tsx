@@ -295,7 +295,7 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
         // >1 hasil: biarkan hook pencarian normal yang menampilkan daftar
         // (kasir ketik manual biasanya bukan barcode, ambigu memang wajar
         // tidak auto-tambah) — tapi tetap kasih tahu kenapa tidak auto-add.
-        setSearchHint(`Ada ${results.length} produk cocok — tekan ↓ untuk pilih dari daftar, lalu Enter.`);
+        setSearchHint(`Ada ${results.length} produk cocok. Tekan panah bawah untuk memilih dari daftar, lalu Enter.`);
       }
     } catch {
       // Diam-diam gagal di sini tidak masalah — hook pencarian normal (yang
@@ -403,7 +403,7 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
       }
     } else if (paymentMode === "split") {
       if (paymentLines.length < 2) {
-        setCheckoutError("Split payment butuh minimal 2 metode — pakai metode tunggal kalau cuma 1");
+        setCheckoutError("Split payment butuh minimal 2 metode. Pakai metode tunggal kalau cuma 1.");
         return;
       }
       if (splitPaidTotal < total) {
@@ -436,7 +436,7 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
 
       const paymentSummaryLabel =
         paymentMode === "piutang"
-          ? `Piutang — ${selectedCustomer?.name}`
+          ? `Piutang: ${selectedCustomer?.name}`
           : paymentMode === "split"
             ? paymentLines.map((p) => PAYMENT_LABELS[p.method]).join(" + ")
             : PAYMENT_LABELS[paymentMode as PaymentMethod];
@@ -487,7 +487,7 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
                     key={h.id}
                     onClick={() => resumeHeldCart(h)}
                     className="flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100"
-                    title={`Ditahan ${h.heldAt} — ${h.cart.length} item`}
+                    title={`Ditahan ${h.heldAt}, ${h.cart.length} item`}
                   >
                     <PlayCircle size={13} /> {h.label}
                   </button>
@@ -542,7 +542,7 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
           ) : searchHint ? (
             <p className="text-slate-500">{searchHint}</p>
           ) : (
-            <p className="hidden text-slate-400 lg:block">
+            <p className="hidden text-slate-500 lg:block">
               <Kbd>↑</Kbd> <Kbd>↓</Kbd> pilih · <Kbd>Enter</Kbd> tambah · <Kbd>Esc</Kbd> hapus · <Kbd>F2</Kbd> atau <Kbd>/</Kbd> ke
               kolom cari · <Kbd>F9</Kbd> bayar
             </p>
@@ -551,10 +551,10 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
 
         <div className="grid min-h-0 flex-1 content-start grid-cols-2 gap-3 sm:grid-cols-3 lg:overflow-y-auto xl:grid-cols-4">
           {isSearching && products.length === 0 && (
-            <p className="col-span-full py-8 text-center text-sm text-slate-400">Mencari…</p>
+            <p className="col-span-full py-8 text-center text-sm text-slate-500">Mencari…</p>
           )}
           {!isSearching && products.length === 0 && (
-            <p className="col-span-full py-8 text-center text-sm text-slate-400">
+            <p className="col-span-full py-8 text-center text-sm text-slate-500">
               {debouncedSearch ? "Tidak ada produk yang cocok." : "Ketik atau scan barcode untuk mencari produk."}
             </p>
           )}
@@ -573,7 +573,7 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
               <span className="line-clamp-2 text-sm font-medium text-slate-900">{p.name}</span>
               <span className="text-xs text-slate-500">{p.partNumber}</span>
               {p.compatibleModelsSummary && (
-                <span className="line-clamp-1 text-[11px] text-slate-400" title={p.compatibleModels.join(', ')}>
+                <span className="line-clamp-1 text-[11px] text-slate-500" title={p.compatibleModels.join(', ')}>
                   Cocok: {p.compatibleModelsSummary}
                 </span>
               )}
@@ -615,7 +615,7 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
         </div>
 
         <div ref={cartListRef} className="min-h-24 flex-1 space-y-2 overflow-y-auto lg:min-h-32">
-          {cart.length === 0 && <p className="py-6 text-center text-sm text-slate-400">Belum ada item.</p>}
+          {cart.length === 0 && <p className="py-6 text-center text-sm text-slate-500">Belum ada item.</p>}
           {cart.map((line) => (
             <div key={line.productId} className="flex items-center gap-1.5 rounded-md border border-slate-200 p-2">
               <div className="min-w-0 flex-1">
@@ -682,7 +682,7 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
 
           <div>
             <label className="field-label">Diskon Nota (Rp)</label>
-            <input
+            <input aria-label="Diskon Nota (Rp)"
               type="number"
               min={0}
               value={discountAmount || ""}
@@ -693,7 +693,7 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
 
           <div>
             <label className="field-label">Metode Pembayaran</label>
-            <Select
+            <Select aria-label="Metode Pembayaran"
               value={paymentMode}
               onValueChange={(value) => {
                 const next = value as SaleSummaryPaymentMethod;
@@ -716,7 +716,7 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
           {paymentMode === "cash" && (
             <div>
               <label className="field-label">Jumlah Dibayar (Rp)</label>
-              <input
+              <input aria-label="Jumlah Dibayar (Rp)"
                 type="number"
                 min={0}
                 value={amountPaid || ""}
@@ -793,7 +793,7 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
                 ? `Catat Piutang ${formatRupiah(total)}`
                 : `Bayar ${formatRupiah(total)}`}
           </button>
-          <p className="hidden text-center text-[11px] text-slate-400 lg:block">
+          <p className="hidden text-center text-[11px] text-slate-500 lg:block">
             Tekan <Kbd>F9</Kbd> untuk bayar cepat
           </p>
         </div>
@@ -850,7 +850,7 @@ function SplitPaymentEditor({
   return (
     <div className="space-y-2 rounded-md border border-slate-200 p-3">
       <p className="text-xs font-medium text-slate-500">
-        Split Payment — tidak ada kembalian untuk kombinasi metode (lihat catatan di migration 0027)
+        Split Payment: tidak ada kembalian untuk kombinasi metode ini.
       </p>
       {lines.map((line) => (
         <div key={line.method} className="flex items-center gap-2">
@@ -945,8 +945,8 @@ function CustomerPicker({
         />
       </div>
       <div className="max-h-32 space-y-1 overflow-y-auto">
-        {isLoading && <p className="text-xs text-slate-400">Mencari…</p>}
-        {!isLoading && customers.length === 0 && <p className="text-xs text-slate-400">Tidak ada pelanggan yang cocok.</p>}
+        {isLoading && <p className="text-xs text-slate-500">Mencari…</p>}
+        {!isLoading && customers.length === 0 && <p className="text-xs text-slate-500">Tidak ada pelanggan yang cocok.</p>}
         {customers.map((c) => (
           <button
             key={c.id}
@@ -996,7 +996,7 @@ function QuickAddCustomer({ onCreated, onCancel }: { onCreated: (c: CustomerResp
       <Input label="No. Telepon (opsional)" value={phone} onChange={setPhone} />
       <div>
         <label className="field-label">Limit Piutang (Rp)</label>
-        <input
+        <input aria-label="Limit Piutang (Rp)"
           type="number"
           min={0}
           value={creditLimit || ""}
@@ -1120,7 +1120,7 @@ function ShiftPanel({
           <div className="space-y-3">
             <div>
               <label className="field-label">Kas Awal (Rp)</label>
-              <input
+              <input aria-label="Kas Awal (Rp)"
                 type="number"
                 min={0}
                 value={openingCash || ""}
@@ -1138,7 +1138,7 @@ function ShiftPanel({
         {!closedResult && currentShift && !showCloseForm && (
           <div className="space-y-3 text-sm">
             <p className="text-xs text-slate-500">Dibuka {new Date(currentShift.opened_at).toLocaleString("id-ID")}</p>
-            {isLoadingReport && <p className="text-xs text-slate-400">Memuat laporan…</p>}
+            {isLoadingReport && <p className="text-xs text-slate-500">Memuat laporan…</p>}
             {report && <ShiftTotalsSummary totals={report} />}
             {error && <p className="text-xs text-red-600">{error}</p>}
             <button onClick={() => setShowCloseForm(true)} className="btn btn-danger w-full py-2">
@@ -1156,7 +1156,7 @@ function ShiftPanel({
             )}
             <div>
               <label className="field-label">Kas Fisik Dihitung (Rp)</label>
-              <input
+              <input aria-label="Kas Fisik Dihitung (Rp)"
                 type="number"
                 min={0}
                 value={closingCash || ""}
@@ -1166,7 +1166,7 @@ function ShiftPanel({
             </div>
             <div>
               <label className="field-label">Catatan (opsional)</label>
-              <input value={closeNotes} onChange={(e) => setCloseNotes(e.target.value)} className="field-input mt-1" />
+              <input aria-label="Catatan (opsional)" value={closeNotes} onChange={(e) => setCloseNotes(e.target.value)} className="field-input mt-1" />
             </div>
             {error && <p className="text-xs text-red-600">{error}</p>}
             <div className="flex gap-2">
@@ -1189,11 +1189,11 @@ function ShiftTotalsSummary({ totals }: { totals: ShiftReportTotalsResponse }) {
     <div className="space-y-1 rounded-md bg-slate-50 p-3">
       <Row label="Jumlah Nota" value={String(totals.salesCount)} />
       <Row label="Total Penjualan" value={formatRupiah(totals.grossRevenue)} bold />
-      <Row label="— Tunai" value={formatRupiah(totals.cashTotal)} />
-      <Row label="— Transfer" value={formatRupiah(totals.transferTotal)} />
-      <Row label="— QRIS" value={formatRupiah(totals.qrisTotal)} />
-      <Row label="— Kartu" value={formatRupiah(totals.cardTotal)} />
-      <Row label="— Piutang" value={formatRupiah(totals.piutangTotal)} />
+      <Row label="- Tunai" value={formatRupiah(totals.cashTotal)} />
+      <Row label="- Transfer" value={formatRupiah(totals.transferTotal)} />
+      <Row label="- QRIS" value={formatRupiah(totals.qrisTotal)} />
+      <Row label="- Kartu" value={formatRupiah(totals.cardTotal)} />
+      <Row label="- Piutang" value={formatRupiah(totals.piutangTotal)} />
       {totals.voidCount > 0 && <Row label="Nota Dibatalkan" value={`${totals.voidCount} (${formatRupiah(totals.voidTotalAmount)})`} />}
     </div>
   );
@@ -1297,7 +1297,7 @@ function Receipt({ success, onNewSale }: { success: CheckoutSuccess; onNewSale: 
               Transaksi Baru
             </button>
           </div>
-          <p className="hidden text-center text-[11px] text-slate-400 lg:block">
+          <p className="hidden text-center text-[11px] text-slate-500 lg:block">
             Tekan <Kbd>Enter</Kbd> untuk transaksi baru
           </p>
         </div>
@@ -1337,7 +1337,7 @@ function Input({
   return (
     <div>
       <label className="field-label">{label}</label>
-      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="field-input mt-1" />
+      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} aria-label={label} className="field-input mt-1" />
     </div>
   );
 }

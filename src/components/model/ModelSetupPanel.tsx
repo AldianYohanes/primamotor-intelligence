@@ -103,7 +103,7 @@ const STEPS = [
 
 function Steps({ current }: { current: 0 | 1 | 2 }) {
   return (
-    <ol className="flex items-center justify-center gap-2 text-[11px]">
+    <ol className="flex items-center justify-center gap-2 text-xs">
       {STEPS.map((step, i) => (
         <li key={step.key} className="flex items-center gap-2">
           <span
@@ -175,7 +175,7 @@ export function ModelSetupPanel({ shortcuts }: { shortcuts: AppModule[] }) {
       <div className="card mx-auto w-full max-w-sm space-y-3 p-6 text-center">
         <div className="mx-auto h-10 w-10 animate-pulse rounded-full bg-slate-200" />
         <div className="mx-auto h-3 w-40 animate-pulse rounded bg-slate-200" />
-        <p className="text-xs text-slate-400">Memeriksa asisten AI di perangkat ini…</p>
+        <p className="text-xs text-slate-500">Memeriksa asisten AI di perangkat ini…</p>
       </div>
     );
   }
@@ -326,7 +326,7 @@ export function ModelSetupPanel({ shortcuts }: { shortcuts: AppModule[] }) {
         </button>
       )}
       {downloading && (
-        <p className="-mt-2 text-[11px] text-slate-400">
+        <p className="-mt-2 text-xs text-slate-500">
           Bagian yang sudah terunduh tetap tersimpan.
         </p>
       )}

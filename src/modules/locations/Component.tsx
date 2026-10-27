@@ -204,7 +204,7 @@ export function LocationsModule() {
             <label className="field-label">
               Nama Lokasi
             </label>
-            <input
+            <input aria-label="Nama Lokasi"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               required
@@ -213,7 +213,7 @@ export function LocationsModule() {
           </div>
           <div>
             <label className="field-label">Jenis</label>
-            <Select
+            <Select aria-label="Jenis"
               value={form.type}
               onValueChange={(value) =>
                 setForm({ ...form, type: value as LocationType })
@@ -226,7 +226,7 @@ export function LocationsModule() {
           </div>
           <div className="sm:col-span-2">
             <label className="field-label">Alamat</label>
-            <input
+            <input aria-label="Alamat"
               value={form.address}
               onChange={(e) => setForm({ ...form, address: e.target.value })}
               className="field-input mt-1"
@@ -234,7 +234,7 @@ export function LocationsModule() {
           </div>
           <div>
             <label className="field-label">Latitude</label>
-            <input
+            <input aria-label="Latitude"
               value={form.latitude}
               onChange={(e) => setForm({ ...form, latitude: e.target.value })}
               inputMode="decimal"
@@ -244,7 +244,7 @@ export function LocationsModule() {
           </div>
           <div>
             <label className="field-label">Longitude</label>
-            <input
+            <input aria-label="Longitude"
               value={form.longitude}
               onChange={(e) => setForm({ ...form, longitude: e.target.value })}
               inputMode="decimal"

@@ -78,14 +78,14 @@ function DeviceRow({ title, detail, action }: { title: string; detail: string; a
     <div className="flex items-center justify-between gap-3">
       <div className="min-w-0">
         <p className="text-xs font-medium text-slate-800">{title}</p>
-        <p className="text-[11px] text-slate-500">{detail}</p>
+        <p className="text-xs text-slate-500">{detail}</p>
       </div>
       {action}
     </div>
   );
 }
 
-const smallBtn = "btn btn-secondary shrink-0 !px-2.5 !py-1 !text-[11px]";
+const smallBtn = "btn btn-secondary shrink-0 !px-2.5 !py-1 !text-xs";
 
 function DeviceSettings() {
   // Panel baru di-mount saat dibuka, jadi aman membaca API browser di initializer.
@@ -191,7 +191,7 @@ function DeviceSettings() {
         }
       />
       <div className="pt-1">
-        <label htmlFor="account-model-switch" className="mb-1 block text-[11px] font-medium text-slate-500">
+        <label htmlFor="account-model-switch" className="mb-1 block text-xs font-medium text-slate-500">
           Ganti model AI {modelBusy && "(tunggu sampai selesai dulu)"}
         </label>
         <ModelPicker
@@ -205,7 +205,7 @@ function DeviceSettings() {
           }}
           className="field-input w-full !py-1.5 text-xs disabled:opacity-60"
         />
-        <p className="mt-1 text-[11px] text-slate-400">
+        <p className="mt-1 text-xs text-slate-500">
           Sering error? Coba varian &ldquo;tanpa f16&rdquo;.
         </p>
       </div>

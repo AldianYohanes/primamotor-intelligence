@@ -350,7 +350,7 @@ export function ProductsModule() {
             <label className="field-label">
               Supplier Utama
             </label>
-            <Select
+            <Select aria-label="Supplier Utama"
               value={form.preferred_supplier_id}
               onValueChange={(value) =>
                 setForm({ ...form, preferred_supplier_id: value })

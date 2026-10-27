@@ -62,7 +62,7 @@ export function StockOpnameModule() {
       >
         <div>
           <label className="field-label">Produk</label>
-          <Select
+          <Select aria-label="Produk"
             value={form.product_id}
             onValueChange={(value) => setForm({ ...form, product_id: value })}
             required
@@ -78,7 +78,7 @@ export function StockOpnameModule() {
         </div>
         <div>
           <label className="field-label">Lokasi</label>
-          <Select
+          <Select aria-label="Lokasi"
             value={form.location_id}
             onValueChange={(value) => setForm({ ...form, location_id: value })}
             required
@@ -96,7 +96,7 @@ export function StockOpnameModule() {
           <label className="field-label">
             Jumlah Hasil Hitung Fisik
           </label>
-          <input
+          <input aria-label="Jumlah Hasil Hitung Fisik"
             type="number"
             min={0}
             value={form.counted_quantity}
@@ -111,7 +111,7 @@ export function StockOpnameModule() {
           <label className="field-label">
             Catatan (opsional)
           </label>
-          <input
+          <input aria-label="Catatan (opsional)"
             value={form.notes}
             onChange={(e) => setForm({ ...form, notes: e.target.value })}
             className="field-input mt-1"

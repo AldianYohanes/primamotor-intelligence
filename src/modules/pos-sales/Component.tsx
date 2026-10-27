@@ -259,7 +259,7 @@ function SaleDetailDialog({
 
             <div>
               <label className="field-label">Alasan Pembatalan</label>
-              <input
+              <input aria-label="Alasan Pembatalan"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 required
@@ -270,7 +270,7 @@ function SaleDetailDialog({
 
             <div>
               <label className="field-label">PIN Konfirmasi</label>
-              <input
+              <input aria-label="PIN Konfirmasi"
                 type="password"
                 inputMode="numeric"
                 value={pin}
