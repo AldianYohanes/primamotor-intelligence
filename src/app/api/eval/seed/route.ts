@@ -106,7 +106,15 @@ export async function POST() {
     });
 
     // Tabel POS tidak punya ON DELETE CASCADE ke business, jadi dihapus berurutan dulu.
-    for (const table of ["warranty_claims", "customer_payments", "sale_payments", "sale_items", "sales", "shifts", "customers", "sale_counters"]) {
+    // Tabel yang menunjuk staf atau ledger tanpa cascade (impor nota, opname, saran, notifikasi, ledger) juga dihapus dulu.
+    const imports = await admin.from("receipt_imports").select("id").eq("business_id", EVAL_BUSINESS_ID);
+    if (imports.error) throw new Error(`baca impor nota: ${imports.error.message}`);
+    const importIds = (imports.data ?? []).map((r) => r.id as string);
+    if (importIds.length) await step("hapus baris impor nota", () => admin.from("receipt_import_items").delete().in("import_id", importIds));
+    for (const table of [
+      "warranty_claims", "customer_payments", "sale_payments", "sale_items", "sales", "shifts", "customers", "sale_counters",
+      "receipt_imports", "stock_opname", "reorder_suggestions", "notifications", "stock_transactions",
+    ]) {
       await step(`hapus ${table}`, () => admin.from(table).delete().eq("business_id", EVAL_BUSINESS_ID));
     }
     await step("hapus tenant", () => admin.from("businesses").delete().eq("id", EVAL_BUSINESS_ID));
