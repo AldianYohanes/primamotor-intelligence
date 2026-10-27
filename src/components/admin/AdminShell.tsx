@@ -68,9 +68,10 @@ export function AdminShell({ role, staffName, tenantName, isForeignTenant, child
 
   return (
     <div className="flex min-h-dvh bg-[#f7f8fa]">
-      {/* Sidebar — desktop */}
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200 bg-white sm:flex">
+      {/* Sidebar desktop: lebar penuh mulai lg, jalur ikon 64 px di tablet supaya isi halaman tidak terhimpit. */}
+      <aside className="hidden w-16 shrink-0 flex-col border-r border-slate-200 bg-white sm:flex lg:w-60">
         <SidebarContent
+          rail
           businessName={businessName}
           staffName={staffName}
           isActive={isActive}
@@ -139,12 +140,15 @@ export function AdminShell({ role, staffName, tenantName, isForeignTenant, child
 }
 
 function SidebarContent({
+  rail = false,
   businessName,
   staffName,
   isActive,
   canSwitchTenant,
   onNavigate,
 }: {
+  /** Di bawah lg label disembunyikan (jalur ikon); nama menu tetap lewat tooltip dan aria-label. */
+  rail?: boolean;
   businessName?: string | null;
   staffName?: string | null;
   isActive: (href: string, exact?: boolean) => boolean;
@@ -156,11 +160,11 @@ function SidebarContent({
     : NAV;
   return (
     <>
-      <div className="flex items-center gap-2.5 border-b border-slate-100 px-4 py-4">
+      <div className={rail ? "flex items-center gap-2.5 border-b border-slate-100 px-4 py-4 max-lg:justify-center max-lg:px-2" : "flex items-center gap-2.5 border-b border-slate-100 px-4 py-4"}>
         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-600 text-xs font-bold text-white">
           PV
         </div>
-        <div className="min-w-0">
+        <div className={rail ? "min-w-0 max-lg:hidden" : "min-w-0"}>
           <p className="truncate text-sm font-semibold text-slate-900">
             {businessName ?? "Toko"}
           </p>
@@ -177,14 +181,18 @@ function SidebarContent({
               key={item.href}
               href={item.href}
               onClick={onNavigate}
+              title={rail ? item.label : undefined}
+              aria-label={rail ? item.label : undefined}
+              aria-current={active ? "page" : undefined}
               className={
-                active
+                (active
                   ? "flex items-center gap-2.5 rounded-md border-l-2 border-brand-600 bg-brand-50 px-2.5 py-2 text-sm font-medium text-brand-700"
-                  : "flex items-center gap-2.5 rounded-md border-l-2 border-transparent px-2.5 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                  : "flex items-center gap-2.5 rounded-md border-l-2 border-transparent px-2.5 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900") +
+                (rail ? " max-lg:min-h-11 max-lg:justify-center max-lg:px-0" : "")
               }
             >
               <Icon size={16} strokeWidth={2} className="shrink-0" />
-              <span className="truncate">{item.label}</span>
+              <span className={rail ? "truncate max-lg:hidden" : "truncate"}>{item.label}</span>
             </Link>
           );
         })}
