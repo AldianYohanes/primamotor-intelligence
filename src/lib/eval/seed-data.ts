@@ -27,7 +27,7 @@ export const EVAL_LOCATIONS = [
 
 const pid = (n: number) => `e0000000-0d0c-0000-0000-${String(n).padStart(12, "0")}`;
 
-type ProductSeed = {
+export type ProductSeed = {
   n: number;
   /** Nomor part asli dari riset web terbuka. */
   partNumber: string;
@@ -150,6 +150,9 @@ const ALIASES: [number, string][] = [
   [29, "radiator hose"],
   [29, "selang atas"],
 ];
+
+/** Data dasar tiap barang, dipakai juga oleh seed-activity.ts. */
+export const EVAL_PRODUCT_SEEDS = PRODUCTS;
 
 export const EVAL_PRODUCTS = PRODUCTS.map((p) => ({
   id: pid(p.n),

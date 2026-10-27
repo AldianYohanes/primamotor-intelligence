@@ -1,3 +1,6 @@
+-- Catatan: file ini hanya seed dasar (produk, stok, riwayat penjualan bulanan). Data simulasi untuk semua modul lain
+-- (nota POS, shift, pelanggan, pemasok, opname, impor nota, dst.) hanya diisi oleh tombol "Reset data eval"
+-- (src/lib/eval/seed-activity.ts), karena butuh akun staf tambahan lewat Auth API.
 -- seed_eval.sql — tenant terpisah untuk evaluasi Bab 4 (routing, tool calling, ETSR)
 --
 -- Kenapa tenant terpisah: skenario transaksi yang dikonfirmasi PIN benar-benar
