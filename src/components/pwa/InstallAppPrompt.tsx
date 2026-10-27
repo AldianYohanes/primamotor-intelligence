@@ -7,9 +7,9 @@ import { isStandalone, useInstallPrompt } from "@/src/lib/pwa/install-prompt";
 
 const DISMISS_KEY = "pwa-install-dismissed-at";
 const DISMISS_DAYS = 7;
-// Jangan menawarkan install di halaman publik/login; tawarkan setelah staf
-// benar-benar memakai app.
-const HIDDEN_PREFIXES = ["/login", "/signup", "/~offline"];
+// Tawaran hanya di layar menu. Di chat, kasir, dan admin kotaknya menutupi header dan isi halaman;
+// pemasangan juga ada di Akun > Pengaturan perangkat.
+const OFFER_PATH = "/menu";
 
 function recentlyDismissed() {
   try {
@@ -32,7 +32,7 @@ export function InstallAppPrompt() {
   // Dibaca sekali saat render pertama; setelah ditutup cukup disembunyikan.
   const [hidden, setHidden] = useState(() => typeof window !== "undefined" && (recentlyDismissed() || isStandalone()));
 
-  if (!deferred || hidden || HIDDEN_PREFIXES.some((p) => pathname.startsWith(p)) || pathname === "/") {
+  if (!deferred || hidden || pathname !== OFFER_PATH) {
     return null;
   }
 
@@ -58,7 +58,7 @@ export function InstallAppPrompt() {
       <div className="min-w-0 flex-1 space-y-2">
         <div>
           <p className="text-sm font-semibold text-slate-900">Pasang aplikasi Prima Motor</p>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-600">
             Buka langsung dari layar utama, tampil layar penuh, dan tetap bisa dibuka saat sinyal
             hilang.
           </p>
@@ -72,7 +72,7 @@ export function InstallAppPrompt() {
           </button>
         </div>
       </div>
-      <button onClick={dismiss} className="text-slate-400 hover:text-slate-600" aria-label="Tutup">
+      <button onClick={dismiss} className="text-slate-500 hover:text-slate-700" aria-label="Tutup">
         <X size={14} />
       </button>
     </div>
