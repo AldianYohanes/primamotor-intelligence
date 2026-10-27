@@ -132,6 +132,13 @@ function LoginForm() {
             Daftar di sini
           </Link>
         </p>
+        <p className="mt-3 text-center text-xs text-slate-500">
+          <Link href="/about" className="underline">Tentang</Link>
+          {' · '}
+          <Link href="/privacy" className="underline">Kebijakan Privasi</Link>
+          {' · '}
+          <Link href="/terms" className="underline">Syarat Penggunaan</Link>
+        </p>
       </div>
     </div>
   )

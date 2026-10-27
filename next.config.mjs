@@ -58,6 +58,9 @@ const securityHeaders = [
 const nextConfig = {
   reactStrictMode: true,
 
+  // Next 16.4 menulis AGENTS.md otomatis saat `next dev`; repo ini sudah punya CLAUDE.md sendiri.
+  agentRules: false,
+
   // Build uji (NEXT_DIST_DIR) memakai folder terpisah supaya tidak merusak server dev yang sedang jalan.
   distDir: process.env.NEXT_DIST_DIR || ".next",
 
