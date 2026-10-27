@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import {
   AreaChart,
@@ -52,7 +53,7 @@ export function DashboardSummaryModule() {
             <h2 className="text-[13px] font-semibold uppercase tracking-wide text-slate-500">
               Tren Pendapatan
             </h2>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-500">
               Per hari, dari nota POS yang selesai (tidak termasuk nota batal).
             </p>
           </div>
@@ -81,8 +82,11 @@ export function DashboardSummaryModule() {
         )}
 
         {!error && !isLoading && summary && summary.trend.every((p) => p.revenue === 0) && (
-          <div className="mt-4 flex h-64 flex-col items-center justify-center gap-1 text-center text-slate-400">
-            <p className="text-sm">Belum ada penjualan POS di rentang ini.</p>
+          <div className="mt-4 flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-slate-200 px-4 py-10 text-center">
+            <p className="text-sm text-slate-600">Belum ada penjualan POS di rentang ini.</p>
+            <Link href="/pos" className="text-xs font-medium text-brand-600 hover:text-brand-700">
+              Buka Kasir untuk mencatat penjualan
+            </Link>
           </div>
         )}
 

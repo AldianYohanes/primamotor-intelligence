@@ -51,16 +51,19 @@ export function DashboardOverviewModule() {
         <h2 className="text-[13px] font-semibold uppercase tracking-wide text-slate-500">
           Penjualan per Bulan
         </h2>
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-slate-500">
           Total nota POS yang selesai, 6 bulan terakhir (tidak termasuk nota batal).
         </p>
 
         {isLoading && <div className="mt-4 h-56 animate-pulse rounded-lg bg-slate-100" />}
 
         {!isLoading && !hasSales && (
-          <p className="mt-4 flex h-56 items-center justify-center text-sm text-slate-400">
-            Belum ada penjualan POS dalam 6 bulan terakhir.
-          </p>
+          <div className="mt-4 flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-slate-200 px-4 py-10 text-center">
+            <p className="text-sm text-slate-600">Belum ada penjualan POS dalam 6 bulan terakhir.</p>
+            <Link href="/pos" className="text-xs font-medium text-brand-600 hover:text-brand-700">
+              Buka Kasir untuk mencatat penjualan
+            </Link>
+          </div>
         )}
 
         {!isLoading && hasSales && (
@@ -136,12 +139,12 @@ export function DashboardOverviewModule() {
           >
             Barang Terlaris
           </h2>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             Jumlah terjual {overview?.top_days ?? 30} hari terakhir.
           </p>
           {isLoading && <ListSkeleton />}
           {!isLoading && (overview?.top_products ?? []).length === 0 && (
-            <p className="mt-4 text-sm text-slate-400">
+            <p className="mt-4 text-sm text-slate-500">
               Belum ada barang terjual di rentang ini.
             </p>
           )}
@@ -150,7 +153,7 @@ export function DashboardOverviewModule() {
               <li key={p.product_id}>
                 <div className="flex items-baseline justify-between gap-3">
                   <p className="min-w-0 truncate text-sm font-medium text-slate-900">
-                    <span className="mr-2 text-slate-400">{i + 1}.</span>
+                    <span className="mr-2 text-slate-500">{i + 1}.</span>
                     {p.name}
                   </p>
                   <p className="shrink-0 text-sm text-slate-700">{p.quantity} terjual</p>
@@ -183,12 +186,12 @@ export function DashboardOverviewModule() {
               <ArrowRight size={12} />
             </Link>
           </div>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             Stok tersedia (semua lokasi) sudah di batas minimum atau di bawahnya.
           </p>
           {isLoading && <ListSkeleton />}
           {!isLoading && (overview?.low_stock ?? []).length === 0 && (
-            <p className="mt-4 text-sm text-slate-400">
+            <p className="mt-4 text-sm text-slate-500">
               Semua barang masih di atas batas minimum.
             </p>
           )}
