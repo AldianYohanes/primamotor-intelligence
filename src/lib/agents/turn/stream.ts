@@ -1,4 +1,5 @@
 import type { MLCEngineInterface } from "@mlc-ai/web-llm";
+import { isGrammarUnavailable, markGrammarUnavailable } from "@/src/lib/agents/grammar-status";
 import { TOOL_STOP_SEQUENCES, visibleStreamText } from "@/src/lib/agents/tool-protocol";
 import { thinkingOptions } from "@/src/lib/agents/model-options";
 import { getActiveModelId } from "@/src/lib/agents/webllm-engine";
@@ -38,8 +39,6 @@ interface StreamChunk {
   // total kalau usage ternyata tidak dikirim.
   usage?: StreamChunkUsage;
 }
-
-let grammarUnavailable = false;
 
 /**
  * Konsumsi stream chunk demi chunk. Pemanggilan tool ditulis model sebagai teks
@@ -100,13 +99,13 @@ async function consumeStream(
   };
   const create = (extra: object) => engine.chat.completions.create({ ...request, ...extra } as unknown as CreateParams);
   let stream: AsyncIterable<StreamChunk>;
-  if (grammar && !grammarUnavailable) {
+  if (grammar && !isGrammarUnavailable()) {
     try {
       stream = (await create({ response_format: { type: "grammar", grammar } })) as AsyncIterable<StreamChunk>;
     } catch (err) {
       if (signal?.aborted) throw err;
       // Build WebLLM menolak grammar ini: balasan jalan seperti model lain dan grammar tidak dicoba lagi.
-      grammarUnavailable = true;
+      markGrammarUnavailable("panggilan alat", err);
       stream = (await create({})) as AsyncIterable<StreamChunk>;
     }
   } else {

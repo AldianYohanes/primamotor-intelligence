@@ -40,7 +40,7 @@ export function EvalRowDetail({ row }: { row: ScoredRow }) {
             {o.assistantText}
           </p>
         ) : (
-          <p className="text-slate-400">Tidak ada jawaban{o.runError ? `: ${o.runError}` : "."}</p>
+          <p className="text-slate-600">Tidak ada jawaban{o.runError ? `: ${o.runError}` : "."}</p>
         )}
       </Block>
 
@@ -48,14 +48,14 @@ export function EvalRowDetail({ row }: { row: ScoredRow }) {
         <table className="w-full text-left">
           <tbody>
             <tr className="align-top">
-              <th className="w-20 pr-2 font-normal text-slate-400">Rute</th>
+              <th className="w-20 pr-2 font-normal text-slate-600">Rute</th>
               <td>
                 harapan <strong>{s.expected_route}</strong> · hasil <strong>{o.predictedRoute ?? "–"}</strong>{" "}
                 {row.routeCorrect ? "✓" : "✗"}
               </td>
             </tr>
             <tr className="align-top">
-              <th className="pr-2 font-normal text-slate-400">Alat</th>
+              <th className="pr-2 font-normal text-slate-600">Alat</th>
               <td>
                 harapan {s.expected_tools.join(", ") || "tanpa alat"}
                 {s.forbidden_tools?.length ? ` (terlarang: ${s.forbidden_tools.join(", ")})` : ""} · hasil{" "}
@@ -64,7 +64,7 @@ export function EvalRowDetail({ row }: { row: ScoredRow }) {
             </tr>
             {s.expected_action && (
               <tr className="align-top">
-                <th className="pr-2 font-normal text-slate-400">Parameter</th>
+                <th className="pr-2 font-normal text-slate-600">Parameter</th>
                 <td className="break-words font-mono">
                   harapan {json(s.expected_action)}
                   {o.toolTrace.map((t, i) => (
@@ -80,7 +80,7 @@ export function EvalRowDetail({ row }: { row: ScoredRow }) {
               </tr>
             )}
             <tr className="align-top">
-              <th className="pr-2 font-normal text-slate-400">Hasil</th>
+              <th className="pr-2 font-normal text-slate-600">Hasil</th>
               <td className={row.success ? "text-emerald-700" : "text-red-700"}>
                 {row.success ? "berhasil" : `gagal di tahap ${row.failedStage}`}
               </td>
@@ -94,19 +94,19 @@ export function EvalRowDetail({ row }: { row: ScoredRow }) {
           <ol className="space-y-1.5">
             {o.modelReplies.map((reply, i) => (
               <li key={i} className="whitespace-pre-wrap break-words rounded bg-white px-2 py-1 font-mono text-slate-700">
-                <span className="text-slate-400">{i + 1}. </span>
+                <span className="text-slate-600">{i + 1}. </span>
                 {reply || "(kosong)"}
               </li>
             ))}
           </ol>
         ) : (
-          <p className="text-slate-400">Tidak tersimpan (run lama atau rute diputuskan kode).</p>
+          <p className="text-slate-600">Tidak tersimpan (run lama atau rute diputuskan kode).</p>
         )}
       </Block>
 
       <Block title="Mutu jawaban">
         {quality === null ? (
-          <p className="text-slate-400">Tidak dinilai (run error atau jawaban kosong).</p>
+          <p className="text-slate-600">Tidak dinilai (run error atau jawaban kosong).</p>
         ) : quality.ok ? (
           <p className="text-emerald-700">Tidak ada masalah terdeteksi.</p>
         ) : (
@@ -133,7 +133,7 @@ export function EvalRowDetail({ row }: { row: ScoredRow }) {
             ))}
           </ul>
         ) : (
-          <p className="text-slate-400">Tidak ada. Hasil ini murni keluaran model.</p>
+          <p className="text-slate-600">Tidak ada. Hasil ini murni keluaran model.</p>
         )}
       </Block>
 
@@ -141,14 +141,14 @@ export function EvalRowDetail({ row }: { row: ScoredRow }) {
         {o.modelCalls && o.modelCalls.length > 0 ? (
           <CallTable calls={o.modelCalls} />
         ) : (
-          <p className="text-slate-400">
+          <p className="text-slate-600">
             Tidak tersimpan{o.promptTokens != null ? `; total ${o.promptTokens} → ${o.completionTokens} token` : ""}.
           </p>
         )}
       </Block>
 
       <Block title="Langkah">
-        {steps.length > 0 ? <ProcessTimeline steps={steps} /> : <p className="text-slate-400">Tidak ada.</p>}
+        {steps.length > 0 ? <ProcessTimeline steps={steps} /> : <p className="text-slate-600">Tidak ada.</p>}
       </Block>
     </div>
   );

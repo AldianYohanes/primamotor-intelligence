@@ -96,6 +96,8 @@ export interface Observation {
   promptPadding?: boolean;
   /** Pengaman profil model dimatikan saat eksekusi ini (kondisi "model mentah"; lihat model-profile.ts). */
   codeGuardsOff?: boolean;
+  /** WebLLM menolak grammar sebelum atau selama eksekusi ini, jadi panggilan model berjalan tanpa batasan bentuk. */
+  grammarUnavailable?: boolean;
   /**
    * Giliran ini memakai cache perangkat atau pencarian produknya gagal karena server
    * (lihat server-check.ts). Eksekusi seperti ini tidak menguji model.

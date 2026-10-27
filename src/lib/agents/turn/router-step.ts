@@ -13,6 +13,7 @@ import {
 } from "@/src/lib/agents/prompts/router";
 import { normalizeShorthand } from "@/src/lib/agents/normalize-shorthand";
 import { thinkingOptions } from "@/src/lib/agents/model-options";
+import { isGrammarUnavailable, markGrammarUnavailable } from "@/src/lib/agents/grammar-status";
 import { getModelProfile } from "@/src/lib/agents/model-profile";
 import { guardRoute } from "@/src/lib/agents/route-guard";
 import { getActiveModelId } from "@/src/lib/agents/webllm-engine";
@@ -30,8 +31,6 @@ const ROUTER_PROMPTS = {
   tiny: ROUTER_TINY_SYSTEM_PROMPT,
 } as const;
 
-// Dimatikan sesudah satu kegagalan supaya tiap giliran tidak mencoba grammar yang tidak jalan.
-let grammarUnavailable = false;
 
 /** Satu pertanyaan ya/tidak ke Router; grammar dilepas bila build WebLLM menolaknya (sama seperti label). */
 async function askYesNo(
@@ -49,7 +48,7 @@ async function askYesNo(
     temperature: 0,
     ...thinkingOptions(modelId),
   };
-  const useGrammar = !grammarUnavailable;
+  const useGrammar = !isGrammarUnavailable();
   const stopListening = interruptOnAbort(engine, signal);
   let completion: ChatCompletion;
   try {
@@ -59,7 +58,7 @@ async function askYesNo(
   } catch (err) {
     if (signal?.aborted) throw new TurnStoppedError();
     if (!useGrammar) throw err;
-    grammarUnavailable = true;
+    markGrammarUnavailable("Router ya/tidak", err);
     completion = await engine.chat.completions.create({ ...request, max_tokens: 8 });
   } finally {
     stopListening();
@@ -123,7 +122,7 @@ export async function routeMessage(
   const modelId = getActiveModelId();
   const profile = getModelProfile(modelId);
   if (profile.routerMode === "binary") return routeBinary(engine, userMessage, lastAssistant, modelId, profile.routerRecovery, signal);
-  const useGrammar = profile.routerGrammar && !grammarUnavailable;
+  const useGrammar = profile.routerGrammar && !isGrammarUnavailable();
   const request: ChatCompletionRequestNonStreaming = {
     messages: [
       { role: "system", content: ROUTER_PROMPTS[profile.routerPrompt] },
@@ -143,7 +142,7 @@ export async function routeMessage(
     if (signal?.aborted) throw new TurnStoppedError();
     if (!useGrammar) throw err;
     // Build WebLLM yang menolak grammar: Router jalan seperti model lain, dan grammar tidak dicoba lagi.
-    grammarUnavailable = true;
+    markGrammarUnavailable("Router label", err);
     completion = await engine.chat.completions.create(request);
   } finally {
     stopListening();

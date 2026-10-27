@@ -108,7 +108,7 @@ export function CallTable({ calls }: { calls: ModelCallStats[] }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[480px] text-left text-xs text-slate-600">
-        <thead className="text-slate-400">
+        <thead className="text-slate-600">
           <tr>
             <th className="py-1 pr-2 font-normal">Panggilan</th>
             <th className="py-1 pr-2 font-normal">Waktu</th>
@@ -135,7 +135,7 @@ function TurnDetail({ turn, now }: { turn: TurnRecord; now: number }) {
     <div className="space-y-3 text-xs text-slate-600">
       {turn.answer && (
         <div className="space-y-1">
-          <p className="text-[11px] text-slate-400">Jawaban akhir</p>
+          <p className="text-xs text-slate-600">Jawaban akhir</p>
           <p className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-800">
             {turn.answer}
           </p>
@@ -154,7 +154,7 @@ function TurnDetail({ turn, now }: { turn: TurnRecord; now: number }) {
       {snapshot && snapshot.calls.length > 0 ? (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[480px] text-left">
-            <thead className="text-slate-400">
+            <thead className="text-slate-600">
               <tr>
                 <th className="py-1 pr-2 font-normal">Panggilan</th>
                 <th className="py-1 pr-2 font-normal">Waktu</th>
@@ -172,7 +172,7 @@ function TurnDetail({ turn, now }: { turn: TurnRecord; now: number }) {
           </table>
         </div>
       ) : (
-        <p className="text-slate-400">Belum ada panggilan model di giliran ini.</p>
+        <p className="text-slate-600">Belum ada panggilan model di giliran ini.</p>
       )}
     </div>
   );
@@ -181,7 +181,7 @@ function TurnDetail({ turn, now }: { turn: TurnRecord; now: number }) {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-slate-200 px-2.5 py-2">
-      <p className="text-[11px] text-slate-400">{label}</p>
+      <p className="text-xs text-slate-600">{label}</p>
       <p className="text-sm font-semibold text-slate-800 tabular-nums">{value}</p>
     </div>
   );

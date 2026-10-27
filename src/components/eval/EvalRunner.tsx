@@ -58,6 +58,7 @@ import {
 } from "@/src/lib/agents/prefill-preference";
 import { isPromptPaddingOn, setPromptPadding } from "@/src/lib/agents/prompt-padding";
 import { isCodeGuardsOff, setCodeGuardsOff } from "@/src/lib/agents/model-profile";
+import { isGrammarUnavailable } from "@/src/lib/agents/grammar-status";
 
 const fixedDevicePosition = () => Promise.resolve(EVAL_DEVICE_POSITION);
 const SCENARIOS = scenarioFile.scenarios as unknown as Scenario[];
@@ -211,9 +212,12 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   } | null>(null);
 
   useEffect(() => {
+    // localStorage dan WebGPU hanya ada di browser: dibaca sesudah hidrasi, bukan di inisialisasi state.
+    /* eslint-disable react-hooks/set-state-in-effect */
     setSavedRun(loadSavedRun());
     setPrefillChunk(getPrefillChunkPreference());
     setGpuPref(getGpuPreference());
+    /* eslint-enable react-hooks/set-state-in-effect */
     probeGpus().then(setGpuProbes);
   }, []);
 
@@ -633,6 +637,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             ...(result.routedByCode && { routedByCode: true }),
             assistantText: result.assistantText,
             modelReplies: result.modelReplies,
+            ...(isGrammarUnavailable() && { grammarUnavailable: true }),
             processSteps: result.processSteps,
             ...(result.inferenceStats && { modelCalls: result.inferenceStats.calls }),
             toolTrace: result.toolTrace,
@@ -1202,7 +1207,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
                       {r.scenario.expected_route} → {r.observation.predictedRoute ?? "–"}
                       {r.observation.routerPredictedRoute &&
                         r.observation.routerPredictedRoute !== r.observation.predictedRoute && (
-                          <div className="text-xs text-slate-400">Router: {r.observation.routerPredictedRoute}</div>
+                          <div className="text-xs text-slate-600">Router: {r.observation.routerPredictedRoute}</div>
                         )}
                     </td>
                     <td className="py-2 pr-3">{r.observation.toolTrace.map((t) => t.name).join(", ") || "–"}</td>
@@ -1231,6 +1236,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
                         type="button"
                         className="text-xs text-slate-500 underline hover:text-slate-700"
                         aria-expanded={openRows.has(idx)}
+                        aria-controls={`eval-row-detail-${idx}`}
                         onClick={() =>
                           setOpenRows((prev) => {
                             const next = new Set(prev);
@@ -1245,7 +1251,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
                   </tr>
                   {openRows.has(idx) && (
                     <tr className="bg-slate-50">
-                      <td colSpan={6} className="p-3">
+                      <td id={`eval-row-detail-${idx}`} colSpan={6} className="p-3">
                         <EvalRowDetail row={r} />
                       </td>
                     </tr>
