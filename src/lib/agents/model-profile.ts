@@ -8,6 +8,8 @@ export interface ModelProfile {
   routerGrammar: boolean;
   /** Prompt Router ringkas dengan contoh berpasangan, untuk model yang gagal mengikuti prompt panjang. */
   routerPrompt: "default" | "compact" | "tiny";
+  /** "binary": dua pertanyaan ya/tidak (urusan stok? lalu minta mencatat?) alih-alih satu label tiga pilihan. */
+  routerMode: "label" | "binary";
   /** Balasan Router tanpa label dirutekan lewat pengaman kode (guardRoute), bukan otomatis OFF_TOPIC. */
   routerRecovery: boolean;
   /**
@@ -57,6 +59,7 @@ export interface ModelProfile {
 export const DEFAULT_PROFILE: ModelProfile = {
   routerGrammar: false,
   routerPrompt: "default",
+  routerMode: "label",
   routerRecovery: false,
   routerQueryGuard: false,
   agentRecovery: false,
@@ -76,6 +79,7 @@ export const DEFAULT_PROFILE: ModelProfile = {
 const SMALL_QWEN3_PROFILE: ModelProfile = {
   routerGrammar: true,
   routerPrompt: "compact",
+  routerMode: "label",
   routerRecovery: true,
   routerQueryGuard: false,
   agentRecovery: true,
@@ -96,6 +100,7 @@ const SMALL_QWEN3_PROFILE: ModelProfile = {
 const TINY_QWEN3_PROFILE: ModelProfile = {
   ...SMALL_QWEN3_PROFILE,
   routerPrompt: "tiny",
+  routerMode: "binary",
   routerQueryGuard: true,
   constrainedToolCall: true,
   toolExamples: true,
@@ -109,6 +114,7 @@ const TINY_QWEN3_PROFILE: ModelProfile = {
 export const RAW_PROFILE: ModelProfile = {
   routerGrammar: false,
   routerPrompt: "default",
+  routerMode: "label",
   routerRecovery: false,
   routerQueryGuard: false,
   agentRecovery: false,

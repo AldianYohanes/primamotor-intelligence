@@ -4,6 +4,9 @@ import { MODEL_OPTIONS } from "@/src/lib/agents/model-options";
 import {
   ROUTER_COMPACT_SYSTEM_PROMPT,
   ROUTER_TINY_SYSTEM_PROMPT,
+  ROUTER_TOPIC_PROMPT,
+  ROUTER_RECORD_PROMPT,
+  parseYesNo,
   ROUTER_GRAMMAR,
   parseRouterReply,
   parseRouterReplyOrNull,
@@ -13,7 +16,7 @@ import scenarios from "@/src/lib/eval/scenarios.json";
 describe("getModelProfile", () => {
   it("Qwen3 kecil memakai Router terbatas dan prompt ringkas", () => {
     for (const id of ["Qwen3-1.7B-q4f16_1-MLC", "Qwen3-1.7B-q4f32_1-MLC", "Qwen3-0.6B-q4f16_1-MLC"]) {
-      expect(getModelProfile(id)).toEqual({ routerGrammar: true, routerPrompt: "compact", routerRecovery: true, routerQueryGuard: false, agentRecovery: true, nudgeMissingCall: true, answerFromToolResult: true, maxAgentTokens: 400, constrainedToolCall: false, toolExamples: false, skipRouterForMovement: true, catalogRouting: true });
+      expect(getModelProfile(id)).toEqual({ routerGrammar: true, routerPrompt: "compact", routerMode: "label", routerRecovery: true, routerQueryGuard: false, agentRecovery: true, nudgeMissingCall: true, answerFromToolResult: true, maxAgentTokens: 400, constrainedToolCall: false, toolExamples: false, skipRouterForMovement: true, catalogRouting: true });
     }
   });
 
@@ -21,7 +24,7 @@ describe("getModelProfile", () => {
     for (const option of MODEL_OPTIONS.filter((o) => !/qwen3/i.test(o.id))) {
       expect(getModelProfile(option.id)).toBe(DEFAULT_PROFILE);
     }
-    expect(DEFAULT_PROFILE).toEqual({ routerGrammar: false, routerPrompt: "default", routerRecovery: false, routerQueryGuard: false, agentRecovery: false, nudgeMissingCall: true, answerFromToolResult: true, maxAgentTokens: 400, constrainedToolCall: false, toolExamples: false, skipRouterForMovement: false, catalogRouting: true });
+    expect(DEFAULT_PROFILE).toEqual({ routerGrammar: false, routerPrompt: "default", routerMode: "label", routerRecovery: false, routerQueryGuard: false, agentRecovery: false, nudgeMissingCall: true, answerFromToolResult: true, maxAgentTokens: 400, constrainedToolCall: false, toolExamples: false, skipRouterForMovement: false, catalogRouting: true });
   });
 
   it("Qwen3 ukuran besar belum punya profil khusus", () => {
@@ -32,7 +35,7 @@ describe("getModelProfile", () => {
 describe("profil Qwen3.5 0.8B dan model mentah", () => {
   it("Qwen3.5 0.8B memakai profil kecil dengan alat dipaksa valid dan contoh tambahan", () => {
     for (const id of ["Qwen3.5-0.8B-q4f16_1-MLC", "Qwen3.5-0.8B-q4f32_1-MLC"]) {
-      expect(getModelProfile(id)).toMatchObject({ routerGrammar: true, agentRecovery: true, constrainedToolCall: true, toolExamples: true, routerPrompt: "tiny", routerQueryGuard: true });
+      expect(getModelProfile(id)).toMatchObject({ routerGrammar: true, agentRecovery: true, constrainedToolCall: true, toolExamples: true, routerPrompt: "tiny", routerMode: "binary", routerQueryGuard: true });
     }
     expect(getModelProfile("Qwen3-1.7B-q4f16_1-MLC")).toMatchObject({ constrainedToolCall: false, toolExamples: false });
   });
@@ -89,6 +92,24 @@ describe("Router Qwen3", () => {
     expect(perLabel("QUERY_AGENT")).toBeGreaterThanOrEqual(4);
     expect(perLabel("TRANSACTION_AGENT")).toBeGreaterThanOrEqual(4);
     expect(perLabel("OFF_TOPIC")).toBeGreaterThanOrEqual(4);
+  });
+
+  it("contoh di prompt Router ya/tidak tidak menyalin pesan skenario evaluasi", () => {
+    const all = (scenarios as { scenarios: { message: string }[] }).scenarios.map((s) => s.message.toLowerCase());
+    for (const prompt of [ROUTER_TOPIC_PROMPT, ROUTER_RECORD_PROMPT]) {
+      const examples = [...prompt.matchAll(/^"(.+)" -> (YA|TIDAK)$/gm)];
+      expect(examples.length).toBeGreaterThanOrEqual(8);
+      for (const [, message] of examples) expect(all).not.toContain(message.toLowerCase());
+      expect(examples.filter((m) => m[2] === "YA").length).toBe(examples.filter((m) => m[2] === "TIDAK").length);
+    }
+  });
+
+  it("parseYesNo membaca YA/TIDAK sesudah blok berpikir kosong", () => {
+    expect(parseYesNo("<think>\n\n</think>\n\nYA")).toBe(true);
+    expect(parseYesNo("TIDAK")).toBe(false);
+    expect(parseYesNo("  tidak.")).toBe(false);
+    expect(parseYesNo("mungkin")).toBeNull();
+    expect(parseYesNo("")).toBeNull();
   });
 
   it("contoh di prompt ringkas tidak menyalin pesan skenario evaluasi", () => {

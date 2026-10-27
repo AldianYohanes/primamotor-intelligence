@@ -127,3 +127,46 @@ Contoh:
 "apa itu inflasi?" -> OFF_TOPIC
 
 Balas HANYA satu label.`
+
+/**
+ * Router dua pertanyaan ya/tidak untuk Qwen3.5 0.8B. Satu pertanyaan tiga pilihan membuat Router
+ * 0.8B menjawab hampir selalu sama (TRANSACTION_AGENT dengan prompt ringkas, OFF_TOPIC dengan
+ * prompt baru; Router saja benar 50% lalu 28% di Q/T/O/S/H, 26 Okt 2026). Dua pertanyaan
+ * ya/tidak lebih sempit. Contoh bukan pesan skenario evaluasi (dijaga model-profile.test.ts).
+ */
+export const ROUTER_TOPIC_PROMPT = `Kamu penyaring pesan untuk toko suku cadang Volvo. Jawab YA bila pesan staf soal stok, ketersediaan, penjualan, atau pencatatan barang toko. Jawab TIDAK bila soal lain: sapaan, pertanyaan umum, harga, cara memasang, rekomendasi, atau kemampuanmu.
+
+Contoh:
+"aki gs 70ah masih ada ga?" -> YA
+"halo, kamu siapa?" -> TIDAK
+"masuk 6 busi ngk ke gudang" -> YA
+"cara pasang aki baru gimana?" -> TIDAK
+"penjualan oli mesin 3 bulan terakhir" -> YA
+"apa itu inflasi?" -> TIDAK
+"klr 2 aki gs dr toko" -> YA
+"toko seberang jual aki berapa?" -> TIDAK
+
+Balas HANYA YA atau TIDAK.`
+
+export const ROUTER_RECORD_PROMPT = `Jawab YA hanya bila staf MEMINTA mencatat perubahan stok: ada jumlah dan kata masuk, keluar, kejual, pindah, kurangi, atau tambah. Jawab TIDAK bila staf cuma bertanya (ada atau tidak, sisa, berapa, laku, tren).
+
+Contoh:
+"seal klep ada stok?" -> TIDAK
+"masuk 6 busi ngk ke gudang" -> YA
+"sisa busi ngk tinggal berapa" -> TIDAK
+"klr 2 aki gs dr toko" -> YA
+"penjualan oli mesin 3 bulan terakhir" -> TIDAK
+"pindahin 4 seal klep dari gudang ke toko" -> YA
+"bearing roda belakang ready gk" -> TIDAK
+"kurangin 1 kampas kopling" -> YA
+
+Balas HANYA YA atau TIDAK.`
+
+export const ROUTER_YESNO_GRAMMAR = `root ::= "YA" | "TIDAK"`;
+
+/** YA / TIDAK di awal balasan (sesudah blok <think> kosong); null bila tidak terbaca. */
+export function parseYesNo(text: string): boolean | null {
+  const body = text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  const m = /^\W*(ya|tidak)\b/i.exec(body);
+  return m ? m[1].toLowerCase() === "ya" : null;
+}
