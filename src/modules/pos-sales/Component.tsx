@@ -11,6 +11,7 @@ import { usePostWarrantyClaim } from "./hooks/use-post-warranty-claim";
 import { createSaleColumns } from "./data/coldef";
 import type { SaleListParams, SaleStatusFilter, SaleSortableColumn } from "./data/params";
 import type { SaleViewModel, SaleItemViewModel } from "./mappers/mappers";
+import { Select } from "@/src/components/ui/select";
 
 const PAGE_SIZE = 20;
 
@@ -83,10 +84,10 @@ export function PosSalesModule({ canVoid }: Props) {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <select
+        <Select
           value={statusFilter}
-          onChange={(e) => {
-            setStatusFilter(e.target.value as SaleStatusFilter);
+          onValueChange={(value) => {
+            setStatusFilter(value as SaleStatusFilter);
             setPage(1);
           }}
           className="field-input w-auto"
@@ -94,11 +95,11 @@ export function PosSalesModule({ canVoid }: Props) {
           <option value="all">Semua Status</option>
           <option value="completed">Selesai</option>
           <option value="voided">Dibatalkan</option>
-        </select>
-        <select
+        </Select>
+        <Select
           value={paymentFilter}
-          onChange={(e) => {
-            setPaymentFilter(e.target.value);
+          onValueChange={(value) => {
+            setPaymentFilter(value);
             setPage(1);
           }}
           className="field-input w-auto"
@@ -110,7 +111,7 @@ export function PosSalesModule({ canVoid }: Props) {
           <option value="card">Kartu Debit/Kredit</option>
           <option value="split">Split (Gabungan)</option>
           <option value="piutang">Piutang</option>
-        </select>
+        </Select>
       </div>
 
       {error && <p className="text-sm text-red-600">Gagal memuat riwayat penjualan: {error.message}</p>}
@@ -371,11 +372,11 @@ function ItemRow({
             placeholder="Alasan klaim (barang cacat, dsb.)"
             className="field-input w-full text-xs"
           />
-          <select value={resolution} onChange={(e) => setResolution(e.target.value as typeof resolution)} className="field-input w-full text-xs">
+          <Select value={resolution} onValueChange={(value) => setResolution(value as typeof resolution)} className="field-input w-full text-xs">
             <option value="replaced">Diganti unit baru (stok dikembalikan)</option>
             <option value="refunded">Dikembalikan uang (stok dikembalikan)</option>
             <option value="repaired">Diperbaiki (stok tidak berubah)</option>
-          </select>
+          </Select>
           {error && <p className="text-xs text-red-600">{error}</p>}
           <div className="flex gap-2">
             <button type="button" onClick={onCloseClaim} disabled={isClaiming} className="btn btn-secondary flex-1 py-1 text-xs">

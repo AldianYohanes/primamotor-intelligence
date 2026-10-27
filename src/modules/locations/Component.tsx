@@ -14,6 +14,7 @@ import { createLocationColumns } from "./data/coldef";
 import type { LocationListParams } from "./data/params";
 import type { LocationType } from "./data/response";
 import type { LocationViewModel } from "./mappers/mappers";
+import { Select } from "@/src/components/ui/select";
 
 const PAGE_SIZE = 20;
 
@@ -212,16 +213,16 @@ export function LocationsModule() {
           </div>
           <div>
             <label className="field-label">Jenis</label>
-            <select
+            <Select
               value={form.type}
-              onChange={(e) =>
-                setForm({ ...form, type: e.target.value as LocationType })
+              onValueChange={(value) =>
+                setForm({ ...form, type: value as LocationType })
               }
               className="field-input mt-1"
             >
               <option value="toko">Toko</option>
               <option value="gudang">Gudang</option>
-            </select>
+            </Select>
           </div>
           <div className="sm:col-span-2">
             <label className="field-label">Alamat</label>

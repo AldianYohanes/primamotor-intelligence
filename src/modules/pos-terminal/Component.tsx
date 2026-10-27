@@ -28,6 +28,7 @@ import { mapPosProductResponseToViewModel } from "./mappers/mappers";
 import type { PaymentMethod, SaleSummaryPaymentMethod, PaymentLinePayload } from "./data/payload";
 import type { CustomerResponse, ShiftResponse, ShiftReportTotalsResponse } from "./data/response";
 import { formatRupiah, generateIdempotencyKey, getQuickCashAmounts, moveHighlight } from "./utils/utils";
+import { Select } from "@/src/components/ui/select";
 
 interface CartLine {
   productId: string;
@@ -493,10 +494,10 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
                 ))}
               </div>
             )}
-            <select
+            <Select
               value={locationId}
-              onChange={(e) => {
-                setLocationId(e.target.value);
+              onValueChange={(value) => {
+                setLocationId(value);
                 setHighlightIndex(-1);
               }}
               disabled={isLoadingLocations}
@@ -508,7 +509,7 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
                   {l.name} ({l.type === "toko" ? "Toko" : "Gudang"})
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         </div>
 
@@ -692,10 +693,10 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
 
           <div>
             <label className="field-label">Metode Pembayaran</label>
-            <select
+            <Select
               value={paymentMode}
-              onChange={(e) => {
-                const next = e.target.value as SaleSummaryPaymentMethod;
+              onValueChange={(value) => {
+                const next = value as SaleSummaryPaymentMethod;
                 setPaymentMode(next);
                 setPaymentLines([]);
                 if (next !== "piutang") setSelectedCustomer(null);
@@ -709,7 +710,7 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
               ))}
               <option value="split">Split (Gabungan Metode)</option>
               <option value="piutang">Piutang (Bayar Nanti)</option>
-            </select>
+            </Select>
           </div>
 
           {paymentMode === "cash" && (

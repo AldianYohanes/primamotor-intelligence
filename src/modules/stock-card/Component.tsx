@@ -6,6 +6,7 @@ import { AlertCircle, ArrowLeft, Bot, ChevronLeft, ChevronRight } from "lucide-r
 import { useGetStockCard } from "./hooks/use-get-stock-card";
 import { TRANSACTION_TYPE_LABELS } from "./mappers/mappers";
 import type { StockCardRow } from "./data/response";
+import { Select } from "@/src/components/ui/select";
 
 const PAGE_SIZE = 20;
 
@@ -54,10 +55,10 @@ export function StockCardModule({ productId }: { productId: string }) {
       </div>
 
       <div className="flex flex-wrap items-end gap-2">
-        <select
+        <Select
           value={locationId}
-          onChange={(e) => {
-            setLocationId(e.target.value);
+          onValueChange={(value) => {
+            setLocationId(value);
             setPage(1);
           }}
           aria-label="Filter lokasi"
@@ -69,7 +70,7 @@ export function StockCardModule({ productId }: { productId: string }) {
               {l.name}
             </option>
           ))}
-        </select>
+        </Select>
         <label className="text-xs text-slate-500">
           Dari
           <input

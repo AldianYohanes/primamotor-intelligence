@@ -12,6 +12,7 @@ import { createProductColumns } from "./data/coldef";
 import type { ProductListParams, ProductStatusFilter, ProductSortableColumn } from "./data/params";
 import type { ProductListResponse } from "./data/response";
 import type { ProductViewModel } from "./mappers/mappers";
+import { Select } from "@/src/components/ui/select";
 
 const PAGE_SIZE = 20;
 
@@ -349,10 +350,10 @@ export function ProductsModule() {
             <label className="field-label">
               Supplier Utama
             </label>
-            <select
+            <Select
               value={form.preferred_supplier_id}
-              onChange={(e) =>
-                setForm({ ...form, preferred_supplier_id: e.target.value })
+              onValueChange={(value) =>
+                setForm({ ...form, preferred_supplier_id: value })
               }
               className="field-input mt-1"
             >
@@ -362,7 +363,7 @@ export function ProductsModule() {
                   {s.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <Input
             label="Alias (pisah koma)"
@@ -405,10 +406,10 @@ export function ProductsModule() {
           placeholder="Cari produk…"
           className="field-input w-full max-w-xs"
         />
-        <select
+        <Select
           value={statusFilter}
-          onChange={(e) => {
-            setStatusFilter(e.target.value as ProductStatusFilter);
+          onValueChange={(value) => {
+            setStatusFilter(value as ProductStatusFilter);
             setPage(1);
           }}
           className="field-input"
@@ -416,7 +417,7 @@ export function ProductsModule() {
           <option value="active">Aktif</option>
           <option value="inactive">Nonaktif</option>
           <option value="all">Semua</option>
-        </select>
+        </Select>
       </div>
 
       {error && (

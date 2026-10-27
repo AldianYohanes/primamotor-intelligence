@@ -7,6 +7,7 @@ import { useGetOpnameHistory } from "./hooks/use-get-opname-history";
 import { useGetOpnameFormOptions } from "./hooks/use-get-opname-form-options";
 import { usePostOpname } from "./hooks/use-post-opname";
 import { opnameColumns } from "./data/coldef";
+import { Select } from "@/src/components/ui/select";
 
 const PAGE_SIZE = 20;
 const emptyForm = {
@@ -61,9 +62,9 @@ export function StockOpnameModule() {
       >
         <div>
           <label className="field-label">Produk</label>
-          <select
+          <Select
             value={form.product_id}
-            onChange={(e) => setForm({ ...form, product_id: e.target.value })}
+            onValueChange={(value) => setForm({ ...form, product_id: value })}
             required
             className="field-input mt-1"
           >
@@ -73,13 +74,13 @@ export function StockOpnameModule() {
                 {p.name}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div>
           <label className="field-label">Lokasi</label>
-          <select
+          <Select
             value={form.location_id}
-            onChange={(e) => setForm({ ...form, location_id: e.target.value })}
+            onValueChange={(value) => setForm({ ...form, location_id: value })}
             required
             className="field-input mt-1"
           >
@@ -89,7 +90,7 @@ export function StockOpnameModule() {
                 {l.name}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div>
           <label className="field-label">

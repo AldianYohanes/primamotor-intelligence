@@ -7,6 +7,7 @@ import {
   tierModelId,
   tierOfModel,
 } from "@/src/lib/agents/model-options";
+import { Select } from "@/src/components/ui/select";
 
 /**
  * Pilihan model untuk staf: tiga tingkat (Saga, Ballad, Tanka) dan sisanya di "Lainnya".
@@ -31,15 +32,15 @@ export function ModelPicker({
   // f32 dipertahankan bila perangkat sudah memakainya (GPU menolak f16).
   const f32 = isF32Model(modelId);
   return (
-    <select
+    <Select
       id={id}
       value={current ? current.id : modelId}
       disabled={disabled}
       title={title}
       className={className}
-      onChange={(e) => {
-        const tier = MODEL_TIERS.find((t) => t.id === e.target.value);
-        onChange(tier ? tierModelId(tier, f32) : e.target.value);
+      onValueChange={(value) => {
+        const tier = MODEL_TIERS.find((t) => t.id === value);
+        onChange(tier ? tierModelId(tier, f32) : value);
       }}
     >
       {MODEL_TIERS.map((t) => (
@@ -54,6 +55,6 @@ export function ModelPicker({
           </option>
         ))}
       </optgroup>
-    </select>
+    </Select>
   );
 }

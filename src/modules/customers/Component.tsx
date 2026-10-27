@@ -6,6 +6,7 @@ import { useGetCustomers } from "./hooks/use-get-customers";
 import { useGetCustomerDetail } from "./hooks/use-get-customer-detail";
 import { usePostCustomer } from "./hooks/use-post-customer";
 import { usePostCustomerPayment } from "./hooks/use-post-payment";
+import { Select } from "@/src/components/ui/select";
 
 const PAYMENT_LABELS: Record<string, string> = { cash: "Tunai", transfer: "Transfer Bank", qris: "QRIS", card: "Kartu" };
 
@@ -285,13 +286,13 @@ function CustomerDetailDialog({
             </div>
             <div>
               <label className="field-label">Metode</label>
-              <select value={method} onChange={(e) => setMethod(e.target.value as typeof method)} className="field-input mt-1">
+              <Select value={method} onValueChange={(value) => setMethod(value as typeof method)} className="field-input mt-1">
                 {Object.entries(PAYMENT_LABELS).map(([value, label]) => (
                   <option key={value} value={value}>
                     {label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             {error && (
               <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">

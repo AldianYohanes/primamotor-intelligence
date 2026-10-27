@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { useGetReportProductOptions } from './hooks/use-get-report-options'
 import { useGetSalesTrend } from './hooks/use-get-sales-trend'
+import { Select } from "@/src/components/ui/select";
 
 export function ReportsModule() {
   const [productId, setProductId] = useState('')
@@ -14,9 +15,9 @@ export function ReportsModule() {
     <div className="space-y-4">
       <h1 className="text-xl font-semibold tracking-tight text-slate-900">Laporan Tren Penjualan</h1>
 
-      <select
+      <Select
         value={productId}
-        onChange={(e) => setProductId(e.target.value)}
+        onValueChange={(value) => setProductId(value)}
         className="field-input w-full max-w-sm"
       >
         <option value="">Pilih produk untuk lihat tren…</option>
@@ -25,7 +26,7 @@ export function ReportsModule() {
             {p.name}
           </option>
         ))}
-      </select>
+      </Select>
 
       {isLoading && <p className="text-sm text-slate-400">Memuat data…</p>}
 

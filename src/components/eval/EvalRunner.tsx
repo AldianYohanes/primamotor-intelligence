@@ -59,6 +59,7 @@ import {
 import { isPromptPaddingOn, setPromptPadding } from "@/src/lib/agents/prompt-padding";
 import { isCodeGuardsOff, setCodeGuardsOff } from "@/src/lib/agents/model-profile";
 import { isGrammarUnavailable } from "@/src/lib/agents/grammar-status";
+import { Select } from "@/src/components/ui/select";
 
 const fixedDevicePosition = () => Promise.resolve(EVAL_DEVICE_POSITION);
 const SCENARIOS = scenarioFile.scenarios as unknown as Scenario[];
@@ -832,27 +833,27 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <label className="space-y-1 text-sm">
             <span className="font-medium text-slate-700">Model</span>
-            <select className="field-input w-full" value={modelId} onChange={(e) => setModelId(e.target.value)} disabled={running}>
+            <Select className="field-input w-full" value={modelId} onValueChange={(value) => setModelId(value)} disabled={running}>
               {MODEL_OPTIONS.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.label} · ~{(m.vramMB / 1024).toFixed(1).replace(".", ",")} GB
                   {m.id === MODEL_ID ? " (default)" : ""}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="space-y-1 text-sm">
             <span className="font-medium text-slate-700">Mode</span>
-            <select
+            <Select
               className="field-input w-full"
               value={modeChoice}
-              onChange={(e) => setModeChoice(e.target.value as ModeChoice)}
+              onValueChange={(value) => setModeChoice(value as ModeChoice)}
               disabled={running}
             >
               <option value="both">Keduanya (diselang-seling)</option>
               <option value="multi_agent">Multi-agent saja</option>
               <option value="single_agent">Single-agent saja</option>
-            </select>
+            </Select>
           </label>
           <label className="space-y-1 text-sm">
             <span className="font-medium text-slate-700">Filter ID</span>
@@ -866,10 +867,10 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
           </label>
           <label className="space-y-1 text-sm">
             <span className="font-medium text-slate-700">Ulangan</span>
-            <select
+            <Select
               className="field-input w-full"
-              value={repetitions}
-              onChange={(e) => setRepetitions(Number(e.target.value))}
+              value={String(repetitions)}
+              onValueChange={(value) => setRepetitions(Number(value))}
               disabled={running}
             >
               {[1, 2, 3, 4, 5].map((n) => (
@@ -877,7 +878,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
                   {n === 1 ? "1× (run biasa)" : `${n}× (data direset tiap ulangan)`}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="space-y-1 text-sm">
             <span className="font-medium text-slate-700">PIN evaluator</span>
@@ -893,11 +894,11 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
           </label>
           <label className="space-y-1 text-sm">
             <span className="font-medium text-slate-700">Potongan prefill</span>
-            <select
+            <Select
               className="field-input w-full"
-              value={prefillChunk ?? ""}
-              onChange={(e) => {
-                const size = e.target.value ? Number(e.target.value) : null;
+              value={prefillChunk === null ? "" : String(prefillChunk)}
+              onValueChange={(value) => {
+                const size = value ? Number(value) : null;
                 setPrefillChunk(size);
                 setPrefillChunkPreference(size);
               }}
@@ -909,7 +910,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
                   {n} token
                 </option>
               ))}
-            </select>
+            </Select>
             <span className="block text-xs text-slate-500">Kecilkan kalau GPU hang saat pemanasan.</span>
           </label>
         </div>
@@ -1360,16 +1361,16 @@ function GpuChoice({
       {recommendation.kind === "choose" ? (
         <label className="block space-y-1">
           <span className="font-medium text-slate-700">GPU</span>
-          <select
+          <Select
             className="field-input w-full sm:w-auto"
             value={value ?? ""}
-            onChange={(e) => onChange((e.target.value || null) as GpuPowerPreference | null)}
+            onValueChange={(value) => onChange((value || null) as GpuPowerPreference | null)}
             disabled={disabled}
           >
             <option value="">Bawaan browser ({describe("high-performance")})</option>
             <option value="high-performance">{describe("high-performance")}</option>
             <option value="low-power">{describe("low-power")}</option>
-          </select>
+          </Select>
         </label>
       ) : (
         <p className="font-medium text-slate-700">GPU: {gpuLabel(recommendation.adapter)}</p>

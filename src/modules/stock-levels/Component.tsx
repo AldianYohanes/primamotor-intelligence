@@ -8,6 +8,7 @@ import { DataTable } from "@/src/components/ui/DataTable";
 import { useGetStockLevels } from "./hooks/use-get-stock-levels";
 import { createStockLevelColumns, type EditTarget } from "./data/coldef";
 import { AdjustStockDialog } from "./AdjustStockDialog";
+import { Select } from "@/src/components/ui/select";
 
 const PAGE_SIZE = 20;
 const NO_SORT: SortingState = [];
@@ -67,10 +68,10 @@ export function StockLevelsModule() {
           aria-label="Cari produk"
           className="field-input w-full sm:max-w-xs"
         />
-        <select
+        <Select
           value={locationId}
-          onChange={(e) => {
-            setLocationId(e.target.value);
+          onValueChange={(value) => {
+            setLocationId(value);
             setPage(1);
           }}
           aria-label="Filter lokasi"
@@ -82,7 +83,7 @@ export function StockLevelsModule() {
               {l.name}
             </option>
           ))}
-        </select>
+        </Select>
         <label className="flex items-center gap-2 text-sm text-slate-700">
           <input
             type="checkbox"

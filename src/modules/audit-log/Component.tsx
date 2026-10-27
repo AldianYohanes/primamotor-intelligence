@@ -20,6 +20,7 @@ import type {
 } from "./data/reorder-params";
 import type { ReorderSuggestionViewModel } from "./mappers/reorder-mappers";
 import type { ReorderStatus } from "./data/reorder-response";
+import { Select } from "@/src/components/ui/select";
 
 const PAGE_SIZE = 20;
 
@@ -106,10 +107,10 @@ function AgentActionsTab() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
-        <select
+        <Select
           value={statusFilter}
-          onChange={(e) => {
-            setStatusFilter(e.target.value as AuditStatusFilter);
+          onValueChange={(value) => {
+            setStatusFilter(value as AuditStatusFilter);
             setPage(1);
           }}
           className="field-input"
@@ -119,11 +120,11 @@ function AgentActionsTab() {
           <option value="executed">Berhasil</option>
           <option value="rejected">Ditolak</option>
           <option value="failed">Gagal</option>
-        </select>
-        <select
+        </Select>
+        <Select
           value={toolFilter}
-          onChange={(e) => {
-            setToolFilter(e.target.value as AuditToolFilter);
+          onValueChange={(value) => {
+            setToolFilter(value as AuditToolFilter);
             setPage(1);
           }}
           className="field-input"
@@ -131,7 +132,7 @@ function AgentActionsTab() {
           <option value="all">Semua Aksi</option>
           <option value="updateStock">Ubah Stok</option>
           <option value="transferStock">Transfer Stok</option>
-        </select>
+        </Select>
       </div>
 
       {error && (
@@ -218,10 +219,10 @@ function ReorderSuggestionsTab() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
-        <select
+        <Select
           value={statusFilter}
-          onChange={(e) => {
-            setStatusFilter(e.target.value as ReorderStatusFilter);
+          onValueChange={(value) => {
+            setStatusFilter(value as ReorderStatusFilter);
             setPage(1);
           }}
           className="field-input"
@@ -231,7 +232,7 @@ function ReorderSuggestionsTab() {
           <option value="acknowledged">Sudah Dilihat</option>
           <option value="ordered">Sudah Dipesan</option>
           <option value="dismissed">Diabaikan</option>
-        </select>
+        </Select>
       </div>
 
       {error && (

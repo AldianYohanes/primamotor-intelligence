@@ -10,6 +10,7 @@ import type { ReorderStatus, ReorderSuggestionResponse } from "@/src/modules/aud
 import type { ReorderStatusFilter } from "@/src/modules/audit-log/data/reorder-params";
 import { useReorderList } from "./hooks/use-reorder-list";
 import { daysOfStockLeft, readSnapshotFacts } from "./utils/snapshot";
+import { Select } from "@/src/components/ui/select";
 
 const PAGE_SIZE = 20;
 
@@ -48,10 +49,10 @@ export function ReorderSuggestionsModule() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <select
+        <Select
           value={status}
-          onChange={(e) => {
-            setStatus(e.target.value as ReorderStatusFilter);
+          onValueChange={(value) => {
+            setStatus(value as ReorderStatusFilter);
             setPage(1);
           }}
           aria-label="Filter status"
@@ -62,7 +63,7 @@ export function ReorderSuggestionsModule() {
           <option value="ordered">Sudah dipesan</option>
           <option value="dismissed">Diabaikan</option>
           <option value="all">Semua</option>
-        </select>
+        </Select>
         <Link href="/admin/audit-log" className="text-sm font-medium text-brand-600 hover:underline">
           Riwayat lengkap
         </Link>
