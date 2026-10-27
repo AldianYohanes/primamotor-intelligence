@@ -19,14 +19,14 @@ function balance(productNo: string, locationId: string) {
 
 describe("buildSeedTransactions", () => {
   it("saldo akhir sama dengan kolom toko/gudang seed_eval.sql", () => {
-    expect(balance("EVAL-007", EVAL_TOKO_ID)).toBe(9);
-    expect(balance("EVAL-007", EVAL_GUDANG_ID)).toBe(15);
-    expect(balance("EVAL-012", EVAL_TOKO_ID)).toBe(0);
-    expect(balance("EVAL-014", EVAL_GUDANG_ID)).toBe(0);
+    expect(balance("LX443", EVAL_TOKO_ID)).toBe(9);
+    expect(balance("LX443", EVAL_GUDANG_ID)).toBe(15);
+    expect(balance("1372441", EVAL_TOKO_ID)).toBe(0);
+    expect(balance("3518885", EVAL_GUDANG_ID)).toBe(0);
   });
 
   it("riwayat Bilah Wiper Bosch per bulan seperti seed (dipakai Q-13)", () => {
-    const id = EVAL_PRODUCTS.find((p) => p.part_number === "EVAL-008")!.id;
+    const id = EVAL_PRODUCTS.find((p) => p.part_number === "43315")!.id;
     const { sales } = buildSeedTransactions(NOW);
     expect(sales.filter((t) => t.product_id === id).map((t) => [t.created_at.slice(0, 10), t.quantity])).toEqual([
       ["2026-05-10", 3],

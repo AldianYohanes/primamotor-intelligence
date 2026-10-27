@@ -46,24 +46,24 @@ describe("stok tenant eval tidak terkuras antar skenario", () => {
     expect(findOverdrafts(SCENARIOS, startingBalances())).toEqual([]);
   });
 
-  it("saldo seed sama dengan yang dipakai test ini (EVAL-004 gudang 16)", () => {
-    expect(startingBalances().get("EVAL-004|Gudang")).toBe(16);
+  it("saldo seed sama dengan yang dipakai test ini (0 986 424 016 gudang 16)", () => {
+    expect(startingBalances().get("0 986 424 016|Gudang")).toBe(16);
   });
 
-  it("menangkap kasus Run 38: H-16 memakai EVAL-007 setelah T-11 dan H-07", () => {
+  it("menangkap kasus Run 38: H-16 memakai LX443 setelah T-11 dan H-07", () => {
     const h16 = SCENARIOS.find((s) => s.id === "H-16")!;
     const old = {
       ...h16,
       expected_stock_delta: [
-        { product: "EVAL-007", location: "Gudang", delta: -3 },
-        { product: "EVAL-007", location: "Toko", delta: 3 },
+        { product: "LX443", location: "Gudang", delta: -3 },
+        { product: "LX443", location: "Toko", delta: 3 },
       ],
     };
     const problems = findOverdrafts(
       SCENARIOS.map((s) => (s.id === "H-16" ? old : s)),
       startingBalances(),
     );
-    expect(problems.some((p) => p.startsWith("H-16") && p.includes("EVAL-007"))).toBe(true);
+    expect(problems.some((p) => p.startsWith("H-16") && p.includes("LX443"))).toBe(true);
   });
 
   it("menangkap transfer 3 dari Gudang saat sisa 2", () => {

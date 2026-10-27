@@ -20,6 +20,12 @@ import {
  * tenant lain tidak bisa tersentuh. Baris staf (auth user tetap) dibaca dulu lalu
  * dibuat ulang dengan id yang sama, supaya sesi evaluator tetap berlaku.
  */
+/** Nama tampil staf seed (akun login tetap sama); diterapkan tiap reset supaya layar tidak menampilkan istilah evaluasi. */
+const STAFF_DISPLAY_NAMES: Record<string, string> = {
+  owner: "Owner Prima Motor",
+  evaluator: "Staf Prima Motor",
+};
+
 export async function POST() {
   if (process.env.ENABLE_EVAL_PAGE !== "true") {
     return NextResponse.json({ error: "Halaman eval tidak aktif" }, { status: 404 });
@@ -47,7 +53,7 @@ export async function POST() {
     await step("buat tenant", () => admin.from("businesses").insert(EVAL_BUSINESS));
     await step("buat lokasi", () => admin.from("locations").insert([...EVAL_LOCATIONS]));
     await step("buat staf", () =>
-      admin.from("staff").insert(staff.map((s) => ({ ...s, business_id: EVAL_BUSINESS_ID }))),
+      admin.from("staff").insert(staff.map((s) => ({ ...s, full_name: STAFF_DISPLAY_NAMES[s.username] ?? s.full_name, business_id: EVAL_BUSINESS_ID }))),
     );
     await step("buat produk", () => admin.from("products").insert(EVAL_PRODUCTS));
     await step("buat alias", () => admin.from("product_aliases").insert(EVAL_ALIASES));
