@@ -282,7 +282,8 @@ export function buildSeedActivity(now: Date, staff: ActivityStaff) {
       payments.push({ method, amount: total });
       paid = total;
     }
-    const cashPaid = payments.filter((p) => p.method === "cash").reduce((a, p) => a + p.amount, 0);
+    // kas masuk laci = uang tunai yang diserahkan dikurangi kembalian (sama dengan laporan shift)
+    const cashPaid = payments.filter((p) => p.method === "cash").reduce((a, p) => a + p.amount, 0) - (method === "cash" ? paid - total : 0);
     const customer = customerIdx === null ? null : CUSTOMERS[customerIdx];
 
     saleRows.push({

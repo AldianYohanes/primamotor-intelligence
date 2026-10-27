@@ -87,7 +87,8 @@ describe("seed aktivitas toko", () => {
       const saleIds = new Set(
         data.sales.filter((s) => s.staff_id === sh.staff_id && s.status === "completed" && s.payment_method !== "piutang" && (s.created_at as string) >= from && (s.created_at as string) <= to).map((s) => s.id),
       );
-      const cash = data.salePayments.filter((p) => saleIds.has(p.sale_id) && p.payment_method === "cash").reduce((a, p) => a + (p.amount as number), 0);
+      const change = data.sales.filter((s) => saleIds.has(s.id)).reduce((a, s) => a + (s.change_amount as number), 0);
+      const cash = data.salePayments.filter((p) => saleIds.has(p.sale_id) && p.payment_method === "cash").reduce((a, p) => a + (p.amount as number), 0) - change;
       expect(sh.expected_cash).toBe((sh.opening_cash as number) + cash);
       expect(sh.cash_variance).toBe((sh.closing_cash as number) - (sh.expected_cash as number));
     }

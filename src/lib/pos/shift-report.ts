@@ -32,7 +32,7 @@ export async function computeShiftReportTotals(
 
   const { data: sales } = await supabase
     .from('sales')
-    .select('id, total_amount, status, payment_method')
+    .select('id, total_amount, status, payment_method, change_amount')
     .eq('business_id', businessId)
     .eq('staff_id', staffId)
     .eq('location_id', locationId)
@@ -53,6 +53,10 @@ export async function computeShiftReportTotals(
     if (p.payment_method in totalsByMethod) {
       totalsByMethod[p.payment_method as keyof typeof totalsByMethod] += p.amount
     }
+  }
+  // sale_payments menyimpan uang yang diserahkan pelanggan; kembalian keluar lagi dari laci, jadi dikurangkan dari tunai.
+  for (const s of completed) {
+    if (s.payment_method !== 'piutang') totalsByMethod.cash -= s.change_amount ?? 0
   }
 
   return {
