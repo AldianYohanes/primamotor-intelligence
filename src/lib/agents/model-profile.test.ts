@@ -16,15 +16,21 @@ import scenarios from "@/src/lib/eval/scenarios.json";
 describe("getModelProfile", () => {
   it("Qwen3 kecil memakai Router terbatas dan prompt ringkas", () => {
     for (const id of ["Qwen3-1.7B-q4f16_1-MLC", "Qwen3-1.7B-q4f32_1-MLC", "Qwen3-0.6B-q4f16_1-MLC"]) {
-      expect(getModelProfile(id)).toEqual({ routerGrammar: true, routerPrompt: "compact", routerMode: "label", routerRecovery: true, routerQueryGuard: false, agentRecovery: true, nudgeMissingCall: true, answerFromToolResult: true, maxAgentTokens: 400, constrainedToolCall: false, toolExamples: false, skipRouterForMovement: true, catalogRouting: true });
+      expect(getModelProfile(id)).toEqual({ routerGrammar: true, routerPrompt: "compact", routerMode: "label", routerRecovery: true, routerQueryGuard: false, agentRecovery: true, nudgeMissingCall: true, answerFromToolResult: true, maxAgentTokens: 400, constrainedToolCall: false, toolExamples: false, skipRouterForMovement: true, catalogRouting: true, quantityGuard: true });
     }
+  });
+
+  it("pengaman jumlah aktif di semua profil kecuali profil mentah /eval", () => {
+    expect(DEFAULT_PROFILE.quantityGuard).toBe(true);
+    expect(getModelProfile("Qwen3.5-0.8B-q4f16_1-MLC").quantityGuard).toBe(true);
+    expect(RAW_PROFILE.quantityGuard).toBe(false);
   });
 
   it("model lain tetap memakai perilaku lama", () => {
     for (const option of MODEL_OPTIONS.filter((o) => !/qwen3/i.test(o.id))) {
       expect(getModelProfile(option.id)).toBe(DEFAULT_PROFILE);
     }
-    expect(DEFAULT_PROFILE).toEqual({ routerGrammar: false, routerPrompt: "default", routerMode: "label", routerRecovery: false, routerQueryGuard: false, agentRecovery: false, nudgeMissingCall: true, answerFromToolResult: true, maxAgentTokens: 400, constrainedToolCall: false, toolExamples: false, skipRouterForMovement: false, catalogRouting: true });
+    expect(DEFAULT_PROFILE).toEqual({ routerGrammar: false, routerPrompt: "default", routerMode: "label", routerRecovery: false, routerQueryGuard: false, agentRecovery: false, nudgeMissingCall: true, answerFromToolResult: true, maxAgentTokens: 400, constrainedToolCall: false, toolExamples: false, skipRouterForMovement: false, catalogRouting: true, quantityGuard: true });
   });
 
   it("Qwen3 ukuran besar belum punya profil khusus", () => {

@@ -24,7 +24,7 @@ import {
   parseModelReply,
   stripThinking,
 } from "@/src/lib/agents/tool-protocol";
-import { applyCorrections, missingCallSuggestion, transferCallFrom } from "@/src/lib/agents/tool-correction";
+import { applyCorrections, correctQuantity, missingCallSuggestion, transferCallFrom } from "@/src/lib/agents/tool-correction";
 import { getModelProfile } from "@/src/lib/agents/model-profile";
 import { getActiveModelId } from "@/src/lib/agents/webllm-engine";
 import { streamChatCompletion } from "@/src/lib/agents/turn/stream";
@@ -369,7 +369,11 @@ export async function runAgentTurnInner(
     for (const writtenCall of reply.calls) {
       // Sesudah stop, tidak ada alat yang boleh dijalankan lagi.
       if (signal?.aborted) throw new TurnStoppedError();
-      const corrected = agentRecovery ? applyCorrections(writtenCall, agentMessage, allowedTools) : { call: writtenCall, note: null };
+      const corrected = agentRecovery
+        ? applyCorrections(writtenCall, agentMessage, allowedTools)
+        : modelProfile.quantityGuard
+          ? correctQuantity(writtenCall, agentMessage)
+          : { call: writtenCall, note: null };
       let call = corrected.call;
       if (corrected.note) rec.add({ kind: "action", label: corrected.note, status: "done", assist: "tool" });
       // T-07, H-08: "ambil dari gudang" untuk toko dicatat model sebagai updateStock. Profil model

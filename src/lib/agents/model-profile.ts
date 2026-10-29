@@ -54,6 +54,12 @@ export interface ModelProfile {
   skipRouterForMovement: boolean;
   /** Nama barang dikenali dari katalog toko di cache perangkat saat pengaman rute menimbang pesan off-topic. */
   catalogRouting: boolean;
+  /**
+   * Jumlah yang jelas disebut di pesan staf menang atas angka tulisan model (correctQuantity), jadi model
+   * yang menulis 50 untuk "keluar 5" tidak sampai ke kartu PIN. Aktif untuk semua model; hanya profil
+   * mentah /eval yang mematikannya, supaya kemampuan model sendiri tetap terukur.
+   */
+  quantityGuard: boolean;
 }
 
 export const DEFAULT_PROFILE: ModelProfile = {
@@ -70,6 +76,7 @@ export const DEFAULT_PROFILE: ModelProfile = {
   toolExamples: false,
   skipRouterForMovement: false,
   catalogRouting: true,
+  quantityGuard: true,
 };
 
 /**
@@ -90,6 +97,7 @@ const SMALL_QWEN3_PROFILE: ModelProfile = {
   toolExamples: false,
   skipRouterForMovement: true,
   catalogRouting: true,
+  quantityGuard: true,
 };
 
 /**
@@ -125,6 +133,7 @@ export const RAW_PROFILE: ModelProfile = {
   toolExamples: false,
   skipRouterForMovement: false,
   catalogRouting: false,
+  quantityGuard: false,
 };
 
 let codeGuardsOff = false;
