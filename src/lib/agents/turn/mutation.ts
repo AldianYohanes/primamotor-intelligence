@@ -11,6 +11,7 @@ import { describeStock, largeQuantityWarning, pickProduct, type ProductSearchRes
 import { ProcessRecorder, answerStep, mutationOutcomeStep, type ProcessStep } from "@/src/lib/agents/process-trace";
 import { OFFLINE_MUTATION_MESSAGE } from "@/src/lib/agents/turn/replies";
 import { executeTool, fetchTenantLocations, searchProducts } from "@/src/lib/agents/turn/tools";
+import { MAX_REASONING_LENGTH } from "@/src/lib/agents/tool-schemas";
 import type { MutationChoice, MutationOutcome, MutationTool, PendingConfirmation } from "@/src/lib/agents/turn/types";
 
 async function executeMutation(
@@ -114,7 +115,7 @@ export async function advanceMutation(
   const name = productName ?? "barang ini";
 
   const quantity = Number(args.quantity);
-  const reasoning = String(args.reasoning ?? "").trim() || originalMessage;
+  const reasoning = (String(args.reasoning ?? "").trim() || originalMessage).slice(0, MAX_REASONING_LENGTH);
   const resolvedArgs: Record<string, unknown> =
     toolName === "updateStock"
       ? {

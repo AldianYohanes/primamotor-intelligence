@@ -7,9 +7,13 @@ import { z } from 'zod'
  *     browser meski sudah "divalidasi" agent, karena browser bisa dimanipulasi.
  */
 
+/** Batas jumlah per transaksi lewat agent dan panjang alasan di audit log; di atasnya hampir pasti salah tulis atau halusinasi model. */
+export const MAX_AGENT_QUANTITY = 100000
+export const MAX_REASONING_LENGTH = 500
+
 export const getStockSchema = z.object({
   business_id: z.string().uuid(),
-  query: z.string().min(1, 'Query pencarian tidak boleh kosong'),
+  query: z.string().min(1, 'Query pencarian tidak boleh kosong').max(100),
   limit: z.number().int().min(1).max(20).default(5),
 })
 export type GetStockInput = z.infer<typeof getStockSchema>
@@ -18,10 +22,10 @@ export const updateStockSchema = z.object({
   business_id: z.string().uuid(),
   product_id: z.string().uuid(),
   location_id: z.string().uuid(),
-  quantity: z.number().int().positive(),
+  quantity: z.number().int().positive().max(MAX_AGENT_QUANTITY),
   direction: z.enum(['masuk', 'keluar']),
   conversation_id: z.string().uuid(),
-  reasoning: z.string().min(1, 'decision_reason wajib diisi untuk audit trail'),
+  reasoning: z.string().min(1, 'decision_reason wajib diisi untuk audit trail').max(MAX_REASONING_LENGTH),
 })
 export type UpdateStockInput = z.infer<typeof updateStockSchema>
 
@@ -37,11 +41,11 @@ export type UpdateStockConfirmInput = z.infer<typeof updateStockConfirmSchema>
 export const transferStockSchema = z.object({
   business_id: z.string().uuid(),
   product_id: z.string().uuid(),
-  quantity: z.number().int().positive(),
+  quantity: z.number().int().positive().max(MAX_AGENT_QUANTITY),
   from_location_id: z.string().uuid(),
   to_location_id: z.string().uuid(),
   conversation_id: z.string().uuid(),
-  reasoning: z.string().min(1),
+  reasoning: z.string().min(1).max(MAX_REASONING_LENGTH),
 }).refine((data) => data.from_location_id !== data.to_location_id, {
   message: 'Lokasi asal dan tujuan tidak boleh sama',
   path: ['to_location_id'],

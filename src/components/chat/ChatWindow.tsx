@@ -51,7 +51,7 @@ import { StockSyncIndicator } from "./StockSyncIndicator";
 import { useStockSyncStore } from "@/src/lib/stores/stock-sync-store";
 import { MutationChoiceCard } from "./MutationChoiceCard";
 import { ProcessDetails } from "./ProcessDetails";
-import { EXAMPLE_QUESTIONS, shouldSubmitOnEnter, turnErrorMessage } from "./chat-ui";
+import { EXAMPLE_QUESTIONS, MAX_CHAT_MESSAGE_LENGTH, shouldSubmitOnEnter, turnErrorMessage } from "./chat-ui";
 
 interface Props {
   /** Tenant aktif (bagi super admin bisa tenant lain). */
@@ -624,6 +624,7 @@ export function ChatWindow({
             aria-label="Pesan untuk asisten"
             enterKeyHint="send"
             autoComplete="off"
+            maxLength={MAX_CHAT_MESSAGE_LENGTH}
             disabled={!engine}
             className="field-input min-h-11 flex-1 rounded-full !text-base sm:!text-sm"
           />

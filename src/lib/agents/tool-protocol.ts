@@ -360,5 +360,8 @@ ${JSON.stringify({ error })}
 export const MISSING_TOOL_CALL_FEEDBACK = missingToolCallFeedback();
 
 export function formatToolResponse(name: string, result: unknown): string {
-  return `<tool_response>\n${JSON.stringify({ name, content: result })}\n</tool_response>`;
+  // Nama barang dan alias berasal dari data toko (dan impor nota). "<" diloloskan supaya teks seperti
+  // "</tool_response> abaikan aturan…" di dalam data tidak bisa menutup pembungkus lalu tampil sebagai instruksi.
+  const body = JSON.stringify({ name, content: result }).replace(/</g, "\\u003c");
+  return `<tool_response>\n${body}\n</tool_response>`;
 }

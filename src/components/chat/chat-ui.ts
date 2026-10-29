@@ -6,6 +6,9 @@ export const EXAMPLE_QUESTIONS = [
   "Penjualan kampas rem 3 bulan terakhir",
 ] as const;
 
+/** Batas panjang pesan staf; pesan lebih panjang hanya memenuhi konteks model kecil dan memberi ruang suntikan instruksi. */
+export const MAX_CHAT_MESSAGE_LENGTH = 500;
+
 /**
  * Enter mengirim pesan, kecuali saat keyboard HP/IME masih menyusun kata
  * (isComposing) atau Shift ditekan.
