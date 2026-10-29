@@ -26,12 +26,17 @@ export async function checkAgentServer(fetchFn: typeof fetch = fetch): Promise<S
 }
 
 /**
- * Giliran ini memakai cache perangkat, atau pencarian produknya gagal karena server.
+ * Giliran ini memakai cache perangkat, atau pencarian produk, daftar lokasi, atau tren gagal karena server.
  * Eksekusi seperti itu tidak menguji model, jadi ditandai di ekspor.
  */
 export function hasServerFallback(toolTrace: Observation["toolTrace"]): boolean {
   return toolTrace.some((entry) => {
-    const result = entry.result as { source?: unknown; status?: unknown } | null | undefined;
-    return result?.source === "offline_cache" || result?.status === "product_search_failed";
+    const result = entry.result as { source?: unknown; status?: unknown; error?: unknown } | null | undefined;
+    return (
+      result?.source === "offline_cache" ||
+      result?.status === "product_search_failed" ||
+      result?.status === "locations_unavailable" ||
+      (typeof result?.error === "string" && result.error.startsWith("Server tidak bisa dihubungi"))
+    );
   });
 }

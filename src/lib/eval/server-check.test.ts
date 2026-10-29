@@ -35,6 +35,19 @@ describe("hasServerFallback", () => {
     expect(hasServerFallback([{ name: "updateStock", args: {}, result: { status: "product_search_failed" } }])).toBe(true);
   });
 
+  it("mengenali daftar lokasi yang gagal dimuat", () => {
+    expect(hasServerFallback([{ name: "updateStock", args: {}, result: { status: "locations_unavailable" } }])).toBe(true);
+  });
+
+  it("mengenali tren penjualan yang tidak bisa dicek karena server", () => {
+    const error = "Server tidak bisa dihubungi, tren penjualan belum bisa dicek. Sampaikan ke staf untuk coba lagi.";
+    expect(hasServerFallback([{ name: "getSalesTrend", args: {}, result: { error } }])).toBe(true);
+  });
+
+  it("galat lain (mis. nama barang kosong) bukan galat server", () => {
+    expect(hasServerFallback([{ name: "getSalesTrend", args: {}, result: { error: "Nama barang belum disebut." } }])).toBe(false);
+  });
+
   it("tidak menandai hasil dari server", () => {
     expect(hasServerFallback([{ name: "getStock", args: {}, result: { results: [] } }])).toBe(false);
     expect(hasServerFallback([])).toBe(false);
