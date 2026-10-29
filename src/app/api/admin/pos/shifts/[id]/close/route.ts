@@ -1,3 +1,4 @@
+import { readJson } from "@/src/lib/http/read-json";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/src/lib/supabase/admin";
@@ -35,7 +36,7 @@ export async function POST(
   const { supabase, staffRow } = ctx;
   const { id } = await params;
 
-  const parsed = closeShiftSchema.safeParse(await req.json());
+  const parsed = closeShiftSchema.safeParse(await readJson(req));
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Input tidak valid", details: parsed.error.flatten() },

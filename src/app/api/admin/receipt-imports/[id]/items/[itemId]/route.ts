@@ -1,3 +1,4 @@
+import { readJson } from "@/src/lib/http/read-json";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { logger } from "@/src/lib/logging/logger";
@@ -18,7 +19,7 @@ export async function PATCH(
   if ("error" in auth) return auth.error;
   const { supabase, staffRow } = auth;
 
-  const parsed = itemUpdateSchema.safeParse(await req.json());
+  const parsed = itemUpdateSchema.safeParse(await readJson(req));
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Input tidak valid", details: parsed.error.flatten() },

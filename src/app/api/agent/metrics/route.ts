@@ -1,3 +1,4 @@
+import { readJson } from "@/src/lib/http/read-json";
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/src/lib/supabase/admin";
 import { agentExecutionMetricSchema } from "@/src/lib/agents/metrics-schema";
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
   if ("error" in auth) return auth.error;
   const { staffRow } = auth;
 
-  const parsed = agentExecutionMetricSchema.safeParse(await req.json());
+  const parsed = agentExecutionMetricSchema.safeParse(await readJson(req));
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Payload metrics tidak valid", details: parsed.error.flatten() },

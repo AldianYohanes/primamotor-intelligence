@@ -1,3 +1,4 @@
+import { readJson } from "@/src/lib/http/read-json";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireApi } from "@/src/lib/auth/staff-context";
@@ -15,7 +16,7 @@ export async function POST(req: NextRequest) {
   const { supabase } = auth;
   const staffRow = auth.staff;
 
-  const parsed = subscribeSchema.safeParse(await req.json());
+  const parsed = subscribeSchema.safeParse(await readJson(req));
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Input tidak valid", details: parsed.error.flatten() },
@@ -52,7 +53,11 @@ export async function DELETE(req: NextRequest) {
   const { supabase } = auth;
   const staffRow = auth.staff;
 
-  const { endpoint } = await req.json();
+  const body = (await readJson(req)) as { endpoint?: unknown } | null;
+  const endpoint = body?.endpoint;
+  if (typeof endpoint !== "string" || !endpoint) {
+    return NextResponse.json({ error: "Input tidak valid" }, { status: 400 });
+  }
   const { error } = await supabase
     .from("push_subscriptions")
     .update({ is_active: false })

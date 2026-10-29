@@ -1,9 +1,11 @@
+import { readJson } from "@/src/lib/http/read-json";
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/src/lib/supabase/admin";
 import { updateStockSchema } from "@/src/lib/agents/tool-schemas";
 import { logger } from "@/src/lib/logging/logger";
 import { requireStaffRow } from "@/src/lib/auth/staff-context";
 import { conversationBelongsToStaff } from "@/src/lib/agents/conversation-owner";
+import { TOO_MANY_PENDING_MESSAGE, tooManyPendingProposals } from "@/src/lib/agents/pending-proposals";
 
 /**
  * Tahap 1 dari pola HITL dua-tahap: catat niat agent ke agent_audit_log (status
@@ -18,7 +20,7 @@ export async function POST(req: NextRequest) {
   if ("error" in auth) return auth.error;
   const { supabase, staffRow } = auth;
 
-  const parsed = updateStockSchema.safeParse(await req.json());
+  const parsed = updateStockSchema.safeParse(await readJson(req));
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Input tidak valid", details: parsed.error.flatten() },
@@ -91,6 +93,10 @@ export async function POST(req: NextRequest) {
         error: expireError,
       },
     );
+  }
+
+  if (await tooManyPendingProposals(admin, body.business_id, body.conversation_id)) {
+    return NextResponse.json({ error: TOO_MANY_PENDING_MESSAGE }, { status: 429 });
   }
 
   if (body.direction === "keluar") {

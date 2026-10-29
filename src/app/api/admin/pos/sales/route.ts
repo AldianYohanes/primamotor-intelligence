@@ -1,3 +1,4 @@
+import { readJson } from "@/src/lib/http/read-json";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/src/lib/supabase/admin";
@@ -171,7 +172,7 @@ export async function POST(req: NextRequest) {
   if ("error" in ctx) return ctx.error;
   const { supabase, staffRow } = ctx;
 
-  const parsed = checkoutSchema.safeParse(await req.json());
+  const parsed = checkoutSchema.safeParse(await readJson(req));
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Input tidak valid", details: parsed.error.flatten() },
@@ -231,6 +232,9 @@ export async function POST(req: NextRequest) {
   }
 
   const admin = createAdminClient();
+  // Usulan chat yang ditinggalkan masih menahan stok sampai ada usulan baru yang membersihkannya;
+  // tanpa ini kasir bisa ditolak "stok tidak cukup" gara-gara reservasi basi (best-effort).
+  await admin.rpc("expire_stale_pending_reservations", { p_business_id: staffRow.business_id });
   const { data: result, error: rpcError } = await admin.rpc("record_sale", {
     p_business_id: staffRow.business_id,
     p_location_id: body.location_id,

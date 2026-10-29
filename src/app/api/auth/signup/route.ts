@@ -1,9 +1,11 @@
+import { readJson } from "@/src/lib/http/read-json";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/src/lib/supabase/admin";
 import { toSyntheticEmail, isValidPin } from "@/src/lib/auth/synthetic-email";
 import { slugify, isValidSlug } from "@/src/lib/validation/slug";
 import { logger } from "@/src/lib/logging/logger";
+import { clientIp, rateLimited } from "@/src/lib/rate-limit/memory-rate-limit";
 
 /**
  * Self-service signup (keputusan produk Ronde 3 #3): siapa pun bisa mendaftarkan
@@ -15,17 +17,18 @@ import { logger } from "@/src/lib/logging/logger";
  * dalam tenant-nya sendiri begitu tenant di-approve.
  */
 const signupSchema = z.object({
-  business_name: z.string().min(2, "Nama bisnis minimal 2 karakter"),
-  business_address: z.string().optional(),
+  business_name: z.string().min(2, "Nama bisnis minimal 2 karakter").max(100),
+  business_address: z.string().max(300).optional(),
   owner_username: z
     .string()
     .min(3, "Username minimal 3 karakter")
+    .max(30)
     .regex(
       /^[a-z0-9_.]+$/i,
       "Username hanya boleh huruf, angka, titik, underscore",
     ),
-  owner_full_name: z.string().min(2),
-  pin: z.string().min(6),
+  owner_full_name: z.string().min(2).max(100),
+  pin: z.string().min(6).max(12),
   // §15.3 — checkbox wajib dicentang, bukan opsional. z.literal(true) menolak
   // false/undefined/string "true" dari body yang tidak well-formed sekalipun.
   ocr_consent: z.literal(true, {
@@ -35,7 +38,11 @@ const signupSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const parsed = signupSchema.safeParse(await req.json());
+  // Daftar membuat akun Auth dan tenant tanpa login; dibatasi per alamat supaya tabel tidak dibanjiri.
+  if (rateLimited(`signup:${clientIp(req)}`, 5, 60 * 60_000)) {
+    return NextResponse.json({ error: "Terlalu banyak pendaftaran dari alamat ini. Coba lagi nanti." }, { status: 429 });
+  }
+  const parsed = signupSchema.safeParse(await readJson(req));
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Input tidak valid", details: parsed.error.flatten() },

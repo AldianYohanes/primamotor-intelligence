@@ -1,3 +1,4 @@
+import { readJson } from "@/src/lib/http/read-json";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/src/lib/supabase/admin";
@@ -9,6 +10,7 @@ import {
 } from "@/src/lib/auth/synthetic-email";
 import { lockedFailure, pinFailureBody, wrongPinFailure } from "@/src/lib/auth/lockout-messages";
 import { logger } from "@/src/lib/logging/logger";
+import { clientIp, rateLimited } from "@/src/lib/rate-limit/memory-rate-limit";
 
 const loginSchema = z.object({
   business_slug: z.string().min(1),
@@ -17,7 +19,11 @@ const loginSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const parsed = loginSchema.safeParse(await req.json());
+  // Kunci per akun (lockout) tidak menahan satu alamat yang mencoba banyak akun sekaligus.
+  if (rateLimited(`login:${clientIp(req)}`, 30, 60_000)) {
+    return NextResponse.json({ error: "Terlalu banyak percobaan masuk. Tunggu semenit lalu coba lagi." }, { status: 429 });
+  }
+  const parsed = loginSchema.safeParse(await readJson(req));
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Input tidak valid", details: parsed.error.flatten() },

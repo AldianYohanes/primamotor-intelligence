@@ -1,3 +1,4 @@
+import { readJson } from "@/src/lib/http/read-json";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireStaffRow } from "@/src/lib/auth/staff-context";
@@ -16,7 +17,7 @@ export async function POST(
   if ("error" in auth) return auth.error;
   const { supabase, staffRow: requester } = auth;
 
-  const parsed = resetSchema.safeParse(await req.json());
+  const parsed = resetSchema.safeParse(await readJson(req));
   if (!parsed.success || !isValidPin(parsed.data.new_pin)) {
     return NextResponse.json(
       { error: "PIN baru minimal 6 digit angka" },
