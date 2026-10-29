@@ -162,6 +162,7 @@ export function ModelSetupPanel({ shortcuts }: { shortcuts: AppModule[] }) {
     secondsLeft,
     loadFraction,
     notice,
+    compatNotice,
     start,
     cancel,
   } = useModelStore();
@@ -209,6 +210,9 @@ export function ModelSetupPanel({ shortcuts }: { shortcuts: AppModule[] }) {
           )}
         </div>
 
+        {compatNotice && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">{compatNotice}</p>
+        )}
         {notice && (
           <p className="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-600">{notice}</p>
         )}

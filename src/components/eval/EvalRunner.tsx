@@ -6,6 +6,7 @@ import { createClient } from "@/src/lib/supabase/client";
 import { refreshCatalog } from "@/src/lib/cache/indexeddb";
 import { isWebGPUAvailable } from "@/src/lib/agents/webgpu-support";
 import { MODEL_ID, MODEL_OPTIONS } from "@/src/lib/agents/model-options";
+import { checkGpuCompatibility, formatMiB, modelBufferBytes, modelFitsGpu } from "@/src/lib/agents/gpu-compat";
 import type { AgentMode, ProcessStep } from "@/src/lib/agents/orchestrator";
 import { ProcessTimeline } from "@/src/components/chat/ProcessDetails";
 import { EvalRowDetail } from "@/src/components/eval/EvalRowDetail";
@@ -245,6 +246,8 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   }, [gpuPref]);
 
   const gpuRecommendation = gpuProbes ? recommendGpu(gpuProbes) : null;
+  const gpuLimitBytes = gpuInfo && gpuInfo !== "loading" ? gpuInfo.maxStorageBufferBindingSizeMB * 2 ** 20 : null;
+  const modelCompat = checkGpuCompatibility(modelId, gpuLimitBytes);
 
   const isEvalTenant = businessSlug === EVAL_TENANT_SLUG;
   // Beberapa awalan dipisah koma, mis. "T-06, T-07, T-08, T-09, T-1".
@@ -835,9 +838,10 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             <span className="font-medium text-slate-700">Model</span>
             <Select className="field-input w-full" value={modelId} onValueChange={(value) => setModelId(value)} disabled={running}>
               {MODEL_OPTIONS.map((m) => (
-                <option key={m.id} value={m.id}>
+                <option key={m.id} value={m.id} disabled={!modelFitsGpu(m.id, gpuLimitBytes)}>
                   {m.label} · ~{(m.vramMB / 1024).toFixed(1).replace(".", ",")} GB
                   {m.id === MODEL_ID ? " (default)" : ""}
+                  {modelFitsGpu(m.id, gpuLimitBytes) ? "" : ` · butuh buffer GPU ${formatMiB(modelBufferBytes(m.id) ?? 0)}`}
                 </option>
               ))}
             </Select>
@@ -927,6 +931,9 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             setGpuPrefChanged(true);
           }}
         />
+        {modelCompat.message && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">{modelCompat.message} Pilih model lain sebelum run.</p>
+        )}
         {(gpuInfo === "loading" || gpuInfo === null || (!gpuInfo.shaderF16 && modelId.includes("q4f16"))) && (
           <p className="text-xs text-slate-500">
             {gpuInfo === "loading"

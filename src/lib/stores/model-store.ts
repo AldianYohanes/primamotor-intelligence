@@ -4,6 +4,7 @@ import { create } from "zustand";
 import type { InitProgressReport, MLCEngineInterface } from "@mlc-ai/web-llm";
 import { MODEL_OPTIONS, DEFAULT_TIER, f32Variant, tierModelId } from "@/src/lib/agents/model-options";
 import { isWebGPUAvailable } from "@/src/lib/agents/webgpu-support";
+import { checkGpuCompatibility } from "@/src/lib/agents/gpu-compat";
 import {
   estimateSecondsLeft,
   phaseFromReport,
@@ -47,6 +48,10 @@ interface ModelState {
   loadFraction: number;
   /** Info non-fatal, mis. alasan unduhan terjeda. */
   notice: string | null;
+  /** Batas buffer GPU (maxStorageBufferBindingSize) dalam byte; null sebelum dicek. */
+  gpuBufferBytes: number | null;
+  /** Peringatan model tidak muat di GPU ini; bertahan sampai pengecekan berikutnya. */
+  compatNotice: string | null;
   error: string | null;
   engine: MLCEngineInterface | null;
   prepare: () => Promise<void>;
@@ -204,6 +209,8 @@ export const useModelStore = create<ModelState>((set, get) => {
     secondsLeft: null,
     loadFraction: 0,
     notice: null,
+    gpuBufferBytes: null,
+    compatNotice: null,
     error: null,
     engine: null,
 
@@ -229,6 +236,19 @@ export const useModelStore = create<ModelState>((set, get) => {
       if (f32 && !(adapter as { features?: { has(f: string): boolean } }).features?.has("shader-f16")) {
         writeStored(NO_F16_KEY, "1");
         wanted = f32;
+      }
+      // Model yang tensor terbesarnya melebihi batas buffer GPU gagal saat dimuat (mis. tablet 128 MB):
+      // alihkan ke tingkat terbesar yang muat dan beri tahu staf.
+      const limit = (adapter as { limits?: { maxStorageBufferBindingSize?: number } }).limits?.maxStorageBufferBindingSize ?? null;
+      const compat = checkGpuCompatibility(wanted, limit);
+      set({ gpuBufferBytes: limit, compatNotice: compat.message });
+      if (!compat.modelId) {
+        set({ status: "error", error: compat.message });
+        return;
+      }
+      if (compat.changed) {
+        wanted = compat.modelId;
+        writeStored(MODEL_KEY, wanted);
       }
       if (wanted !== get().modelId) set({ modelId: wanted });
       installListeners();

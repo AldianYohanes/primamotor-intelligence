@@ -88,6 +88,7 @@ export function ChatWindow({
   const modelStatus = useModelStore((s) => s.status);
   const engine = useModelStore((s) => s.engine);
   const engineError = useModelStore((s) => s.error);
+  const compatNotice = useModelStore((s) => s.compatNotice);
   const modelId = useModelStore((s) => s.modelId);
   const prepareModel = useModelStore((s) => s.prepare);
   const retryModel = useModelStore((s) => s.retry);
@@ -532,6 +533,10 @@ export function ChatWindow({
       />
 
       <EnableNotificationsBanner />
+
+      {compatNotice && (
+        <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">{compatNotice}</div>
+      )}
 
       {!isOnline && (
         <div className="flex items-start gap-2 border-b border-slate-200 bg-slate-100 px-4 py-2 text-xs text-slate-600">
