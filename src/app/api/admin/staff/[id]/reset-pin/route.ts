@@ -63,7 +63,7 @@ export async function POST(
       requested_by_role: requester.role,
       error,
     });
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: "Terjadi kesalahan pada server" }, { status: 500 });
   }
 
   const { error: unlockError } = await admin

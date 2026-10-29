@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
       business_id: staffRow.business_id,
       error,
     });
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: "Terjadi kesalahan pada server" }, { status: 500 });
   }
 
   return NextResponse.json({ customers: data ?? [] });
@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
       business_id: staffRow.business_id,
       error,
     });
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: "Terjadi kesalahan pada server" }, { status: 500 });
   }
 
   return NextResponse.json({ customer: data }, { status: 201 });

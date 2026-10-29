@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
       route: "admin/staff",
       error,
     });
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: "Terjadi kesalahan pada server" }, { status: 500 });
   }
   return NextResponse.json(
     buildPaginatedResponse(data ?? [], count, page, pageSize),
