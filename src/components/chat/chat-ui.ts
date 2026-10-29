@@ -28,6 +28,22 @@ export function turnErrorMessage(online: boolean): string {
     : "Maaf, asisten gagal menjawab karena sinyal terputus. Sambungkan internet lalu kirim ulang pertanyaannya.";
 }
 
+/**
+ * Pertanyaan staf terakhir yang belum dijawab: pesan terakhir di riwayat berperan user.
+ * Dihitung dari riwayat, jadi tetap terdeteksi setelah halaman dimuat ulang di tengah jawaban.
+ */
+export function unansweredQuestion(messages: { role: string; content: string }[]): string | null {
+  const last = messages[messages.length - 1];
+  return last?.role === "user" ? last.content : null;
+}
+
+/** Alasan di pembatas "jawaban terputus"; setelah muat ulang penyebabnya tidak diketahui. */
+export function interruptionReason(cause: "offline" | "error" | "unknown"): string {
+  if (cause === "offline") return "Internet terputus saat asisten menjawab.";
+  if (cause === "error") return "Asisten berhenti di tengah jawaban (GPU atau model tidak merespons).";
+  return "Halaman dimuat ulang atau koneksi terputus sebelum jawaban selesai.";
+}
+
 /** Sisa digit PIN yang masih kurang (PIN minimal 6 digit). */
 export function pinDigitsLeft(pin: string, min = 6): number {
   return Math.max(0, min - pin.length);

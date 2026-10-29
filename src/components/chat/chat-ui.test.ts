@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { liveCallText, pinDigitsLeft, shouldSubmitOnEnter, turnErrorMessage, waitHint } from "./chat-ui";
+import { interruptionReason, liveCallText, pinDigitsLeft, shouldSubmitOnEnter, turnErrorMessage, unansweredQuestion, waitHint } from "./chat-ui";
 
 describe("shouldSubmitOnEnter", () => {
   it("Enter biasa mengirim", () => {
@@ -33,6 +33,19 @@ describe("waitHint", () => {
     expect(waitHint(20_000)).toContain("30 sampai 90 detik");
     expect(waitHint(130_000)).toContain("Hentikan");
     expect(waitHint(130_000)).not.toEqual(waitHint(20_000));
+  });
+});
+
+describe("unansweredQuestion", () => {
+  it("pesan terakhir dari staf berarti belum terjawab", () => {
+    expect(unansweredQuestion([{ role: "assistant", content: "Halo" }, { role: "user", content: "Stok radiator?" }])).toBe("Stok radiator?");
+  });
+  it("null bila pesan terakhir jawaban asisten atau riwayat kosong", () => {
+    expect(unansweredQuestion([{ role: "user", content: "a" }, { role: "assistant", content: "b" }])).toBeNull();
+    expect(unansweredQuestion([])).toBeNull();
+  });
+  it("alasan berbeda untuk tiap penyebab", () => {
+    expect(new Set([interruptionReason("offline"), interruptionReason("error"), interruptionReason("unknown")]).size).toBe(3);
   });
 });
 

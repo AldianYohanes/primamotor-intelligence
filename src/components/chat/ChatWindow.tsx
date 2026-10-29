@@ -43,6 +43,7 @@ import {
 } from "@/src/lib/agents/conversation";
 import { ConversationHistoryPanel } from "./ConversationHistoryPanel";
 import { EnableNotificationsBanner } from "./EnableNotificationsBanner";
+import { InterruptedDivider } from "./InterruptedDivider";
 import { MessageBubble } from "./MessageBubble";
 import { InferenceStatsButton, LiveInferenceLine, type TurnRecord } from "./InferenceStats";
 import type { InferenceSnapshot } from "@/src/lib/agents/inference-stats";
@@ -51,7 +52,7 @@ import { StockSyncIndicator } from "./StockSyncIndicator";
 import { useStockSyncStore } from "@/src/lib/stores/stock-sync-store";
 import { MutationChoiceCard } from "./MutationChoiceCard";
 import { ProcessDetails } from "./ProcessDetails";
-import { EXAMPLE_QUESTIONS, MAX_CHAT_MESSAGE_LENGTH, shouldSubmitOnEnter, turnErrorMessage } from "./chat-ui";
+import { EXAMPLE_QUESTIONS, MAX_CHAT_MESSAGE_LENGTH, interruptionReason, shouldSubmitOnEnter, turnErrorMessage, unansweredQuestion } from "./chat-ui";
 
 interface Props {
   /** Tenant aktif (bagi super admin bisa tenant lain). */
@@ -109,6 +110,8 @@ export function ChatWindow({
   const [submittingChoice, setSubmittingChoice] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [resuming, setResuming] = useState(false);
+  // Pertanyaan terakhir yang tidak sempat dijawab, untuk pembatas "jawaban terputus".
+  const [interrupted, setInterrupted] = useState<{ reason: string; text: string } | null>(null);
   const isOnline = useOnlineStatus();
   const scrollRef = useRef<HTMLDivElement>(null);
   const stopRef = useRef<AbortController | null>(null);
@@ -126,6 +129,8 @@ export function ChatWindow({
         const withPending = await appendPendingMessages(id, history);
         setConversationId(id);
         setMessages(withPending);
+        const lost = unansweredQuestion(withPending);
+        if (lost) setInterrupted({ reason: interruptionReason("unknown"), text: lost });
         setLoadingHistory(false);
       })
       .catch((err) => {
@@ -224,6 +229,7 @@ export function ChatWindow({
     if (!text || !engine || !conversationId || isThinking) return;
 
     setInput("");
+    setInterrupted(null);
     // Pesan baru berarti staf tidak memakai pilihan yang tertahan.
     setMutationChoice(null);
     const userMsg: ChatMessage = { role: "user", content: text };
@@ -305,6 +311,7 @@ export function ChatWindow({
           trace: lastSteps,
         },
       ]);
+      setInterrupted({ reason: interruptionReason(isOnline ? "error" : "offline"), text });
     } finally {
       stopRef.current = null;
       releaseWake();
@@ -393,6 +400,7 @@ export function ChatWindow({
         conversationId,
       );
       setConversationId(newId);
+      setInterrupted(null);
       setMessages([]);
     } catch (err) {
       console.error(err);
@@ -406,7 +414,10 @@ export function ChatWindow({
       const history = await resumeConversation(supabase, id, conversationId);
       abandonPendingActions();
       setConversationId(id);
-      setMessages(await appendPendingMessages(id, history));
+      const resumed = await appendPendingMessages(id, history);
+      setMessages(resumed);
+      const lost = unansweredQuestion(resumed);
+      setInterrupted(lost ? { reason: interruptionReason("unknown"), text: lost } : null);
       setHistoryOpen(false);
     } catch (err) {
       console.error(err);
@@ -585,6 +596,13 @@ export function ChatWindow({
         {messages.map((m, i) => (
           <MessageBubble key={i} message={m} />
         ))}
+        {interrupted && !isThinking && (
+          <InterruptedDivider
+            reason={interrupted.reason}
+            disabled={!engine || !conversationId}
+            onRetry={() => handleSend(interrupted.text)}
+          />
+        )}
         {mutationChoice && !isThinking && (
           <MutationChoiceCard
             choice={mutationChoice}
