@@ -73,6 +73,72 @@ export function fromStoredRows(rows: StoredRow[], scenarios: Scenario[]): Scored
   });
 }
 
+export type ImportResult = { ok: true; run: SavedRun; imported: number; skipped: number } | { ok: false; error: string };
+
+const isMode = (m: unknown): m is AgentMode => m === "multi_agent" || m === "single_agent";
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+
+/**
+ * Memulihkan run tersimpan dari berkas JSON hasil "Unduh JSON", untuk melanjutkan di perangkat lain
+ * atau sesudah penyimpanan browser terhapus (mis. PC warnet). Berkas lama tidak memuat `plan`, jadi
+ * rencana diambil dari `fallbackPlan` (pilihan di layar). Baris dengan skenario yang tidak dikenal dilewati.
+ */
+export function runFromExport(
+  text: string,
+  opts: { scenarioVersion: string; scenarios: Scenario[]; fallbackPlan: SavedRun["plan"] },
+): ImportResult {
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    return { ok: false, error: "Berkas bukan JSON yang valid." };
+  }
+  if (!isRecord(json) || !Array.isArray(json.rows) || typeof json.startedAt !== "string" || !isRecord(json.environment) || typeof json.environment.model !== "string") {
+    return { ok: false, error: "Berkas ini bukan ekspor JSON /eval (startedAt, environment.model, atau rows tidak ada)." };
+  }
+  if (json.scenarioVersion !== opts.scenarioVersion) {
+    return { ok: false, error: `Berkas memakai skenario versi ${String(json.scenarioVersion)}, sekarang ${opts.scenarioVersion}. Tidak bisa dilanjutkan.` };
+  }
+  const known = new Set(opts.scenarios.map((s) => s.id));
+  const rows = (json.rows as unknown[]).filter(
+    (r): r is StoredRow => isRecord(r) && typeof r.scenario === "string" && known.has(r.scenario) && isRecord(r.observation) && isMode(r.observation.mode),
+  );
+  const skipped = json.rows.length - rows.length;
+  if (rows.length === 0) return { ok: false, error: "Tidak ada baris hasil yang bisa dipulihkan dari berkas ini." };
+
+  const filePlan = Array.isArray(json.plan)
+    ? (json.plan as unknown[]).filter((p): p is SavedRun["plan"][number] => isRecord(p) && typeof p.scenarioId === "string" && isMode(p.mode))
+    : [];
+  const plan = filePlan.length > 0 ? filePlan : opts.fallbackPlan;
+  // Baris yang sudah ada tetap dihitung dalam rencana, walau tidak termasuk pilihan di layar.
+  const inPlan = new Set(plan.map((p) => planKey(p.scenarioId, p.mode, p.repetition)));
+  const extra = rows
+    .filter((r) => !inPlan.has(planKey(r.scenario, r.observation.mode, r.observation.repetition)))
+    .map((r) => ({ scenarioId: r.scenario, mode: r.observation.mode, ...(r.observation.repetition && r.observation.repetition > 1 ? { repetition: r.observation.repetition } : {}) }));
+
+  const stop = isRecord(json.stoppedReason) ? [json.stoppedReason as unknown as Interruption] : [];
+  const interruptions = [...(Array.isArray(json.interruptions) ? (json.interruptions as Interruption[]) : []), ...stop];
+  const env = json.environment;
+  return {
+    ok: true,
+    imported: rows.length,
+    skipped,
+    run: {
+      scenarioVersion: opts.scenarioVersion,
+      startedAt: json.startedAt,
+      modelId: env.model as string,
+      plan: [...extra, ...plan],
+      environment: json.environment,
+      promptPadding: typeof env.promptPadding === "boolean" ? env.promptPadding : undefined,
+      codeGuardsOff: typeof env.codeGuardsOff === "boolean" ? env.codeGuardsOff : undefined,
+      rows,
+      interruptions,
+      resumed: Array.isArray(json.resumed) ? (json.resumed as SavedRun["resumed"]) : [],
+      updatedAt: new Date().toISOString(),
+    },
+  };
+}
+
 export function loadSavedRun(): SavedRun | null {
   try {
     const raw = localStorage.getItem(RUN_STORE_KEY);

@@ -23,6 +23,7 @@ import {
   fromStoredRows,
   loadSavedRun,
   remainingPlan,
+  runFromExport,
   saveRun,
   toStoredRow,
   type Interruption,
@@ -381,6 +382,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
     stoppedReason: Interruption | null;
     interruptions: Interruption[];
     resumed: SavedRun["resumed"];
+    plan?: SavedRun["plan"] | null;
   }) {
     const byMode = (["multi_agent", "single_agent"] as AgentMode[])
       .map((m) => args.rows.filter((r) => r.observation.mode === m))
@@ -393,6 +395,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         draftLabels: draftCount,
         environment: args.environment,
         resumed: args.resumed,
+        plan: args.plan ?? undefined,
         interruptions: args.interruptions,
         stoppedReason: args.stoppedReason,
         summaries: byMode,
@@ -761,6 +764,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
           // Penghentian yang sedang terjadi sudah ada di stoppedReason.
           interruptions: stop ? interruptions.slice(0, -1) : interruptions,
           resumed,
+          plan,
         });
         downloadResults(json, collected, runStartedAt);
       }
@@ -785,8 +789,34 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         stoppedReason,
         interruptions: stoppedReason ? interruptions.slice(0, -1) : interruptions,
         resumed: savedRun?.resumed ?? [],
+        plan: savedRun?.plan,
       }),
       "application/json",
+    );
+  }
+
+  /** Pulihkan run dari berkas JSON hasil "Unduh JSON" (mis. sesudah penyimpanan browser PC warnet terhapus). */
+  async function importJson(file: File | undefined) {
+    if (!file) return;
+    const result = runFromExport(await file.text(), {
+      scenarioVersion: scenarioFile.version,
+      scenarios: SCENARIOS,
+      fallbackPlan: buildPlan(selected.map((s) => s.id), modes, repetitions),
+    });
+    if (!result.ok) {
+      setStatus(`Impor gagal: ${result.error}`);
+      return;
+    }
+    if (savedRun && !window.confirm(`Run tersimpan di browser (${savedRun.rows.length} eksekusi) akan diganti oleh berkas ini (${result.imported} eksekusi). Lanjutkan?`)) return;
+    saveRun(result.run);
+    setSavedRun(loadSavedRun());
+    setRows(fromStoredRows(result.run.rows, SCENARIOS));
+    setStartedAt(result.run.startedAt);
+    setInterruptions(result.run.interruptions);
+    setModelId(result.run.modelId);
+    const left = remainingPlan(result.run.plan, result.run.rows).length;
+    setStatus(
+      `Run diimpor: ${result.imported} eksekusi sudah ada, ${left} tersisa${result.skipped ? `, ${result.skipped} baris dilewati (skenario tidak dikenal)` : ""}. Jangan reset data eval, supaya stok sama seperti saat run berhenti, lalu tekan "Lanjutkan run".`,
     );
   }
 
@@ -1013,6 +1043,19 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
           <button className="btn btn-secondary px-3 py-2" onClick={exportJson} disabled={rows.length === 0 && !stoppedReason}>
             Unduh JSON
           </button>
+          <label className={`btn btn-secondary cursor-pointer px-3 py-2 ${running ? "pointer-events-none opacity-60" : ""}`}>
+            Impor JSON
+            <input
+              type="file"
+              accept=".json,application/json"
+              className="sr-only"
+              disabled={running}
+              onChange={(e) => {
+                void importJson(e.target.files?.[0]);
+                e.target.value = "";
+              }}
+            />
+          </label>
         </div>
         <p className="text-sm text-slate-600">{status}</p>
         {savedRun && !running && (
