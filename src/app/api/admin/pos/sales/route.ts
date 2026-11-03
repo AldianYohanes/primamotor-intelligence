@@ -22,8 +22,9 @@ function pickEnum<T extends string>(value: string | null, allowed: readonly T[])
   return allowed.includes(value as T) ? (value as T) : null;
 }
 
+// Riwayat semua nota hanya untuk Portal Admin; kasir cuma butuh POST (checkout).
 export async function GET(req: NextRequest) {
-  const ctx = await requireStaff();
+  const ctx = await requireStaff("portal.access");
   if ("error" in ctx) return ctx.error;
   const { supabase, staffRow } = ctx;
 
