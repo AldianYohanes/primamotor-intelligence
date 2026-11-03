@@ -42,7 +42,13 @@ export function ReceiptImportsModule() {
 
   async function handleCommit() {
     if (!selected) return
-    const result = await commit(selected)
+    let result
+    try {
+      result = await commit(selected)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Gagal commit ke stok')
+      return
+    }
     alert(`${result.committed_count} item berhasil dicatat sebagai stok masuk.${result.failed.length ? ` ${result.failed.length} gagal.` : ''}`)
     await refreshImports()
     await refreshDetail()

@@ -38,6 +38,13 @@ export async function POST(
     .eq("import_id", id)
     .eq("status", "confirmed");
 
+  // Tanpa item terkonfirmasi tidak ada stok yang masuk; jangan tandai impor selesai.
+  if (!items || items.length === 0)
+    return NextResponse.json(
+      { error: "Belum ada baris yang dikonfirmasi. Konfirmasi minimal satu baris dulu sebelum commit ke stok." },
+      { status: 400 },
+    );
+
   const admin = createAdminClient();
   const committed: string[] = [];
   const failed: { item_id: string; error: string }[] = [];
