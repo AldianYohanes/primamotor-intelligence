@@ -51,7 +51,7 @@ export function DataTable<T>({
 
   return (
     <div className="card overflow-hidden">
-      <div className="overflow-x-auto">
+      <div className="scroll-shadows overflow-x-auto">
         <table className="w-full border-collapse text-left text-sm">
           <thead className="border-b border-slate-200 bg-slate-50/80">
             {table.getHeaderGroups().map((headerGroup) => (

@@ -15,14 +15,19 @@ interface Props {
  * menyisakan ruang selebar dock lewat .pr-dock.
  */
 export function AppHeader({ title, subtitle, actions, meta }: Props) {
+  // Layar sempit: judul tidak boleh terpotong, jadi aksi pindah ke baris sendiri di bawahnya.
   return (
-    <header className="pr-dock flex min-h-[52px] items-center justify-between gap-2 border-b border-slate-200 bg-white py-2 pl-4">
-      <div className="min-w-0">
-        <p className="truncate text-sm font-semibold text-slate-900">{title}</p>
-        {subtitle && <p className="truncate text-xs text-slate-500">{subtitle}</p>}
+    <header className="pr-dock flex min-h-[52px] flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b border-slate-200 bg-white py-2 pl-4">
+      <div className="min-w-0 flex-1 basis-40">
+        <p className="text-sm font-semibold text-slate-900">{title}</p>
+        {subtitle && (
+          <p className="truncate text-xs text-slate-600" title={subtitle}>
+            {subtitle}
+          </p>
+        )}
         {meta && <div className="mt-0.5">{meta}</div>}
       </div>
-      {actions && <div className="flex shrink-0 items-center gap-1">{actions}</div>}
+      {actions && <div className="flex shrink-0 items-center gap-1 max-sm:basis-full">{actions}</div>}
     </header>
   );
 }

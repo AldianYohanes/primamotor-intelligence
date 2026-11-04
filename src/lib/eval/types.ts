@@ -1,4 +1,5 @@
 import type { AgentMode, AgentTurnResult, ProcessStep } from "@/src/lib/agents/orchestrator";
+import type { ModelCallStats } from "@/src/lib/agents/inference-stats";
 
 export type Route = AgentTurnResult["agentType"];
 export const ROUTES: Route[] = ["query", "transaction", "off_topic"];
@@ -58,6 +59,8 @@ export type StockSnapshot = Record<string, number>;
 export interface Observation {
   scenarioId: string;
   mode: AgentMode;
+  /** Nomor ulangan pada run berulang (2, 3, …); kosong = ulangan 1 / run biasa. */
+  repetition?: number;
   /** Kelas akhir giliran (Router + koreksi kode); dasar routeCorrect. */
   predictedRoute: Route | null;
   /**
@@ -65,10 +68,14 @@ export interface Observation {
    * ternyata hanya membaca stok). Kosong di mode single_agent dan di run lama.
    */
   routerPredictedRoute?: Route | null;
+  /** Rute diputuskan kode tanpa memanggil Router; eksekusi ini tidak ikut akurasi "Router saja". */
+  routedByCode?: boolean;
   assistantText: string;
   modelReplies?: string[];
   /** Langkah "Lihat proses" yang sama dengan /chat. */
   processSteps?: ProcessStep[];
+  /** Waktu, token, dan kecepatan tiap panggilan model (Router, Agent) pada eksekusi ini. */
+  modelCalls?: ModelCallStats[];
   toolTrace: AgentTurnResult["toolTrace"];
   pending: boolean;
   /** Ada saat updateStock ditahan untuk pemilihan lokasi. */
@@ -87,6 +94,15 @@ export interface Observation {
   completionTokens: number | null;
   /** Opsi ablasi panjang prompt aktif saat eksekusi ini (lihat prompt-padding.ts). */
   promptPadding?: boolean;
+  /** Pengaman profil model dimatikan saat eksekusi ini (kondisi "model mentah"; lihat model-profile.ts). */
+  codeGuardsOff?: boolean;
+  /** WebLLM menolak grammar sebelum atau selama eksekusi ini, jadi panggilan model berjalan tanpa batasan bentuk. */
+  grammarUnavailable?: boolean;
+  /**
+   * Giliran ini memakai cache perangkat atau pencarian produknya gagal karena server
+   * (lihat server-check.ts). Eksekusi seperti ini tidak menguji model.
+   */
+  serverFallback?: boolean;
   runError?: string;
 }
 

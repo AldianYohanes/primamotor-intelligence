@@ -35,6 +35,7 @@ export async function updateSession(request: NextRequest) {
   // it means expired sessions won't be renewed until the next full reload.
   const {
     data: { user },
+    error: userError,
   } = await supabase.auth.getUser();
 
   // Rute publik yang boleh diakses tanpa login. Sebelumnya hanya
@@ -48,6 +49,10 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/login") ||
     request.nextUrl.pathname.startsWith("/signup") ||
     request.nextUrl.pathname.startsWith("/auth") ||
+    // Halaman informasi (Tentang, Privasi, Syarat) harus terbuka tanpa login.
+    request.nextUrl.pathname === "/about" ||
+    request.nextUrl.pathname === "/privacy" ||
+    request.nextUrl.pathname === "/terms" ||
     request.nextUrl.pathname.startsWith("/api/auth") ||
     // Vercel Cron tidak membawa sesi login, hanya header Authorization. Tanpa
     // pengecualian ini cron di-redirect ke /login dan monitoring tidak pernah
@@ -57,6 +62,16 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname === "/sw.js" ||
     request.nextUrl.pathname.startsWith("/serwist/") ||
     request.nextUrl.pathname === "/~offline";
+
+  if (!user && !isPublicPath && request.nextUrl.pathname.startsWith("/api/")) {
+    // API tidak boleh membalas HTML halaman login: klien (alat agent, eval) mem-parse JSON. Gangguan sesaat ke
+    // Supabase Auth dibedakan dari sesi yang memang tidak valid supaya klien tahu harus mencoba lagi.
+    const transient = userError?.name === "AuthRetryableFetchError" || (userError?.status ?? 0) >= 500;
+    return NextResponse.json(
+      { error: transient ? "Layanan sesi sedang tidak tersedia, coba lagi sebentar." : "Sesi tidak valid atau sudah habis, masuk ulang." },
+      { status: transient ? 503 : 401 },
+    );
+  }
 
   if (!user && !isPublicPath) {
     const url = request.nextUrl.clone();

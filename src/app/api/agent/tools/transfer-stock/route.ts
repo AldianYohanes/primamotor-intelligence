@@ -1,16 +1,18 @@
+import { readJson } from "@/src/lib/http/read-json";
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/src/lib/supabase/admin";
 import { transferStockSchema } from "@/src/lib/agents/tool-schemas";
 import { logger } from "@/src/lib/logging/logger";
 import { requireStaffRow } from "@/src/lib/auth/staff-context";
 import { conversationBelongsToStaff } from "@/src/lib/agents/conversation-owner";
+import { TOO_MANY_PENDING_MESSAGE, tooManyPendingProposals } from "@/src/lib/agents/pending-proposals";
 
 export async function POST(req: NextRequest) {
   const auth = await requireStaffRow("chat.use");
   if ("error" in auth) return auth.error;
   const { supabase, staffRow } = auth;
 
-  const parsed = transferStockSchema.safeParse(await req.json());
+  const parsed = transferStockSchema.safeParse(await readJson(req));
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Input tidak valid", details: parsed.error.flatten() },
@@ -85,6 +87,10 @@ export async function POST(req: NextRequest) {
         error: expireError,
       },
     );
+  }
+
+  if (await tooManyPendingProposals(admin, body.business_id, body.conversation_id)) {
+    return NextResponse.json({ error: TOO_MANY_PENDING_MESSAGE }, { status: 429 });
   }
 
   const { error: reserveError } = await admin.rpc("reserve_stock", {

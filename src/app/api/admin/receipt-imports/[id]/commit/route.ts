@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/src/lib/supabase/admin";
 import { logger } from "@/src/lib/logging/logger";
 import { requireStaffRow } from "@/src/lib/auth/staff-context";
+import { pickReceiptLocation } from "@/src/lib/inventory/receipt-location";
 
 /**
  * Tahap akhir §4.4: hanya item berstatus 'confirmed' yang di-commit jadi transaksi
@@ -37,6 +38,13 @@ export async function POST(
     .eq("import_id", id)
     .eq("status", "confirmed");
 
+  // Tanpa item terkonfirmasi tidak ada stok yang masuk; jangan tandai impor selesai.
+  if (!items || items.length === 0)
+    return NextResponse.json(
+      { error: "Belum ada baris yang dikonfirmasi. Konfirmasi minimal satu baris dulu sebelum commit ke stok." },
+      { status: 400 },
+    );
+
   const admin = createAdminClient();
   const committed: string[] = [];
   const failed: { item_id: string; error: string }[] = [];
@@ -50,14 +58,13 @@ export async function POST(
       continue;
     }
 
-    // Lokasi default = toko pertama tenant ini (barang masuk dari bon biasanya langsung ke toko)
-    const { data: defaultLocation, error: locationError } = await admin
+    // Lokasi default = Gudang (bon pemasok), atau Toko pertama bila tenant tidak punya Gudang
+    const { data: candidateLocations, error: locationError } = await admin
       .from("locations")
-      .select("id")
+      .select("id, type")
       .eq("business_id", importRow.business_id)
-      .eq("type", "toko")
-      .limit(1)
-      .maybeSingle();
+      .in("type", ["toko", "gudang"]);
+    const defaultLocation = pickReceiptLocation(candidateLocations ?? []);
 
     if (locationError) {
       logger.error("Gagal query lokasi default saat commit receipt import", {
@@ -69,14 +76,14 @@ export async function POST(
       });
       failed.push({
         item_id: item.id,
-        error: "Gagal mencari lokasi toko default",
+        error: "Gagal mencari lokasi default",
       });
       continue;
     }
     if (!defaultLocation) {
       failed.push({
         item_id: item.id,
-        error: "Lokasi toko default tidak ditemukan",
+        error: "Lokasi default (Gudang atau Toko) tidak ditemukan",
       });
       continue;
     }

@@ -3,8 +3,14 @@ import type { ChatMessage, ProcessStep } from "@/src/lib/agents/orchestrator";
 
 type SupabaseBrowserClient = ReturnType<typeof createClient>;
 
-/** Pesan yang ditampilkan di chat: pesan asisten bisa membawa langkah "Lihat proses". */
-export type StoredChatMessage = ChatMessage & { trace?: ProcessStep[] };
+/**
+ * Pesan yang ditampilkan di chat: pesan asisten bisa membawa langkah "Lihat proses"
+ * dan lama giliran (hanya di memori sesi ini, tidak disimpan ke database).
+ */
+export type StoredChatMessage = ChatMessage & {
+  trace?: ProcessStep[];
+  inference?: { totalMs: number };
+};
 
 /**
  * Sebelumnya: SETIAP kali halaman chat dibuka, baris agent_conversations baru

@@ -1,0 +1,260 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import clsx from "clsx";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/src/components/ui/dialog";
+import {
+  formatDuration,
+  formatRate,
+  inferenceTotals,
+  liveTokPerS,
+  type InferenceSnapshot,
+  type ModelCallStats,
+} from "@/src/lib/agents/inference-stats";
+import { userModelLabel } from "@/src/lib/agents/model-options";
+import { liveCallText, waitHint } from "./chat-ui";
+
+/** Satu giliran untuk tombol/modal statistik. `startedAt` dari Date.now(). */
+export interface TurnRecord {
+  id: string;
+  /** Pesan staf atau nama skenario. */
+  title: string;
+  startedAt: number;
+  snapshot: InferenceSnapshot | null;
+  /** Kosong selama giliran masih berjalan. */
+  totalMs?: number;
+  /** Jawaban akhir yang diterima staf; kosong selama berjalan atau bila giliran gagal. */
+  answer?: string;
+}
+
+const HISTORY_LIMIT = 20;
+
+/** Date.now() yang diperbarui tiap 250 ms selama `active`. */
+function useNow(active: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const id = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(id);
+  }, [active]);
+  return now;
+}
+
+function elapsedOf(turn: TurnRecord, now: number): number {
+  return turn.totalMs ?? now - turn.startedAt;
+}
+
+function modelLabel(modelId: string): string {
+  return userModelLabel(modelId);
+}
+
+/** "42s · Agent menulis ±37 token" di bawah indikator "lagi mikir". */
+export function LiveInferenceLine({ snapshot, startedAt }: { snapshot: InferenceSnapshot | null; startedAt: number }) {
+  const now = useNow(true);
+  const running = snapshot?.calls.at(-1);
+  const hint = waitHint(now - startedAt);
+  return (
+    <>
+      <p className="px-1 text-xs text-slate-500 tabular-nums">
+        {formatDuration(now - startedAt, { precise: false })}
+        {running?.status === "running" && ` · ${liveCallText(running.label, running.liveTokens)}`}
+      </p>
+      {/* role=status: penjelasan muncul sekali setelah 15 detik dan dibacakan pembaca layar. */}
+      {hint && (
+        <p role="status" className="mt-0.5 max-w-[90%] px-1 text-xs leading-snug text-slate-500 sm:max-w-[80%]">
+          {hint}
+        </p>
+      )}
+    </>
+  );
+}
+
+/** "Selesai dalam 38s" di bawah jawaban. */
+export function InferenceSummary({ totalMs }: { totalMs: number }) {
+  return <p className="mt-1 px-1 text-xs text-slate-500 tabular-nums">Selesai dalam {formatDuration(totalMs)}</p>;
+}
+
+function CallRow({ call, index }: { call: ModelCallStats; index: number }) {
+  const running = call.status === "running";
+  const out = call.completionTokens ?? call.liveTokens;
+  const rate = running ? liveTokPerS(call) : call.decodeTokPerS;
+  return (
+    <tr className="border-t border-slate-100 align-top">
+      <td className="py-1.5 pr-2 text-slate-700">
+        {index + 1}. {call.label}
+        {running && <span className="ml-1 text-brand-600">berjalan</span>}
+      </td>
+      <td className="py-1.5 pr-2 tabular-nums">{formatDuration(call.durationMs)}</td>
+      <td className="py-1.5 pr-2 tabular-nums">
+        {call.promptTokens ?? "–"} → {running ? `±${out}` : out}
+      </td>
+      <td className="py-1.5 pr-2 tabular-nums">{formatRate(call.prefillTokPerS)}</td>
+      <td className="py-1.5 pr-2 tabular-nums">{formatRate(rate)}</td>
+      <td className="py-1.5 tabular-nums">
+        {call.timeToFirstTokenMs === undefined ? "–" : formatDuration(call.timeToFirstTokenMs)}
+      </td>
+    </tr>
+  );
+}
+
+/** Tabel panggilan model; dipakai di /chat, live /eval, dan detail baris /eval. */
+export function CallTable({ calls }: { calls: ModelCallStats[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[480px] text-left text-xs text-slate-600">
+        <thead className="text-slate-600">
+          <tr>
+            <th className="py-1 pr-2 font-normal">Panggilan</th>
+            <th className="py-1 pr-2 font-normal">Waktu</th>
+            <th className="py-1 pr-2 font-normal">Token masuk → keluar</th>
+            <th className="py-1 pr-2 font-normal">Baca prompt</th>
+            <th className="py-1 pr-2 font-normal">Menulis</th>
+            <th className="py-1 font-normal">Kata pertama</th>
+          </tr>
+        </thead>
+        <tbody>
+          {calls.map((c, i) => (
+            <CallRow key={i} call={c} index={i} />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function TurnDetail({ turn, now }: { turn: TurnRecord; now: number }) {
+  const snapshot = turn.snapshot;
+  const totals = snapshot ? inferenceTotals(snapshot) : null;
+  return (
+    <div className="space-y-3 text-xs text-slate-600">
+      {turn.answer && (
+        <div className="space-y-1">
+          <p className="text-xs text-slate-600">Jawaban akhir</p>
+          <p className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-800">
+            {turn.answer}
+          </p>
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Stat label="Waktu" value={formatDuration(elapsedOf(turn, now), { precise: turn.totalMs !== undefined })} />
+        <Stat label="Panggilan model" value={String(totals?.calls ?? 0)} />
+        <Stat label="Token masuk → keluar" value={totals ? `${totals.promptTokens} → ${totals.completionTokens}` : "–"} />
+        <Stat label="Rata-rata menulis" value={formatRate(totals?.decodeTokPerS)} />
+      </div>
+      <p>
+        Model {snapshot ? modelLabel(snapshot.modelId) : "–"}
+        {totals && ` · ${formatDuration(totals.modelMs)} dipakai model`}
+      </p>
+      {snapshot && snapshot.calls.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[480px] text-left">
+            <thead className="text-slate-600">
+              <tr>
+                <th className="py-1 pr-2 font-normal">Panggilan</th>
+                <th className="py-1 pr-2 font-normal">Waktu</th>
+                <th className="py-1 pr-2 font-normal">Token masuk → keluar</th>
+                <th className="py-1 pr-2 font-normal">Baca prompt</th>
+                <th className="py-1 pr-2 font-normal">Menulis</th>
+                <th className="py-1 font-normal">Kata pertama</th>
+              </tr>
+            </thead>
+            <tbody>
+              {snapshot.calls.map((c, i) => (
+                <CallRow key={i} call={c} index={i} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="text-slate-600">Belum ada panggilan model di giliran ini.</p>
+      )}
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-slate-200 px-2.5 py-2">
+      <p className="text-xs text-slate-600">{label}</p>
+      <p className="text-sm font-semibold text-slate-800 tabular-nums">{value}</p>
+    </div>
+  );
+}
+
+/**
+ * Tombol teks berisi waktu giliran terakhir (berjalan atau selesai); membuka modal
+ * statistik giliran itu plus riwayat giliran sesi ini. Tidak tampil sebelum ada giliran.
+ */
+export function InferenceStatsButton({ turns, className }: { turns: TurnRecord[]; className?: string }) {
+  const [open, setOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const latest = turns.at(-1);
+  const running = latest !== undefined && latest.totalMs === undefined;
+  const now = useNow(running || open);
+
+  if (!latest) return null;
+  const selected = turns.find((t) => t.id === selectedId) ?? latest;
+  const history = turns.slice(-HISTORY_LIMIT).reverse();
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          setSelectedId(null);
+          setOpen(true);
+        }}
+        className={clsx("btn btn-secondary tabular-nums", className)}
+        aria-label="Lihat statistik model"
+        title="Statistik model"
+      >
+        {formatDuration(elapsedOf(latest, now), { precise: false })}
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Statistik model</DialogTitle>
+            <DialogDescription className="line-clamp-2">
+              {selected.title}
+              {selected.totalMs === undefined && " · sedang berjalan"}
+            </DialogDescription>
+          </DialogHeader>
+          <TurnDetail turn={selected} now={now} />
+          {history.length > 1 && (
+            <div className="space-y-1 border-t border-slate-100 pt-3">
+              <p className="text-xs font-medium text-slate-700">Giliran di sesi ini</p>
+              <ul className="space-y-1">
+                {history.map((t) => {
+                  const calls = t.snapshot?.calls.length ?? 0;
+                  return (
+                    <li key={t.id}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedId(t.id)}
+                        className={clsx(
+                          "flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left text-xs hover:bg-slate-50",
+                          t.id === selected.id && "bg-slate-100",
+                        )}
+                      >
+                        <span className="truncate text-slate-700">{t.title}</span>
+                        <span className="shrink-0 text-slate-500 tabular-nums">
+                          {formatDuration(elapsedOf(t, now), { precise: false })} · {calls} panggilan
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}

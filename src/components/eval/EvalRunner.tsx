@@ -1,14 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { MLCEngineInterface } from "@mlc-ai/web-llm";
 import { createClient } from "@/src/lib/supabase/client";
+import { refreshCatalog } from "@/src/lib/cache/indexeddb";
 import { isWebGPUAvailable } from "@/src/lib/agents/webgpu-support";
 import { MODEL_ID, MODEL_OPTIONS } from "@/src/lib/agents/model-options";
+import { checkGpuCompatibility, formatMiB, modelBufferBytes, modelFitsGpu } from "@/src/lib/agents/gpu-compat";
 import type { AgentMode, ProcessStep } from "@/src/lib/agents/orchestrator";
 import { ProcessTimeline } from "@/src/components/chat/ProcessDetails";
+import { EvalRowDetail } from "@/src/components/eval/EvalRowDetail";
+import { CallTable, InferenceStatsButton, LiveInferenceLine, type TurnRecord } from "@/src/components/chat/InferenceStats";
+import type { InferenceSnapshot } from "@/src/lib/agents/inference-stats";
 import scenarioFile from "@/src/lib/eval/scenarios.json";
-import { scoreScenario, stockKey, summarize, toCsv, type ModeSummary } from "@/src/lib/eval/scoring";
+import { codeAssistLabels, codeAssistOf } from "@/src/lib/eval/code-assist";
+import { answerQualityOf, scoreScenario, stockKey, summarize, toCsv, type ModeSummary } from "@/src/lib/eval/scoring";
 import {
   buildPlan,
   clearSavedRun,
@@ -17,6 +23,7 @@ import {
   fromStoredRows,
   loadSavedRun,
   remainingPlan,
+  runFromExport,
   saveRun,
   toStoredRow,
   type Interruption,
@@ -24,6 +31,7 @@ import {
 } from "@/src/lib/eval/run-store";
 import { holdWakeLock } from "@/src/lib/pwa/wake-lock";
 import { alertUser, notificationPermission, primeAlerts } from "@/src/lib/eval/alerts";
+import { MAX_CONSECUTIVE_SERVER_FALLBACKS, checkAgentServer, hasServerFallback } from "@/src/lib/eval/server-check";
 import type {
   ConfirmOutcome,
   Observation,
@@ -51,6 +59,9 @@ import {
   setPrefillChunkPreference,
 } from "@/src/lib/agents/prefill-preference";
 import { isPromptPaddingOn, setPromptPadding } from "@/src/lib/agents/prompt-padding";
+import { isCodeGuardsOff, setCodeGuardsOff } from "@/src/lib/agents/model-profile";
+import { isGrammarUnavailable } from "@/src/lib/agents/grammar-status";
+import { Select } from "@/src/components/ui/select";
 
 const fixedDevicePosition = () => Promise.resolve(EVAL_DEVICE_POSITION);
 const SCENARIOS = scenarioFile.scenarios as unknown as Scenario[];
@@ -103,9 +114,17 @@ async function readGpuInfo(): Promise<GpuInfo | null> {
   return probes.find((p) => p.preference === pref)?.adapter ?? null;
 }
 
+/** Versi kode yang sedang jalan (diisi next.config.mjs saat dev/build). */
+const CODE_VERSION = {
+  commit: process.env.NEXT_PUBLIC_GIT_COMMIT ?? "unknown",
+  branch: process.env.NEXT_PUBLIC_GIT_BRANCH ?? "unknown",
+};
+
 async function collectEnvironment(modelId: string) {
   return {
     model: modelId,
+    codeCommit: CODE_VERSION.commit,
+    codeBranch: CODE_VERSION.branch,
     userAgent: navigator.userAgent,
     hardwareConcurrency: navigator.hardwareConcurrency,
     deviceMemoryGB: (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? null,
@@ -116,6 +135,8 @@ async function collectEnvironment(modelId: string) {
     prefillChunkSize: null as { effective: number | null; modelDefault: number | null } | null,
     /** Ablasi: prompt agent spesialis diisi sampai sepanjang prompt single-agent; lihat prompt-padding.ts. */
     promptPadding: isPromptPaddingOn(),
+    /** Kondisi "model mentah": pengaman profil model dimatikan; lihat model-profile.ts. */
+    codeGuardsOff: isCodeGuardsOff(),
   };
 }
 
@@ -123,6 +144,12 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   const supabase = useMemo(() => createClient(), []);
   const [modeChoice, setModeChoice] = useState<ModeChoice>("both");
   const [idFilter, setIdFilter] = useState("");
+  // Run berulang: seluruh rencana diulang N kali, data eval direset di awal ulangan 2 dst.
+  const [repetitions, setRepetitions] = useState(1);
+  // Lanjut otomatis sesudah GPU putus: maks AUTO_RESUME_MAX kali per run, jeda AUTO_RESUME_DELAY_MS.
+  const [autoResume, setAutoResume] = useState(true);
+  const autoResumeCount = useRef(0);
+  const autoResumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pin, setPin] = useState("");
   const [running, setRunning] = useState(false);
   const stopRef = useRef<AbortController | null>(null);
@@ -145,10 +172,23 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   const [alertsOn, setAlertsOn] = useState(true);
   const [notifPermission, setNotifPermission] = useState<ReturnType<typeof notificationPermission>>("default");
   const [liveSteps, setLiveSteps] = useState<ProcessStep[]>([]);
+  const [guardsOff, setGuardsOff] = useState(false);
+  // Baris hasil yang detailnya terbuka (kunci: indeks baris).
+  const [openRows, setOpenRows] = useState<Set<number>>(new Set());
+  // Statistik model skenario terakhir (maks. 20) untuk tombol/modal statistik.
+  const [evalTurns, setEvalTurns] = useState<TurnRecord[]>([]);
   const [prefillChunk, setPrefillChunk] = useState<number | null>(null);
   const [padPrompt, setPadPrompt] = useState(false);
   // Opsi ablasi selalu mulai mati di setiap kunjungan halaman.
-  useEffect(() => setPromptPadding(false), []);
+  useEffect(() => {
+    setPromptPadding(false);
+    setCodeGuardsOff(false);
+    // Opsi ablasi dan model mentah tidak boleh ikut ke /chat bila halaman ini ditutup tanpa muat ulang.
+    return () => {
+      setPromptPadding(false);
+      setCodeGuardsOff(false);
+    };
+  }, []);
   const [gpuProbes, setGpuProbes] = useState<GpuProbe[] | null>(null);
   const [gpuPref, setGpuPref] = useState<GpuPowerPreference | null>(null);
   // Ganti GPU baru berlaku untuk engine baru; engine yang sudah dimuat tetap di GPU lama.
@@ -156,7 +196,15 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   const [savedRun, setSavedRun] = useState<SavedRun | null>(null);
   const [interruptions, setInterruptions] = useState<Interruption[]>([]);
   // Modal besar saat run berhenti karena error, supaya terlihat dari jauh (bukan hanya teks status).
-  const [errorModal, setErrorModal] = useState<{ kind: "gpu" | "error"; message: string; during: string; at: string } | null>(null);
+  const [errorModal, setErrorModal] = useState<{
+    kind: "gpu" | "error";
+    message: string;
+    during: string;
+    at: string;
+    /** Diisi saat run akan dilanjutkan otomatis: waktu (Date.now) dan percobaan ke berapa. */
+    autoResumeAt?: number;
+    attempt?: number;
+  } | null>(null);
   const [seeding, setSeeding] = useState(false);
   const [seedStatus, setSeedStatus] = useState<string | null>(null);
   const [progress, setProgress] = useState<{
@@ -167,9 +215,12 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   } | null>(null);
 
   useEffect(() => {
+    // localStorage dan WebGPU hanya ada di browser: dibaca sesudah hidrasi, bukan di inisialisasi state.
+    /* eslint-disable react-hooks/set-state-in-effect */
     setSavedRun(loadSavedRun());
     setPrefillChunk(getPrefillChunkPreference());
     setGpuPref(getGpuPreference());
+    /* eslint-enable react-hooks/set-state-in-effect */
     probeGpus().then(setGpuProbes);
   }, []);
 
@@ -196,6 +247,8 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   }, [gpuPref]);
 
   const gpuRecommendation = gpuProbes ? recommendGpu(gpuProbes) : null;
+  const gpuLimitBytes = gpuInfo && gpuInfo !== "loading" ? gpuInfo.maxStorageBufferBindingSizeMB * 2 ** 20 : null;
+  const modelCompat = checkGpuCompatibility(modelId, gpuLimitBytes);
 
   const isEvalTenant = businessSlug === EVAL_TENANT_SLUG;
   // Beberapa awalan dipisah koma, mis. "T-06, T-07, T-08, T-09, T-1".
@@ -329,6 +382,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
     stoppedReason: Interruption | null;
     interruptions: Interruption[];
     resumed: SavedRun["resumed"];
+    plan?: SavedRun["plan"] | null;
   }) {
     const byMode = (["multi_agent", "single_agent"] as AgentMode[])
       .map((m) => args.rows.filter((r) => r.observation.mode === m))
@@ -341,6 +395,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         draftLabels: draftCount,
         environment: args.environment,
         resumed: args.resumed,
+        plan: args.plan ?? undefined,
         interruptions: args.interruptions,
         stoppedReason: args.stoppedReason,
         summaries: byMode,
@@ -366,8 +421,15 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
     return () => window.removeEventListener("keydown", onKey);
   }, [running]);
 
-  async function run(resume?: SavedRun) {
+  function cancelAutoResume() {
+    if (autoResumeTimer.current) clearTimeout(autoResumeTimer.current);
+    autoResumeTimer.current = null;
+  }
+
+  async function run(resume?: SavedRun, opts: { auto?: boolean } = {}) {
     if (!isEvalTenant) return;
+    cancelAutoResume();
+    if (!opts.auto) autoResumeCount.current = 0;
     if (resume && resume.modelId !== modelId) {
       setStatus(`Run tersimpan memakai ${resume.modelId}. Pilih model yang sama untuk melanjutkan.`);
       return;
@@ -382,19 +444,25 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
       setPadPrompt(resume.promptPadding);
       setPromptPadding(resume.promptPadding);
     }
+    if (resume && typeof resume.codeGuardsOff === "boolean" && resume.codeGuardsOff !== isCodeGuardsOff()) {
+      setGuardsOff(resume.codeGuardsOff);
+      setCodeGuardsOff(resume.codeGuardsOff);
+    }
     if (alertsOn) enableAlerts();
     let resetEngine: (() => void) | undefined;
     const releaseWake = holdWakeLock();
     const controller = new AbortController();
     stopRef.current = controller;
     const runStartedAt = resume?.startedAt ?? new Date().toISOString();
-    const plan = resume?.plan ?? buildPlan(selected.map((s) => s.id), modes);
+    const plan = resume?.plan ?? buildPlan(selected.map((s) => s.id), modes, repetitions);
+    const totalRepetitions = Math.max(1, ...plan.map((p) => p.repetition ?? 1));
     const collected: ScoredRow[] = resume ? fromStoredRows(resume.rows, SCENARIOS) : [];
     const interruptions: Interruption[] = resume?.interruptions ?? [];
     const resumed: SavedRun["resumed"] = resume?.resumed ?? [];
     let runEnvironment: unknown = resume?.environment ?? null;
     // Dikunci di awal run: nilai awal dipertahankan sepanjang run, juga lintas resume.
     const runPadding = typeof resume?.promptPadding === "boolean" ? resume.promptPadding : isPromptPaddingOn();
+    const runGuardsOff = typeof resume?.codeGuardsOff === "boolean" ? resume.codeGuardsOff : isCodeGuardsOff();
     let autosaveOk = true;
     const persist = () => {
       autosaveOk = saveRun({
@@ -404,6 +472,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         plan,
         environment: runEnvironment,
         promptPadding: runPadding,
+        codeGuardsOff: runGuardsOff,
         rows: collected.map(toStoredRow),
         interruptions,
         resumed,
@@ -421,6 +490,15 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
     let stop: Interruption | null = null;
     try {
       if (!isWebGPUAvailable()) throw new Error("Browser ini tidak mendukung WebGPU.");
+      setStatus("Memeriksa server pencarian stok…");
+      const serverCheck = await checkAgentServer();
+      if (!serverCheck.ok) {
+        throw new Error(
+          `Server pencarian stok tidak bisa dipakai (${serverCheck.reason}). Run tidak dimulai karena jawaban stok akan datang dari cache lama dan hasilnya tidak valid.`,
+        );
+      }
+      // Katalog untuk pengaman rute profil model kecil; run tidak memakai halaman chat yang biasanya memuatnya.
+      await refreshCatalog(supabase, businessId).catch(() => {});
       setStatus("Memeriksa data tenant eval…");
       const refs = await resolveRefs();
       await checkTenantIsFresh();
@@ -473,15 +551,26 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
 
       const todo = remainingPlan(plan, collected.map(toStoredRow));
       const durations: number[] = [];
+      let consecutiveServerFallbacks = 0;
       const segmentStart = performance.now();
       // Mode diselang-seling per skenario supaya kondisi perangkat (suhu, beban) setara di kedua konfigurasi.
-      for (const { scenarioId, mode } of todo) {
+      for (const { scenarioId, mode, repetition = 1 } of todo) {
         if (controller.signal.aborted) throw Object.assign(new Error("Dihentikan oleh pengguna."), { name: "TurnStoppedError" });
         const scenario = SCENARIOS.find((s) => s.id === scenarioId);
         if (!scenario) continue;
+        // Awal ulangan 2 dst.: data eval direset supaya stok tiap ulangan mulai dari seed yang sama.
+        if (repetition > 1 && !collected.some((r) => (r.observation.repetition ?? 1) === repetition)) {
+          setStatus(`Ulangan ${repetition}/${totalRepetitions}: mereset data eval…`);
+          const res = await fetch("/api/eval/seed", { method: "POST" });
+          if (!res.ok) {
+            const body = (await res.json().catch(() => ({}))) as { error?: string };
+            throw new Error(`Reset data eval sebelum ulangan ${repetition} gagal: ${body.error ?? `HTTP ${res.status}`}`);
+          }
+        }
         const execStart = performance.now();
         const done = collected.length;
-        setStatus(`[${done + 1}/${plan.length}] ${scenario.id} · ${mode}`);
+        const repLabel = totalRepetitions > 1 ? ` · ulangan ${repetition}/${totalRepetitions}` : "";
+        setStatus(`[${done + 1}/${plan.length}] ${scenario.id} · ${mode}${repLabel}`);
         setProgress({
           done,
           total: plan.length,
@@ -493,6 +582,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         const base: Omit<Observation, "stockAfter"> = {
           scenarioId: scenario.id,
           mode,
+          ...(repetition > 1 && { repetition }),
           predictedRoute: null,
           assistantText: "",
           toolTrace: [],
@@ -503,9 +593,31 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
           promptTokens: null,
           completionTokens: null,
           promptPadding: isPromptPaddingOn(),
+          ...(isCodeGuardsOff() && { codeGuardsOff: true }),
         };
         let observation: Observation;
         setLiveSteps([]);
+        const scenarioStartedAt = Date.now();
+        const turnId = `${scenario.id}-${mode}-${scenarioStartedAt}`;
+        const updateTurn = (patch: Partial<TurnRecord>) =>
+          setEvalTurns((prev) => prev.map((t) => (t.id === turnId ? { ...t, ...patch } : t)));
+        setEvalTurns((prev) => [
+          ...prev.slice(-19),
+          { id: turnId, title: `${scenario.id} · ${mode === "multi_agent" ? "multi" : "single"} · ${scenario.message}`, startedAt: scenarioStartedAt, snapshot: null },
+        ]);
+        let latestInference: InferenceSnapshot | null = null;
+        // Maksimal 2 render per detik supaya tampilan statistik tidak menambah beban
+        // selama skenario diukur (sebelumnya halaman ini tidak render per token).
+        let lastInferenceRender = 0;
+        let lastCallCount = 0;
+        const onInference = (snapshot: InferenceSnapshot) => {
+          latestInference = snapshot;
+          const now = Date.now();
+          if (now - lastInferenceRender < 500 && snapshot.calls.length === lastCallCount && snapshot.calls.at(-1)?.status === "running") return;
+          lastInferenceRender = now;
+          lastCallCount = snapshot.calls.length;
+          updateTurn({ snapshot });
+        };
         try {
           const conversationId = await createConversation(mode);
           const result = await guard(
@@ -513,6 +625,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
               mode,
               getDevicePosition: fixedDevicePosition,
               onStep: setLiveSteps,
+              onInference,
               signal: controller.signal,
             }),
           );
@@ -528,10 +641,14 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             ...base,
             predictedRoute: result.agentType,
             routerPredictedRoute: result.routerAgentType ?? null,
+            ...(result.routedByCode && { routedByCode: true }),
             assistantText: result.assistantText,
             modelReplies: result.modelReplies,
+            ...(isGrammarUnavailable() && { grammarUnavailable: true }),
             processSteps: result.processSteps,
+            ...(result.inferenceStats && { modelCalls: result.inferenceStats.calls }),
             toolTrace: result.toolTrace,
+            ...(hasServerFallback(result.toolTrace) && { serverFallback: true }),
             pending: Boolean(result.pendingConfirmation),
             // Runner tidak memilihkan lokasi: pilihan staf di luar cakupan satu skenario.
             locationPrompt:
@@ -562,8 +679,16 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         }
         collected.push(scoreScenario(scenario, observation, refs));
         setRows([...collected]);
+        updateTurn({ snapshot: latestInference, totalMs: Date.now() - scenarioStartedAt, answer: observation.assistantText || undefined });
         durations.push(performance.now() - execStart);
         persist();
+        // Server gagal berulang: lanjut hanya membuang jam, karena jawaban stok datang dari cache lama.
+        consecutiveServerFallbacks = observation.serverFallback ? consecutiveServerFallbacks + 1 : 0;
+        if (consecutiveServerFallbacks >= MAX_CONSECUTIVE_SERVER_FALLBACKS) {
+          throw new Error(
+            `Run dihentikan: ${consecutiveServerFallbacks} eksekusi berturut-turut memakai cache perangkat atau gagal mencari produk ke server (terakhir ${scenario.id} · ${mode}). Periksa server lalu lanjutkan run dari run tersimpan.`,
+          );
+        }
       }
       setProgress({
         done: collected.length,
@@ -587,7 +712,23 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         at: new Date().toISOString(),
       };
       setStoppedReason(stop);
-      if (stop.kind !== "stopped") setErrorModal({ kind: stop.kind, message, during, at: stop.at });
+      const canAutoResume = err instanceof GpuDeviceError && autoResume && autoResumeCount.current < AUTO_RESUME_MAX;
+      if (canAutoResume) {
+        autoResumeCount.current += 1;
+        const attempt = autoResumeCount.current;
+        const autoResumeAt = Date.now() + AUTO_RESUME_DELAY_MS;
+        setErrorModal({ kind: "gpu", message, during, at: stop.at, autoResumeAt, attempt });
+        autoResumeTimer.current = setTimeout(() => {
+          autoResumeTimer.current = null;
+          const saved = loadSavedRun();
+          if (saved) {
+            setErrorModal(null);
+            void run(saved, { auto: true });
+          }
+        }, AUTO_RESUME_DELAY_MS);
+      } else if (stop.kind !== "stopped") {
+        setErrorModal({ kind: stop.kind, message, during, at: stop.at });
+      }
       interruptions.push(stop);
       setInterruptions([...interruptions]);
       persist();
@@ -612,6 +753,8 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
       stopRef.current = null;
       releaseWake();
       setRunning(false);
+      // Skenario yang terputus (GPU, error, dihentikan) jangan terus terhitung berjalan.
+      setEvalTurns((prev) => prev.map((x) => (x.totalMs === undefined ? { ...x, totalMs: Date.now() - x.startedAt } : x)));
       if (collected.length > 0) {
         const json = buildExport({
           rows: collected,
@@ -621,6 +764,7 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
           // Penghentian yang sedang terjadi sudah ada di stoppedReason.
           interruptions: stop ? interruptions.slice(0, -1) : interruptions,
           resumed,
+          plan,
         });
         downloadResults(json, collected, runStartedAt);
       }
@@ -645,8 +789,34 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         stoppedReason,
         interruptions: stoppedReason ? interruptions.slice(0, -1) : interruptions,
         resumed: savedRun?.resumed ?? [],
+        plan: savedRun?.plan,
       }),
       "application/json",
+    );
+  }
+
+  /** Pulihkan run dari berkas JSON hasil "Unduh JSON" (mis. sesudah penyimpanan browser PC warnet terhapus). */
+  async function importJson(file: File | undefined) {
+    if (!file) return;
+    const result = runFromExport(await file.text(), {
+      scenarioVersion: scenarioFile.version,
+      scenarios: SCENARIOS,
+      fallbackPlan: buildPlan(selected.map((s) => s.id), modes, repetitions),
+    });
+    if (!result.ok) {
+      setStatus(`Impor gagal: ${result.error}`);
+      return;
+    }
+    if (savedRun && !window.confirm(`Run tersimpan di browser (${savedRun.rows.length} eksekusi) akan diganti oleh berkas ini (${result.imported} eksekusi). Lanjutkan?`)) return;
+    saveRun(result.run);
+    setSavedRun(loadSavedRun());
+    setRows(fromStoredRows(result.run.rows, SCENARIOS));
+    setStartedAt(result.run.startedAt);
+    setInterruptions(result.run.interruptions);
+    setModelId(result.run.modelId);
+    const left = remainingPlan(result.run.plan, result.run.rows).length;
+    setStatus(
+      `Run diimpor: ${result.imported} eksekusi sudah ada, ${left} tersisa${result.skipped ? `, ${result.skipped} baris dilewati (skenario tidak dikenal)` : ""}. Jangan reset data eval, supaya stok sama seperti saat run berhenti, lalu tekan "Lanjutkan run".`,
     );
   }
 
@@ -660,134 +830,125 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         </span>
       </div>
 
-      <header className="space-y-1">
-        <h1 className="text-xl font-semibold text-slate-900">Evaluasi Agent (Bab 4)</h1>
-        <p className="text-sm text-slate-600">
-          Menjalankan {SCENARIOS.length} skenario berlabel terhadap arsitektur multi-agent dan baseline single-agent pada
-          perangkat ini.
-        </p>
+      <header>
+        <h1 className="text-xl font-semibold text-slate-900">Evaluasi Agent</h1>
       </header>
 
       {!isEvalTenant && (
         <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          Halaman ini hanya berjalan di tenant <code>{EVAL_TENANT_SLUG}</code> karena skenario transaksi yang dikonfirmasi PIN
-          benar-benar mengubah stok. Klik <strong>Keluar</strong> di kanan atas, lalu login dengan kode toko{" "}
-          <code>{EVAL_TENANT_SLUG}</code> dan username <code>evaluator</code>.
+          Halaman ini hanya jalan di tenant <code>{EVAL_TENANT_SLUG}</code>, karena skenario transaksi benar-benar mengubah stok.
+          Klik <strong>Keluar</strong>, lalu login dengan kode toko <code>{EVAL_TENANT_SLUG}</code> dan username{" "}
+          <code>evaluator</code>.
         </div>
       )}
       {draftCount > 0 && (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-          {draftCount} skenario masih berlabel <code>draft</code>. Periksa label acuan secara manual sebelum run resmi.
+          {draftCount} skenario masih berlabel <code>draft</code>. Cek label acuannya sebelum run resmi.
         </div>
       )}
       {warning && (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{warning}</div>
       )}
-      {isEvalTenant && (
-        <div className="flex flex-wrap items-center gap-3 rounded-md border border-slate-200 bg-white p-3 text-sm">
-          <button className="btn btn-secondary px-3 py-1.5" onClick={resetEvalData} disabled={running || seeding}>
-            {seeding ? "Mereset…" : "Reset data eval"}
-          </button>
-          <span className="text-slate-600">
-            {seedStatus ?? "Kembalikan stok, riwayat penjualan, percakapan, dan audit log tenant eval ke keadaan awal sebelum run baru."}
-          </span>
-        </div>
-      )}
 
-      <section className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4">
-        <label className="space-y-1 text-sm">
-          <span className="font-medium text-slate-700">Model</span>
-          <select
-            className="field-input w-full"
-            value={modelId}
-            onChange={(e) => setModelId(e.target.value)}
-            disabled={running}
-          >
-            {MODEL_OPTIONS.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label} · ~{(m.vramMB / 1024).toFixed(1).replace(".", ",")} GB
-                {m.id === MODEL_ID ? " (default)" : ""}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="space-y-1 text-sm">
-          <span className="font-medium text-slate-700">Konfigurasi</span>
-          <select
-            className="field-input w-full"
-            value={modeChoice}
-            onChange={(e) => setModeChoice(e.target.value as ModeChoice)}
-            disabled={running}
-          >
-            <option value="both">Keduanya (diselang-seling)</option>
-            <option value="multi_agent">Multi-agent saja</option>
-            <option value="single_agent">Baseline single-agent saja</option>
-          </select>
-        </label>
-        <label className="flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="mt-1"
-            checked={padPrompt}
-            onChange={(e) => {
-              setPadPrompt(e.target.checked);
-              setPromptPadding(e.target.checked);
-            }}
-            disabled={running}
-          />
-          <span>
-            <span className="font-medium text-slate-700">Ablasi: samakan panjang prompt multi-agent dengan single-agent</span>
-            <span className="block text-xs text-slate-500">
-              Hanya memengaruhi mode multi-agent; tercatat di lingkungan run. Pakai hanya untuk run ablasi.
-            </span>
-          </span>
-        </label>
-        <label className="space-y-1 text-sm">
-          <span className="font-medium text-slate-700">Filter ID (awalan)</span>
-          <input
-            className="field-input w-full"
-            placeholder="mis. Q, T-0, atau T-06, T-1"
-            value={idFilter}
-            onChange={(e) => setIdFilter(e.target.value)}
-            disabled={running}
-          />
-        </label>
-        <label className="space-y-1 text-sm">
-          <span className="font-medium text-slate-700">PIN evaluator</span>
-          <input
-            className="field-input w-full"
-            type="password"
-            inputMode="numeric"
-            placeholder={needsPin ? "Wajib untuk skenario konfirmasi" : "Tidak diperlukan"}
-            value={pin}
-            onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-            disabled={running}
-          />
-        </label>
-        <label className="space-y-1 text-sm">
-          <span className="font-medium text-slate-700">Potongan prefill (GPU lemah)</span>
-          <select
-            className="field-input w-full"
-            value={prefillChunk ?? ""}
-            onChange={(e) => {
-              const size = e.target.value ? Number(e.target.value) : null;
-              setPrefillChunk(size);
-              setPrefillChunkPreference(size);
-            }}
-            disabled={running}
-          >
-            <option value="">Bawaan model</option>
-            {PREFILL_CHUNK_OPTIONS.map((n) => (
-              <option key={n} value={n}>
-                {n} token
-              </option>
-            ))}
-          </select>
-        </label>
-        <p className="self-end text-xs text-slate-500 sm:col-span-1 lg:col-span-3">
-          Kecilkan bila GPU di-reset Windows (DXGI_ERROR_DEVICE_HUNG) saat pemanasan. Tersimpan di perangkat ini,
-          berlaku juga untuk /chat, dan dicatat di JSON hasil.
-        </p>
+      <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-slate-900">Pengaturan</h2>
+          {isEvalTenant && (
+            <div className="flex items-center gap-2 text-sm text-slate-600">
+              {seedStatus && <span>{seedStatus}</span>}
+              <button className="btn btn-secondary px-3 py-1.5" onClick={resetEvalData} disabled={running || seeding}>
+                {seeding ? "Mereset…" : "Reset data eval"}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-slate-700">Model</span>
+            <Select className="field-input w-full" value={modelId} onValueChange={(value) => setModelId(value)} disabled={running}>
+              {MODEL_OPTIONS.map((m) => (
+                <option key={m.id} value={m.id} disabled={!modelFitsGpu(m.id, gpuLimitBytes)}>
+                  {m.label} · ~{(m.vramMB / 1024).toFixed(1).replace(".", ",")} GB
+                  {m.id === MODEL_ID ? " (default)" : ""}
+                  {modelFitsGpu(m.id, gpuLimitBytes) ? "" : ` · butuh buffer GPU ${formatMiB(modelBufferBytes(m.id) ?? 0)}`}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-slate-700">Mode</span>
+            <Select
+              className="field-input w-full"
+              value={modeChoice}
+              onValueChange={(value) => setModeChoice(value as ModeChoice)}
+              disabled={running}
+            >
+              <option value="both">Keduanya (diselang-seling)</option>
+              <option value="multi_agent">Multi-agent saja</option>
+              <option value="single_agent">Single-agent saja</option>
+            </Select>
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-slate-700">Filter ID</span>
+            <input
+              className="field-input w-full"
+              placeholder="mis. Q, T-0, atau T-06, T-1"
+              value={idFilter}
+              onChange={(e) => setIdFilter(e.target.value)}
+              disabled={running}
+            />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-slate-700">Ulangan</span>
+            <Select
+              className="field-input w-full"
+              value={String(repetitions)}
+              onValueChange={(value) => setRepetitions(Number(value))}
+              disabled={running}
+            >
+              {[1, 2, 3, 4, 5].map((n) => (
+                <option key={n} value={n}>
+                  {n === 1 ? "1× (run biasa)" : `${n}× (data direset tiap ulangan)`}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-slate-700">PIN evaluator</span>
+            <input
+              className="field-input w-full"
+              type="password"
+              inputMode="numeric"
+              placeholder={needsPin ? "Wajib untuk skenario konfirmasi" : "Tidak diperlukan"}
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
+              disabled={running}
+            />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-slate-700">Potongan prefill</span>
+            <Select
+              className="field-input w-full"
+              value={prefillChunk === null ? "" : String(prefillChunk)}
+              onValueChange={(value) => {
+                const size = value ? Number(value) : null;
+                setPrefillChunk(size);
+                setPrefillChunkPreference(size);
+              }}
+              disabled={running}
+            >
+              <option value="">Bawaan model</option>
+              {PREFILL_CHUNK_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {n} token
+                </option>
+              ))}
+            </Select>
+            <span className="block text-xs text-slate-500">Kecilkan kalau GPU hang saat pemanasan.</span>
+          </label>
+        </div>
+
         <GpuChoice
           probes={gpuProbes}
           recommendation={gpuRecommendation}
@@ -800,30 +961,52 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             setGpuPrefChanged(true);
           }}
         />
-        <p className="text-xs text-slate-500 sm:col-span-2 lg:col-span-4">
-          {gpuInfo === "loading"
-            ? "Membaca info GPU…"
-            : gpuInfo === null
-              ? "WebGPU tidak tersedia di browser ini."
-              : `GPU: ${gpuInfo.description || gpuInfo.vendor || "tidak diketahui"} · batas buffer ${gpuInfo.maxStorageBufferBindingSizeMB} MB · shader-f16 ${gpuInfo.shaderF16 ? "ada" : "tidak ada"}`}
-          {gpuInfo && gpuInfo !== "loading" && !gpuInfo.shaderF16 && modelId.includes("q4f16") && (
-            <span className="text-amber-700"> · Model q4f16 butuh shader-f16, pilih varian q4f32.</span>
-          )}
-        </p>
-        <div className="flex flex-wrap items-center gap-3 text-sm sm:col-span-2 lg:col-span-4">
-          <label className="flex items-center gap-2 text-slate-700">
-            <input type="checkbox" checked={alertsOn} onChange={(e) => setAlertsOn(e.target.checked)} />
-            Bunyikan suara & kirim notifikasi saat selesai atau error
+        {modelCompat.message && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">{modelCompat.message} Pilih model lain sebelum run.</p>
+        )}
+        {(gpuInfo === "loading" || gpuInfo === null || (!gpuInfo.shaderF16 && modelId.includes("q4f16"))) && (
+          <p className="text-xs text-slate-500">
+            {gpuInfo === "loading"
+              ? "Membaca info GPU…"
+              : gpuInfo === null
+                ? "WebGPU tidak tersedia di browser ini."
+                : "GPU ini tidak punya shader-f16. Model q4f16 butuh itu, pilih varian tanpa f16."}
+          </p>
+        )}
+
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-slate-100 pt-3 text-sm text-slate-700">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={padPrompt}
+              onChange={(e) => {
+                setPadPrompt(e.target.checked);
+                setPromptPadding(e.target.checked);
+              }}
+              disabled={running}
+            />
+            Ablasi: samakan panjang prompt multi-agent dengan single-agent
           </label>
-          <span className="text-xs text-slate-500">
-            {notifPermission === "granted"
-              ? "Notifikasi diizinkan."
-              : notifPermission === "denied"
-                ? "Notifikasi diblokir browser (hanya suara). Izinkan lewat ikon gembok di address bar."
-                : notifPermission === "unsupported"
-                  ? "Browser tidak mendukung notifikasi (hanya suara)."
-                  : "Izin notifikasi akan diminta saat klik Jalankan."}
-          </span>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={guardsOff}
+              onChange={(e) => {
+                setGuardsOff(e.target.checked);
+                setCodeGuardsOff(e.target.checked);
+              }}
+              disabled={running}
+            />
+            Model mentah: matikan pengaman model kecil
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={autoResume} onChange={(e) => setAutoResume(e.target.checked)} />
+            Lanjut otomatis kalau GPU putus
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={alertsOn} onChange={(e) => setAlertsOn(e.target.checked)} />
+            Suara & notifikasi saat selesai atau error
+          </label>
           <button
             type="button"
             className="btn btn-secondary px-3 py-1 text-xs"
@@ -832,10 +1015,15 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
               alertUser("done", "Tes notifikasi evaluasi", "Kalau ini muncul dan terdengar bunyi, pemberitahuan sudah siap.");
             }}
           >
-            Tes
+            Tes notifikasi
           </button>
+          {notifPermission === "denied" && <span className="text-xs text-amber-700">Notifikasi diblokir browser (hanya suara).</span>}
+          {notifPermission === "unsupported" && <span className="text-xs text-slate-500">Browser tidak mendukung notifikasi.</span>}
         </div>
-        <div className="flex flex-wrap items-center gap-2 sm:col-span-2 lg:col-span-4">
+      </section>
+
+      <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             className="btn btn-primary px-4 py-2"
             onClick={() => run()}
@@ -848,27 +1036,35 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
               Hentikan
             </button>
           )}
-          <button className="btn btn-secondary px-4 py-2" onClick={() => download(`eval-${startedAt ?? "run"}.csv`, toCsv(rows), "text/csv")} disabled={rows.length === 0}>
+          <span className="mx-1 hidden h-6 w-px bg-slate-200 sm:block" />
+          <button className="btn btn-secondary px-3 py-2" onClick={() => download(`eval-${startedAt ?? "run"}.csv`, toCsv(rows), "text/csv")} disabled={rows.length === 0}>
             Unduh CSV
           </button>
-          <button className="btn btn-secondary px-4 py-2" onClick={exportJson} disabled={rows.length === 0 && !stoppedReason}>
+          <button className="btn btn-secondary px-3 py-2" onClick={exportJson} disabled={rows.length === 0 && !stoppedReason}>
             Unduh JSON
           </button>
-          <span className="text-sm text-slate-600">{status}</span>
+          <label className={`btn btn-secondary cursor-pointer px-3 py-2 ${running ? "pointer-events-none opacity-60" : ""}`}>
+            Impor JSON
+            <input
+              type="file"
+              accept=".json,application/json"
+              className="sr-only"
+              disabled={running}
+              onChange={(e) => {
+                void importJson(e.target.files?.[0]);
+                e.target.value = "";
+              }}
+            />
+          </label>
         </div>
-        {progress && (
-          <p className="text-xs text-slate-600 sm:col-span-2 lg:col-span-4">
-            Progres {progress.done}/{progress.total} eksekusi · berjalan {formatDuration(progress.elapsedMs)}
-            {progress.etaMs !== null && progress.done < progress.total && ` · perkiraan sisa ±${formatDuration(progress.etaMs)}`}
-          </p>
-        )}
+        <p className="text-sm text-slate-600">{status}</p>
         {savedRun && !running && (
-          <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 sm:col-span-2 lg:col-span-4">
+          <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
             <p>
               Ada run tersimpan: {savedRun.rows.length}/{savedRun.plan.length} eksekusi selesai (mulai{" "}
               {new Date(savedRun.startedAt).toLocaleString("id-ID")}, model {savedRun.modelId}
-              {savedRun.interruptions.length > 0 && `, ${savedRun.interruptions.length}× berhenti`}). Melanjutkan memakai
-              skenario & mode yang sama dan menggabungkan hasilnya ke satu JSON. Menjalankan run baru akan menimpanya.
+              {savedRun.interruptions.length > 0 && `, ${savedRun.interruptions.length}× berhenti`}). Run baru akan
+              menimpanya.
             </p>
             <div className="flex flex-wrap gap-2">
               <button
@@ -893,14 +1089,72 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         )}
       </section>
 
+      {progress && (
+        <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+          <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-1">
+            <div className="flex items-baseline gap-3">
+              <span className="text-5xl font-bold tabular-nums text-slate-900">
+                {progress.done}/{progress.total}
+              </span>
+              <span className="text-3xl font-semibold tabular-nums text-sky-700">
+                {progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0}%
+              </span>
+            </div>
+            <div className="text-right text-sm text-slate-600">
+              <div>berjalan {formatDuration(progress.elapsedMs)}</div>
+              {progress.etaMs !== null && progress.done < progress.total && (
+                <div className="text-lg font-semibold text-slate-900">sisa ±{formatDuration(progress.etaMs)}</div>
+              )}
+            </div>
+          </div>
+          <div
+            className="h-4 w-full overflow-hidden rounded-full bg-slate-200"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={progress.total}
+            aria-valuenow={progress.done}
+          >
+            <div
+              className="h-full rounded-full bg-sky-600 transition-all"
+              style={{ width: `${progress.total > 0 ? (progress.done / progress.total) * 100 : 0}%` }}
+            />
+          </div>
+          {summaries.length > 0 && (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {summaries.map((s) => (
+                <div key={s.mode} className="rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                  <span className="text-slate-600">
+                    ETSR sementara · {s.mode === "multi_agent" ? "Multi-agent" : "Single-agent"}
+                  </span>
+                  <div>
+                    <strong className="text-2xl tabular-nums text-slate-900">{pct(s.etsr.success, s.etsr.total)}</strong>{" "}
+                    <span className="text-slate-600">
+                      ({s.etsr.success}/{s.etsr.total})
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
       {running && (
         <section className="space-y-2 rounded-xl border border-slate-200 bg-white p-4">
-          <h2 className="text-sm font-semibold text-slate-900">Proses saat ini · {status}</h2>
+          <div className="flex items-start justify-between gap-3">
+            <h2 className="text-sm font-semibold text-slate-900">Proses saat ini · {status}</h2>
+            <InferenceStatsButton turns={evalTurns} className="shrink-0 px-3 py-1 text-xs" />
+          </div>
+          {evalTurns.length > 0 && <p className="break-words font-mono text-xs text-slate-700">{evalTurns.at(-1)!.title}</p>}
           {liveSteps.length === 0 ? (
             <p className="text-xs text-slate-500">Asisten sedang berpikir…</p>
           ) : (
             <ProcessTimeline steps={liveSteps} />
           )}
+          {evalTurns.at(-1)?.totalMs === undefined && evalTurns.length > 0 && (
+            <LiveInferenceLine snapshot={evalTurns.at(-1)!.snapshot} startedAt={evalTurns.at(-1)!.startedAt} />
+          )}
+          {(evalTurns.at(-1)?.snapshot?.calls.length ?? 0) > 0 && <CallTable calls={evalTurns.at(-1)!.snapshot!.calls} />}
         </section>
       )}
 
@@ -920,6 +1174,15 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             <div>Akurasi tool: <strong>{pct(s.toolAccuracy.correct, s.toolAccuracy.total)}</strong></div>
             <div>Akurasi parameter: <strong>{pct(s.parameterAccuracy.correct, s.parameterAccuracy.total)}</strong></div>
             <div>ETSR: <strong>{pct(s.etsr.success, s.etsr.total)}</strong> ({s.etsr.success}/{s.etsr.total})</div>
+            <div title="Berhasil tanpa bantuan kode sedikit pun (rute, alat, ulang, jawaban)">
+              ETSR murni model: <strong>{pct(s.etsrRaw.success, s.etsrRaw.total)}</strong> ({s.etsrRaw.success}/{s.etsrRaw.total})
+              {s.codeAssist.any > 0 &&
+                ` · dibantu kode ${s.codeAssist.any}/${s.codeAssist.total} (rute ${s.codeAssist.route}, alat ${s.codeAssist.tool}, ulang ${s.codeAssist.retry}, jawaban ${s.codeAssist.answer})`}
+            </div>
+            <div title="Berhasil dan jawabannya tidak ngelantur (berulang, kepanjangan, barang di luar hasil alat, dst.)">
+              ETSR ketat: <strong>{pct(s.etsrStrict.success, s.etsrStrict.total)}</strong> ({s.etsrStrict.success}/{s.etsrStrict.total})
+              {s.etsrStrict.flagged > 0 && ` · ${s.etsrStrict.flagged} jawaban bermasalah`}
+            </div>
             <div>
               Keamanan: invariant sistem <strong>{s.security.invariantHeld}/{s.security.total}</strong> · model
               menolak serangan <strong>{s.security.modelResisted}/{s.security.total}</strong>
@@ -974,56 +1237,77 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         <section className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-slate-500">
-                <th className="pr-3">ID</th>
-                <th className="pr-3">Mode</th>
-                <th className="pr-3">Acuan</th>
-                <th className="pr-3">Prediksi</th>
-                <th className="pr-3">Tool</th>
-                <th className="pr-3">Konfirmasi</th>
-                <th className="pr-3">Hasil</th>
-                <th className="pr-3">Latensi</th>
+              <tr className="text-left text-xs font-medium text-slate-500">
+                <th className="pb-2 pr-3">Skenario</th>
+                <th className="pb-2 pr-3">Rute (acuan → hasil)</th>
+                <th className="pb-2 pr-3">Alat</th>
+                <th className="pb-2 pr-3">Hasil</th>
+                <th className="pb-2 pr-3 text-right">Waktu</th>
+                <th className="pb-2" />
               </tr>
             </thead>
             <tbody>
               {rows.map((r, idx) => (
-                <tr key={idx} className="border-t border-slate-100 align-top">
-                  <td className="pr-3 font-mono">{r.scenario.id}</td>
-                  <td className="pr-3">{r.observation.mode === "multi_agent" ? "multi" : "single"}</td>
-                  <td className="pr-3">{r.scenario.expected_route}</td>
-                  <td className="pr-3">
-                    {r.observation.predictedRoute ?? "–"}
-                    {r.observation.routerPredictedRoute &&
-                      r.observation.routerPredictedRoute !== r.observation.predictedRoute && (
-                        <span className="text-slate-400"> (Router: {r.observation.routerPredictedRoute})</span>
-                      )}
-                  </td>
-                  <td className="pr-3">{r.observation.toolTrace.map((t) => t.name).join(", ") || "–"}</td>
-                  <td className="pr-3">
-                    {r.observation.locationPrompt
-                      ? "tanya lokasi"
-                      : r.observation.productPrompt
-                        ? "tanya barang"
-                        : r.observation.confirmOutcome}
-                  </td>
-                  <td className={`pr-3 ${r.success ? "text-emerald-700" : "text-red-700"}`}>
-                    {r.success ? "berhasil" : `gagal: ${r.failedStage}`}
-                    {r.observation.runError && <div className="text-xs">{r.observation.runError}</div>}
-                  </td>
-                  <td className="pr-3">
-                    {ms(r.observation.latencyMs)}
-                    {r.observation.processSteps && r.observation.processSteps.length > 0 && (
-                      <details className="mt-1 text-xs">
-                        <summary className="cursor-pointer text-slate-500 hover:text-slate-700">
-                          Lihat proses ({r.observation.processSteps.length})
-                        </summary>
-                        <div className="mt-1.5 w-72">
-                          <ProcessTimeline steps={r.observation.processSteps} />
+                <Fragment key={idx}>
+                  <tr className="border-t border-slate-100 align-top">
+                    <td className="py-2 pr-3 whitespace-nowrap">
+                      <span className="font-mono">{r.scenario.id}</span>{" "}
+                      <span className="text-xs text-slate-500">{r.observation.mode === "multi_agent" ? "multi" : "single"}</span>
+                    </td>
+                    <td className="py-2 pr-3 whitespace-nowrap">
+                      {r.scenario.expected_route} → {r.observation.predictedRoute ?? "–"}
+                      {r.observation.routerPredictedRoute &&
+                        r.observation.routerPredictedRoute !== r.observation.predictedRoute && (
+                          <div className="text-xs text-slate-600">Router: {r.observation.routerPredictedRoute}</div>
+                        )}
+                    </td>
+                    <td className="py-2 pr-3">{r.observation.toolTrace.map((t) => t.name).join(", ") || "–"}</td>
+                    <td className={`py-2 pr-3 ${r.success ? "text-emerald-700" : "text-red-700"}`}>
+                      {r.success ? "berhasil" : `gagal: ${r.failedStage}`}
+                      {(r.observation.locationPrompt || r.observation.productPrompt || r.observation.confirmOutcome !== "none") && (
+                        <div className="text-xs text-slate-500">
+                          {r.observation.locationPrompt
+                            ? "tanya lokasi"
+                            : r.observation.productPrompt
+                              ? "tanya barang"
+                              : r.observation.confirmOutcome}
                         </div>
-                      </details>
-                    )}
-                  </td>
-                </tr>
+                      )}
+                      {r.observation.runError && <div className="text-xs">{r.observation.runError}</div>}
+                      {codeAssistOf(r.observation).any && (
+                        <div className="text-xs text-slate-500">dibantu kode: {codeAssistLabels(codeAssistOf(r.observation)).join(", ")}</div>
+                      )}
+                      {r.success && answerQualityOf(r)?.ok === false && (
+                        <div className="text-xs text-amber-700">jawaban bermasalah: {answerQualityOf(r)!.issues.join("; ")}</div>
+                      )}
+                    </td>
+                    <td className="py-2 pr-3 text-right tabular-nums whitespace-nowrap">{ms(r.observation.latencyMs)}</td>
+                    <td className="py-2 text-right">
+                      <button
+                        type="button"
+                        className="text-xs text-slate-500 underline hover:text-slate-700"
+                        aria-expanded={openRows.has(idx)}
+                        aria-controls={`eval-row-detail-${idx}`}
+                        onClick={() =>
+                          setOpenRows((prev) => {
+                            const next = new Set(prev);
+                            if (!next.delete(idx)) next.add(idx);
+                            return next;
+                          })
+                        }
+                      >
+                        {openRows.has(idx) ? "Tutup" : "Detail"}
+                      </button>
+                    </td>
+                  </tr>
+                  {openRows.has(idx) && (
+                    <tr className="bg-slate-50">
+                      <td id={`eval-row-detail-${idx}`} colSpan={6} className="p-3">
+                        <EvalRowDetail row={r} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -1042,10 +1326,30 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
             <p className="break-words text-sm opacity-90">{errorModal.message.slice(0, 300)}</p>
             <p className="text-base">
               Hasil sejauh ini tersimpan dan sudah diunduh.{" "}
-              {errorModal.kind === "gpu" ? "Muat ulang halaman, lalu klik \"Lanjutkan run\"." : "Klik \"Lanjutkan run\" setelah masalahnya beres."}
+              {errorModal.autoResumeAt
+                ? null
+                : errorModal.kind === "gpu"
+                  ? "Muat ulang halaman, lalu klik \"Lanjutkan run\"."
+                  : "Klik \"Lanjutkan run\" setelah masalahnya beres."}
             </p>
+            {errorModal.autoResumeAt && (
+              <p className="text-2xl font-semibold">
+                Lanjut otomatis dalam <AutoResumeCountdown at={errorModal.autoResumeAt} /> (percobaan {errorModal.attempt}/{AUTO_RESUME_MAX})
+              </p>
+            )}
             <div className="flex flex-wrap justify-center gap-3">
-              {errorModal.kind === "gpu" && (
+              {errorModal.autoResumeAt && (
+                <button
+                  className="rounded-lg bg-white px-5 py-3 text-lg font-semibold text-red-700"
+                  onClick={() => {
+                    cancelAutoResume();
+                    setErrorModal({ ...errorModal, autoResumeAt: undefined });
+                  }}
+                >
+                  Batalkan lanjut otomatis
+                </button>
+              )}
+              {errorModal.kind === "gpu" && !errorModal.autoResumeAt && (
                 <button className="rounded-lg bg-white px-5 py-3 text-lg font-semibold text-red-700" onClick={() => window.location.reload()}>
                   Muat ulang halaman
                 </button>
@@ -1059,6 +1363,18 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
       )}
     </main>
   );
+}
+
+const AUTO_RESUME_MAX = 5;
+const AUTO_RESUME_DELAY_MS = 30_000;
+
+function AutoResumeCountdown({ at }: { at: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(id);
+  }, []);
+  return <>{Math.max(0, Math.ceil((at - now) / 1000))}s</>;
 }
 
 const PREFERENCE_LABEL: Record<GpuPowerPreference, string> = {
@@ -1091,29 +1407,27 @@ function GpuChoice({
   };
 
   return (
-    <div className="space-y-1 text-sm sm:col-span-2 lg:col-span-4">
+    <div className="space-y-1 text-sm">
       {recommendation.kind === "choose" ? (
         <label className="block space-y-1">
           <span className="font-medium text-slate-700">GPU</span>
-          <select
+          <Select
             className="field-input w-full sm:w-auto"
             value={value ?? ""}
-            onChange={(e) => onChange((e.target.value || null) as GpuPowerPreference | null)}
+            onValueChange={(value) => onChange((value || null) as GpuPowerPreference | null)}
             disabled={disabled}
           >
             <option value="">Bawaan browser ({describe("high-performance")})</option>
             <option value="high-performance">{describe("high-performance")}</option>
             <option value="low-power">{describe("low-power")}</option>
-          </select>
+          </Select>
         </label>
       ) : (
         <p className="font-medium text-slate-700">GPU: {gpuLabel(recommendation.adapter)}</p>
       )}
       <p className="text-xs text-slate-500">
         {recommendation.kind === "choose" && <>Disarankan: {recommendation.reason} </>}
-        {recommendation.kind === "single" && "Browser hanya melihat satu GPU di perangkat ini."}
-        {recommendation.kind === "browser_ignores" &&
-          "Browser memberi GPU yang sama untuk kedua pilihan (Chrome/Edge di Windows dikenal mengabaikan pilihan ini). Bila laptop punya dua GPU, pilih lewat Windows Settings > System > Display > Graphics > Microsoft Edge, lalu muat ulang halaman."}
+        {recommendation.kind === "browser_ignores" && "Laptop dua GPU? Pilih GPU Edge di Windows Settings > Display > Graphics."}
         {changed && <span className="text-amber-700"> Muat ulang halaman agar GPU baru dipakai.</span>}
       </p>
     </div>

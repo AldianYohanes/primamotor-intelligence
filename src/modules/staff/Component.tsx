@@ -8,6 +8,7 @@ import { usePostStaff } from "./hooks/use-post-staff";
 import { usePatchStaff, useResetStaffPin } from "./hooks/use-patch-staff";
 import { createStaffColumns } from "./data/coldef";
 import type { StaffViewModel } from "./mappers/mappers";
+import { Select } from "@/src/components/ui/select";
 
 const PAGE_SIZE = 20;
 const emptyForm: {
@@ -100,7 +101,7 @@ export function StaffModule() {
             <label className="field-label">
               Nama Lengkap
             </label>
-            <input
+            <input aria-label="Nama Lengkap"
               value={form.full_name}
               onChange={(e) => setForm({ ...form, full_name: e.target.value })}
               required
@@ -111,7 +112,7 @@ export function StaffModule() {
             <label className="field-label">
               Username
             </label>
-            <input
+            <input aria-label="Username"
               value={form.username}
               onChange={(e) => setForm({ ...form, username: e.target.value })}
               required
@@ -120,22 +121,22 @@ export function StaffModule() {
           </div>
           <div>
             <label className="field-label">Role</label>
-            <select
+            <Select aria-label="Role"
               value={form.role}
-              onChange={(e) =>
-                setForm({ ...form, role: e.target.value as "owner" | "staff" })
+              onValueChange={(value) =>
+                setForm({ ...form, role: value as "owner" | "staff" })
               }
               className="field-input mt-1"
             >
               <option value="staff">Staf</option>
               <option value="owner">Owner</option>
-            </select>
+            </Select>
           </div>
           <div>
             <label className="field-label">
               PIN Awal
             </label>
-            <input
+            <input aria-label="PIN Awal"
               type="password"
               inputMode="numeric"
               value={form.pin}

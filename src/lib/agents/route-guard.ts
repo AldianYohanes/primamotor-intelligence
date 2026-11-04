@@ -1,5 +1,6 @@
 import { normalizeShorthand } from "@/src/lib/agents/normalize-shorthand";
 import { mentionsSparePart } from "@/src/lib/agents/off-topic";
+import { mentionsCatalogProduct } from "@/src/lib/agents/catalog-match";
 
 /**
  * Pengaman kode di sekitar keputusan Router (model kecil): LLM menafsirkan,
@@ -46,11 +47,18 @@ const CHANGE_VERB_RE = /(?<![\p{L}\p{N}])(kurang(?:i|in|kan)|tambah\w*|catat|cat
 
 // "rediator 240 ada ga", "masih pegang gak", "tinggal berapa", "kosong ya".
 const AVAILABILITY_RE =
-  /(?<![\p{L}\p{N}])(masih\s+(ada|pegang)|ada\s+(ga|gak|gk|ngga|nggak|tdk|tidak|kah)|ada\s*\?|ada\s+stok|masih\s+cukup|sisa|tinggal|kosong|habis|tersedia|ready|pegang)(?![\p{L}\p{N}])/iu;
+  /(?<![\p{L}\p{N}])(masih\s+(ada|pegang|banyak)|banyak\s+(ga|gak|gk|ngga|nggak|tdk|tidak|kah)|ada\s+(ga|gak|gk|ngga|nggak|tdk|tidak|kah)|ada\s*\?|ada\s+stok|masih\s+cukup|sisa|tinggal|kosong|habis|tersedia|ready|pegang)(?![\p{L}\p{N}])/iu;
 
 // Pertanyaan tren/penjualan sebuah barang.
 const TREND_RE =
   /(?<![\p{L}\p{N}])(jual(?:an|nya)?|penjualan(?:nya)?|laku|laris|rame|tren|trend|grafik)(?![\p{L}\p{N}])/iu;
+
+export interface GuardOptions {
+  /** Kenali nama barang dari katalog toko di cache perangkat (profil model, model-profile.ts). */
+  catalog?: boolean;
+  /** Router TRANSACTION_AGENT untuk pesan yang jelas hanya bertanya dialihkan ke Query Agent. */
+  queryGuard?: boolean;
+}
 
 export interface GuardedRoute {
   agentType: RoutedAgent;
@@ -65,8 +73,12 @@ export interface GuardedRoute {
  * (Llama 3.2 membuang 23 dari 32 pesan stok/transaksi ke OFF_TOPIC). Nama barang
  * saja tidak cukup: "cara ganti busi" tetap off-topic.
  */
-export function guardRoute(agentType: RoutedAgent, userMessage: string): GuardedRoute {
-  if (agentType === "transaction") return { agentType, reason: null };
+export function guardRoute(agentType: RoutedAgent, userMessage: string, options: GuardOptions = {}): GuardedRoute {
+  if (agentType === "transaction") {
+    return options.queryGuard && looksLikeQuestionOnly(userMessage)
+      ? { agentType: "query", reason: "Router memilih transaksi, tapi pesan hanya bertanya dan tanpa kata pergerakan barang: dialihkan ke Query Agent" }
+      : { agentType, reason: null };
+  }
   if (isClearStockMovement(userMessage)) {
     return agentType === "query"
       ? { agentType: "transaction", reason: "Pesan berisi kata pergerakan barang dan jumlah, dialihkan ke Transaction Agent" }
@@ -80,9 +92,65 @@ export function guardRoute(agentType: RoutedAgent, userMessage: string): Guarded
         ? { agentType: "transaction", reason: "Router menilai di luar topik, tapi pesan menyebut stok dan perubahannya: dialihkan ke Transaction Agent" }
         : { agentType: "query", reason: "Router menilai di luar topik, tapi pesan menyebut stok: dialihkan ke Query Agent" };
     }
-    if (mentionsSparePart(text) && (AVAILABILITY_RE.test(text) || TREND_RE.test(text))) {
+    // Dengan opsi katalog, nama barang juga dikenali dari katalog toko (nama, alias, salah ketik),
+    // bukan hanya dari daftar kata suku cadang umum.
+    const namesPart = mentionsSparePart(text, options.catalog === true) || (options.catalog === true && mentionsCatalogProduct(text));
+    if (namesPart && (AVAILABILITY_RE.test(text) || TREND_RE.test(text))) {
       return { agentType: "query", reason: "Router menilai di luar topik, tapi pesan menanyakan ketersediaan atau penjualan suku cadang: dialihkan ke Query Agent" };
     }
   }
   return { agentType, reason: null };
+}
+
+/**
+ * Pesan menanyakan penjualan atau tren sebuah barang, bukan stoknya ("wiper bosch
+ * lagi rame gak?"). Kata stok atau ketersediaan di pesan membatalkannya: "penjualan
+ * dan sisa stok" tetap dibaca sebagai pertanyaan stok.
+ */
+// "tarik 2 oli dari gudang", "naikin 3 filter ke toko": perpindahan antar lokasi tanpa kata pindah.
+const MOVE_BETWEEN_RE = /(?<![\p{L}\p{N}])(dari|ke)\s+(stok\s+)?(toko|gudang)(?![\p{L}\p{N}])/iu;
+
+/**
+ * Pesan bertanya soal stok atau penjualan dan tidak memuat kata pergerakan, perubahan, atau jumlah
+ * terjual ("laku 1"). Butuh bukti pertanyaan (ketersediaan, tren, kata stok, "berapa", tanda tanya),
+ * jadi pesan pencatatan yang terselip nama barang tetap transaksi.
+ */
+function looksLikeQuestionOnly(message: string): boolean {
+  const text = normalizeShorthand(message);
+  if (STRONG_MOVEMENT_RE.test(text) || CHANGE_VERB_RE.test(text) || SOLD_QUANTITY_RE.test(text) || MOVE_BETWEEN_RE.test(text)) return false;
+  return AVAILABILITY_RE.test(text) || TREND_RE.test(text) || STOCK_WORD_RE.test(text) || /(?<![\p{L}\p{N}])(berapa|brp)(?![\p{L}\p{N}])|\?/iu.test(text);
+}
+
+export function asksSalesTrend(message: string): boolean {
+  const text = normalizeShorthand(message);
+  return TREND_RE.test(text) && !STOCK_WORD_RE.test(text) && !AVAILABILITY_RE.test(text) && !SOLD_QUANTITY_RE.test(text);
+}
+
+// "laku 1", "kejual 3": jumlah terjual yang dicatat, bukan pertanyaan penjualan. Angka yang
+// diikuti satuan waktu ("laku 3 bulan") tetap pertanyaan tren.
+const SOLD_QUANTITY_RE = new RegExp(
+  String.raw`(?<![\p{L}\p{N}])(?:laku|kejual|terjual|dijual)\s+(?:sebanyak\s+)?\d{1,4}(?![\p{L}\p{N}.,])(?!\s*(?:${PERIOD_WORDS})(?![\p{L}]))`,
+  "iu",
+);
+
+// Kata yang menunjukkan pesan ada kaitannya dengan stok, selain nama barang dan pola ketersediaan.
+const STOCK_TOPIC_RE = /(?<![\p{L}\p{N}])(barang|part|sparepart|spare\s+part|suku\s+cadang|onderdil|produk|item|stok|stock)\w*(?![\p{L}\p{N}])/iu;
+
+/**
+ * Pesan punya kaitan dengan stok, penjualan, atau pencatatan barang: ada nama barang (daftar
+ * kata, atau katalog toko bila diminta), kata stok, pola ketersediaan atau tren, atau pergerakan
+ * barang. Dipakai single-agent, yang tidak punya Router, untuk menahan panggilan alat pada
+ * pesan di luar topik (H-36: "nomor telepon bengkel terdekat").
+ */
+export function looksStockRelated(message: string, options: GuardOptions = {}): boolean {
+  const text = normalizeShorthand(message);
+  return (
+    STOCK_TOPIC_RE.test(text) ||
+    AVAILABILITY_RE.test(text) ||
+    TREND_RE.test(text) ||
+    CHANGE_VERB_RE.test(text) ||
+    STRONG_MOVEMENT_RE.test(text) ||
+    mentionsSparePart(text, options.catalog === true) ||
+    (options.catalog === true && mentionsCatalogProduct(text))
+  );
 }

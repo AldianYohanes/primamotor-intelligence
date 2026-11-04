@@ -6,6 +6,7 @@ import { useGetShifts } from "./hooks/use-get-shifts";
 import { useGetShiftReport } from "./hooks/use-get-shift-report";
 import type { ShiftStatusFilter } from "./data/params";
 import { formatRupiah } from "./utils/utils";
+import { Select } from "@/src/components/ui/select";
 
 /**
  * modules/pos-shifts/Component.tsx — riwayat shift SEMUA kasir, untuk
@@ -23,15 +24,15 @@ export function PosShiftsModule() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold tracking-tight text-slate-900">Riwayat Shift Kasir</h1>
-        <select
+        <Select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as ShiftStatusFilter)}
+          onValueChange={(value) => setStatusFilter(value as ShiftStatusFilter)}
           className="field-input w-auto"
         >
           <option value="all">Semua Status</option>
           <option value="open">Terbuka</option>
           <option value="closed">Tertutup</option>
-        </select>
+        </Select>
       </div>
 
       {error && <p className="text-sm text-red-600">Gagal memuat shift: {error.message}</p>}

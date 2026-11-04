@@ -16,6 +16,9 @@ export default async function HomePage() {
           Prima Motor Volvo
         </span>
         <div className="flex items-center gap-2">
+          <Link href="/about" className="no-underline">
+            <span className="rounded-full px-3 py-1.5 text-xs font-medium text-slate-700">Tentang</span>
+          </Link>
           {user ? (
             <Link href="/menu" className="no-underline">
               <span className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-medium text-white">

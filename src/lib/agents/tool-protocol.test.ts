@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { AGENT_TOOL_DEFINITIONS } from "@/src/lib/agents/tool-schemas";
+import scenarios from "@/src/lib/eval/scenarios.json";
 import {
   announcesToolCall,
   buildToolInstructions,
@@ -7,6 +9,7 @@ import {
   missingToolCallFeedback,
   parseModelReply,
   repairJson,
+  stripThinking,
   visibleStreamText,
 } from "@/src/lib/agents/tool-protocol";
 
@@ -201,5 +204,61 @@ describe("missingToolCallFeedback", () => {
     const error = errorOf(missingToolCallFeedback(suggestion));
     const parsed = parseModelReply(error.slice(error.lastIndexOf("<tool_call>")));
     expect(parsed.calls).toEqual([suggestion]);
+  });
+});
+
+describe("stripThinking", () => {
+  it("membuang blok <think> dan menyisakan jawaban", () => {
+    expect(stripThinking("<think>\nmikir dulu\n</think>\n\nStok radiator ada 3.").trim()).toBe("Stok radiator ada 3.");
+  });
+
+  it("membuang <think> tanpa penutup sampai akhir", () => {
+    expect(stripThinking("<think>belum selesai mikir")).toBe("");
+  });
+
+  it("teks biasa tidak berubah", () => {
+    expect(stripThinking("  Stok ada 3. ")).toBe("  Stok ada 3. ");
+  });
+
+  it("parseModelReply tidak membaca tool call yang hanya disebut di dalam <think>", () => {
+    const reply = parseModelReply(
+      '<think>Perlu <tool_call>{"name": "getStock", "arguments": {"query": "x"}}</tool_call>?</think>Ada 3 pcs.',
+    );
+    expect(reply.calls).toEqual([]);
+    expect(reply.text).toBe("Ada 3 pcs.");
+  });
+
+  it("parseModelReply tetap membaca tool call sesudah <think>", () => {
+    const reply = parseModelReply(
+      '<think>cek stok</think><tool_call>{"name": "getStock", "arguments": {"query": "busi"}}</tool_call>',
+    );
+    expect(reply.calls).toHaveLength(1);
+    expect(reply.calls[0].name).toBe("getStock");
+  });
+
+  it("visibleStreamText menyembunyikan <think> yang masih terbuka", () => {
+    expect(visibleStreamText("<think>sedang mikir")).toBe("");
+    expect(visibleStreamText("<thi")).toBe("");
+    expect(visibleStreamText("<think>x</think>Halo")).toBe("Halo");
+  });
+});
+
+describe("contoh alat tambahan", () => {
+  const tools = AGENT_TOOL_DEFINITIONS;
+  it("hanya muncul bila diminta dan tidak memakai kalimat atau barang skenario evaluasi", () => {
+    expect(buildToolInstructions(tools)).not.toContain("oli samping");
+    const text = buildToolInstructions(tools, { extraExamples: true });
+    expect(text).toContain("oli samping");
+    const messages = (scenarios as { scenarios: { message: string }[] }).scenarios.map((s) => s.message.toLowerCase());
+    for (const item of ["oli samping"]) {
+      expect(messages.some((m) => m.includes(item))).toBe(false);
+    }
+  });
+
+  it("contoh hanya untuk alat yang tersedia", () => {
+    const query = tools.filter((t) => ["getStock", "getSalesTrend"].includes(t.function.name));
+    const text = buildToolInstructions(query, { extraExamples: true });
+    expect(text).toContain("oli samping");
+    expect(text).not.toContain("transferStock");
   });
 });

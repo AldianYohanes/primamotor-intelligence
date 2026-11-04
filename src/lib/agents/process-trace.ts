@@ -14,6 +14,12 @@ export interface ProcessStep {
   /** Argumen alat atau ringkasan hasil; satu-dua baris. */
   detail?: string;
   status: "running" | "done" | "failed";
+  /**
+   * Langkah ini kode menolong atau mengoreksi model (bukan validasi bawaan): rute dikoreksi,
+   * panggilan alat diperbaiki, model diminta mengulang, atau jawaban diganti kode.
+   * Dipakai /eval untuk memisahkan kemampuan model dari bantuan kode.
+   */
+  assist?: "route" | "tool" | "retry" | "answer";
 }
 
 const MAX_DETAIL_CHARS = 240;
@@ -165,11 +171,13 @@ export function retryStep(reason: "malformed" | "missing_call" | "unbacked_numbe
     unbacked_numbers: "Model menjawab angka tanpa memanggil alat, diminta memanggil getStock dulu",
     read_only_pin: "Tidak ada pencatatan stok tapi jawaban menyebut PIN, model diminta menjawab ulang tanpa PIN",
   }[reason];
-  return { kind: "retry", label, status: "done" };
+  return { kind: "retry", label, status: "done", assist: "retry" };
 }
 
 export function answerStep(
   source: "model" | "model_no_tool" | "code" | "unbacked" | "fallback",
+  /** Jawaban kode ini menggantikan jawaban model yang kosong, rusak, atau bertentangan dengan data. */
+  replacesModel = false,
 ): ProcessStep {
   const label = {
     model: "Jawaban ditulis model dari hasil di atas",
@@ -178,7 +186,7 @@ export function answerStep(
     unbacked: "Jawaban berisi angka tanpa data dari alat, diganti jawaban kode",
     fallback: "Batas langkah tercapai, jawaban cadangan dipakai",
   }[source];
-  return { kind: "answer", label, status: "done" };
+  return { kind: "answer", label, status: "done", ...((replacesModel || source === "unbacked" || source === "fallback") && { assist: "answer" as const }) };
 }
 
 /** Satu baris status saat asisten bekerja, mis. `Mencari "filter udara"…`. */

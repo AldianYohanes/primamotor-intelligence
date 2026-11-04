@@ -76,7 +76,28 @@ export async function GET(req: NextRequest) {
       });
       return NextResponse.json({ error: searchError.message }, { status: 500 });
     }
-    productIds = (matches ?? []).map((m) => m.product_id);
+    // search_products bisa mengembalikan produk yang sama lebih dari sekali (satu baris per model mobil cocok).
+    productIds = [...new Set((matches ?? []).map((m) => m.product_id))];
+
+    // search_products hanya mencocokkan nama/alias, jadi nomor part dicari terpisah.
+    const likePattern = `%${q.replace(/[\\%_]/g, "\\$&")}%`;
+    const { data: partMatches, error: partError } = await supabase
+      .from("products")
+      .select("id")
+      .eq("business_id", staffRow.business_id)
+      .eq("is_active", true)
+      .ilike("part_number", likePattern)
+      .limit(limit);
+    if (partError) {
+      logger.error("Pencarian nomor part gagal (pos/products)", {
+        route: "admin/pos/products",
+        business_id: staffRow.business_id,
+        query: q,
+        error: partError,
+      });
+      return NextResponse.json({ error: partError.message }, { status: 500 });
+    }
+    productIds = [...new Set([...productIds, ...(partMatches ?? []).map((p) => p.id)])];
     if (productIds.length === 0) return NextResponse.json({ results: [] });
   }
 

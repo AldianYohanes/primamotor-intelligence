@@ -286,6 +286,18 @@ h6 {
     cursor: not-allowed;
   }
 
+  /* Bayangan di tepi kiri/kanan hanya tampil bila isi masih bisa digeser (tabel lebar di tablet dan HP). */
+  .scroll-shadows {
+    background:
+      linear-gradient(to right, #fff 30%, rgba(255, 255, 255, 0)) left center,
+      linear-gradient(to left, #fff 30%, rgba(255, 255, 255, 0)) right center,
+      radial-gradient(farthest-side at 0 50%, rgba(15, 23, 42, 0.18), rgba(15, 23, 42, 0)) left center,
+      radial-gradient(farthest-side at 100% 50%, rgba(15, 23, 42, 0.18), rgba(15, 23, 42, 0)) right center;
+    background-repeat: no-repeat;
+    background-size: 40px 100%, 40px 100%, 14px 100%, 14px 100%;
+    background-attachment: local, local, scroll, scroll;
+  }
+
   .card {
     background-color: #fff;
     border: 1px solid #e5e9f0;

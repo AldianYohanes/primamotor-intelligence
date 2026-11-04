@@ -1,3 +1,4 @@
+import { readJson } from "@/src/lib/http/read-json";
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/src/lib/supabase/admin";
 import { createReorderSuggestionSchema } from "@/src/lib/agents/tool-schemas";
@@ -18,7 +19,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const parsed = createReorderSuggestionSchema.safeParse(await req.json());
+  const parsed = createReorderSuggestionSchema.safeParse(await readJson(req));
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Input tidak valid", details: parsed.error.flatten() },

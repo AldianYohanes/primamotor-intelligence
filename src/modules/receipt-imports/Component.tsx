@@ -8,6 +8,7 @@ import { usePostUploadReceipt } from './hooks/use-post-upload-receipt'
 import { usePatchImportItem } from './hooks/use-patch-import-item'
 import { usePostCommitImport } from './hooks/use-post-commit-import'
 import type { ImportItemViewModel } from './mappers/mappers'
+import { Select } from "@/src/components/ui/select";
 
 const PAGE_SIZE = 20
 
@@ -41,7 +42,13 @@ export function ReceiptImportsModule() {
 
   async function handleCommit() {
     if (!selected) return
-    const result = await commit(selected)
+    let result
+    try {
+      result = await commit(selected)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Gagal commit ke stok')
+      return
+    }
     alert(`${result.committed_count} item berhasil dicatat sebagai stok masuk.${result.failed.length ? ` ${result.failed.length} gagal.` : ''}`)
     await refreshImports()
     await refreshDetail()
@@ -120,16 +127,16 @@ export function ReceiptImportsModule() {
                       onBlur={(e) => handleUpdateItem(item.id, { suggested_quantity: Number(e.target.value) })}
                       className="field-input w-20 !py-1"
                     />
-                    <select
+                    <Select
                       value={item.status}
-                      onChange={(e) => handleUpdateItem(item.id, { status: e.target.value as ImportItemViewModel['status'] })}
+                      onValueChange={(value) => handleUpdateItem(item.id, { status: value as ImportItemViewModel['status'] })}
                       className="field-input !py-1 !text-xs"
                     >
                       <option value="unmatched">Belum cocok</option>
                       <option value="matched">Cocok (belum dikonfirmasi)</option>
                       <option value="confirmed">✓ Konfirmasi</option>
                       <option value="rejected">✕ Tolak baris ini</option>
-                    </select>
+                    </Select>
                   </div>
                 </div>
               ))}

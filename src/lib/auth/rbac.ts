@@ -96,7 +96,7 @@ const MODULES: (AppModule & { permission: Permission })[] = [
     key: "eval",
     href: "/eval",
     label: "Evaluasi",
-    description: "Jalankan skenario evaluasi agent (bab 4)",
+    description: "Jalankan skenario uji untuk asisten stok",
     permission: "chat.use",
   },
   {

@@ -62,8 +62,18 @@ for (const r of runs) {
   if (r.data.stoppedReason) warnings.push(`${path.basename(r.file)} berhenti sebelum selesai (stoppedReason terisi).`);
 }
 
+// Run berulang: metrik utama dan uji berpasangan memakai ulangan 1; ulangan lain
+// hanya untuk bagian "Konsistensi antar ulangan".
+const repOf = (row: StoredRow) => row.observation.repetition ?? 1;
 const merged = new Map<string, StoredRow>();
-for (const r of runs) for (const row of r.data.rows) merged.set(`${row.scenario}|${row.observation.mode}`, row);
+const allReps = new Map<string, StoredRow>();
+for (const r of runs) {
+  for (const row of r.data.rows) {
+    allReps.set(`${row.scenario}|${row.observation.mode}|${repOf(row)}`, row);
+    if (repOf(row) === 1) merged.set(`${row.scenario}|${row.observation.mode}`, row);
+  }
+}
+const repetitionCount = Math.max(1, ...[...allReps.values()].map(repOf));
 const rows: ScoredRow[] = fromStoredRows([...merged.values()], SCENARIOS);
 const missing = SCENARIOS.flatMap((s) => MODES.filter((m) => !merged.has(`${s.id}|${m}`)).map((m) => `${s.id}·${m}`));
 
@@ -111,8 +121,21 @@ const md: string[] = [];
 md.push(`# Laporan evaluasi /eval`, "");
 md.push(`- Sumber: ${files.map((f) => path.basename(f)).join(", ")}`);
 md.push(`- Versi skenario: ${runs.map((r) => r.data.scenarioVersion).join(", ")} (kode sekarang ${scenarioFile.version})`);
+md.push(`- Kode: ${env.codeCommit ?? "tidak tercatat"} (${env.codeBranch ?? "–"})`);
 md.push(`- Model: ${env.model ?? "–"} · GPU: ${gpu.description || gpu.architecture || "–"} · prefill: ${JSON.stringify(env.prefillChunkSize ?? null)}`);
 md.push(`- Eksekusi: ${rows.length} dari ${SCENARIOS.length * MODES.length}${missing.length ? ` (belum ada: ${missing.join(", ")})` : ""}`);
+const serverFallbacks = rows.filter((r) => r.observation.serverFallback).length;
+const confirmFailed = rows.filter((r) => r.observation.confirmOutcome === "confirm_failed").length;
+if (confirmFailed > 0) {
+  md.push(`- **PERINGATAN: ${confirmFailed} eksekusi gagal pada langkah konfirmasi PIN di server (bukan keputusan model), jadi ETSR transaksi tidak valid. Cek server dan akun evaluator, lalu ulangi skenario transaksi.**`);
+}
+if (serverFallbacks > 0) {
+  md.push(`- **PERINGATAN: ${serverFallbacks} eksekusi memakai cache perangkat atau gagal mencari produk ke server, jadi ETSR dan akurasi parameternya tidak valid.**`);
+}
+const routedByCode = rows.filter((r) => r.observation.routedByCode).length;
+if (routedByCode > 0) {
+  md.push(`- Rute diputuskan kode tanpa memanggil Router: ${routedByCode} eksekusi (tidak ikut "Router saja"; ikut akurasi rute akhir).`);
+}
 const interruptions = runs.reduce((n, r) => n + (r.data.interruptions?.length ?? 0), 0);
 if (interruptions) md.push(`- Run sempat berhenti ${interruptions}× lalu dilanjutkan.`);
 for (const w of warnings) md.push(`- ⚠ ${w}`);
@@ -131,6 +154,9 @@ row("Akurasi rute: Router saja", (s) =>
 row("Akurasi tool", (s) => `${s.toolAccuracy.correct}/${s.toolAccuracy.total} (${pct(s.toolAccuracy.correct, s.toolAccuracy.total)})`);
 row("Akurasi parameter", (s) => `${s.parameterAccuracy.correct}/${s.parameterAccuracy.total} (${pct(s.parameterAccuracy.correct, s.parameterAccuracy.total)})`);
 row("ETSR", (s) => `${s.etsr.success}/${s.etsr.total} (${pct(s.etsr.success, s.etsr.total)})`);
+row("ETSR murni model (tanpa bantuan kode)", (s) => `${s.etsrRaw.success}/${s.etsrRaw.total} (${pct(s.etsrRaw.success, s.etsrRaw.total)})`);
+row("Eksekusi dibantu kode", (s) => `${s.codeAssist.any}/${s.codeAssist.total} (rute ${s.codeAssist.route}, alat ${s.codeAssist.tool}, ulang ${s.codeAssist.retry}, jawaban ${s.codeAssist.answer})`);
+row("ETSR ketat (tanpa jawaban ngelantur)", (s) => `${s.etsrStrict.success}/${s.etsrStrict.total} (${pct(s.etsrStrict.success, s.etsrStrict.total)}), ${s.etsrStrict.flagged} berhasil tapi jawabannya bermasalah`);
 for (const r of ROUTES) row(`ETSR ${ROUTE_LABEL[r]}`, (s) => `${s.etsr.byRoute[r].success}/${s.etsr.byRoute[r].total}`);
 row("Keamanan: invariant sistem", (s) => `${s.security.invariantHeld}/${s.security.total}`);
 row("Keamanan: model menolak serangan", (s) => `${s.security.modelResisted}/${s.security.total}`);
@@ -162,6 +188,43 @@ md.push(`## Eksekusi yang gagal`, "", `| Skenario | Mode | Tahap gagal | Jawaban
 for (const r of rows.filter((x) => !x.success)) {
   const text = (r.observation.runError ?? r.observation.assistantText).replace(/\s+/g, " ").replace(/\|/g, "\\|").slice(0, 90);
   md.push(`| ${r.scenario.id} | ${MODE_LABEL[r.observation.mode]} | ${r.failedStage} | ${text} |`);
+}
+if (repetitionCount > 1) {
+  const repRows = fromStoredRows([...allReps.values()], SCENARIOS);
+  const repHeaders = Array.from({ length: repetitionCount }, (_, i) => `ETSR ulangan ${i + 1}`);
+  md.push(
+    "",
+    `## Konsistensi antar ulangan (${repetitionCount} ulangan)`,
+    "",
+    "Metrik di atas memakai ulangan 1. Tabel ini membandingkan semua ulangan; skenario keamanan tidak dihitung.",
+    "",
+    `| Mode | ${repHeaders.join(" | ")} | Skenario selalu sama | Skenario berubah-ubah |`,
+    `|---|${[...repHeaders, "", ""].map(() => "---").join("|")}|`,
+  );
+  const unstable: string[] = [];
+  for (const m of MODES) {
+    const mr = repRows.filter((r) => r.observation.mode === m && r.scenario.variant !== "keamanan");
+    if (!mr.length) continue;
+    const perRep = repHeaders.map((_, i) => {
+      const rr = mr.filter((r) => (r.observation.repetition ?? 1) === i + 1);
+      return rr.length ? `${rr.filter((r) => r.success).length}/${rr.length}` : "–";
+    });
+    const byScenario = new Map<string, boolean[]>();
+    for (const r of mr) byScenario.set(r.scenario.id, [...(byScenario.get(r.scenario.id) ?? []), r.success]);
+    let stable = 0;
+    let changed = 0;
+    for (const [id, results] of byScenario) {
+      if (results.length < 2) continue;
+      if (results.every((x) => x === results[0])) {
+        stable++;
+      } else {
+        changed++;
+        unstable.push(`${id} ${MODE_LABEL[m]} (${results.filter(Boolean).length}/${results.length} berhasil)`);
+      }
+    }
+    md.push(`| ${MODE_LABEL[m]} | ${perRep.join(" | ")} | ${stable} | ${changed} |`);
+  }
+  md.push("", unstable.length ? `Berubah-ubah: ${unstable.join("; ")}.` : "Tidak ada skenario yang hasilnya berubah antar ulangan.");
 }
 fs.writeFileSync(path.join(outDir, "summary.md"), md.join("\n") + "\n");
 

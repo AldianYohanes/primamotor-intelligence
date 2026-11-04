@@ -91,7 +91,7 @@ export default function SignupPage() {
             <Field label="Username" value={form.owner_username} onChange={(v) => update('owner_username', v)} required />
             <div>
               <label className="field-label">PIN (minimal 6 digit)</label>
-              <input
+              <input aria-label="PIN (minimal 6 digit)"
                 type="password"
                 inputMode="numeric"
                 value={form.pin}
@@ -115,7 +115,9 @@ export default function SignupPage() {
               Saya memahami dan menyetujui bahwa fitur pindai bon (OCR) mengirim foto bon —
               yang berpotensi memuat harga beli dan data supplier — ke Gemini API (Google) sebagai
               pihak ketiga untuk diproses. Fitur lain (asisten chat stok) tetap berjalan sepenuhnya
-              di perangkat tanpa data toko keluar ke cloud.
+              di perangkat tanpa data toko keluar ke cloud. Rinciannya ada di{' '}
+              <Link href="/privacy" target="_blank" className="underline">Kebijakan Privasi</Link> dan{' '}
+              <Link href="/terms" target="_blank" className="underline">Syarat Penggunaan</Link>.
             </span>
           </label>
 

@@ -293,3 +293,24 @@ export function twoLocationsSuggestion(
     },
   };
 }
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Asal dan tujuan dari kata depan di pesan: lokasi sesudah "dari"/"dr" adalah asal, sesudah "ke"
+ * adalah tujuan, dan lokasi satunya mengisi sisi yang tidak disebut ("ambil dari gudang" untuk
+ * "toko butuh" → gudang ke toko). null bila kata depan tidak menunjuk tepat satu arah.
+ */
+export function inferTransferDirection(message: string, names: [string, string]): { from: string; to: string } | null {
+  const text = message.toLowerCase();
+  const after = (prepositions: string, name: string) =>
+    new RegExp(String.raw`(?<![\p{L}\p{N}])(?:${prepositions})\s+${escapeRe(name.toLowerCase())}(?![\p{L}\p{N}])`, "u").test(text);
+  const [a, b] = names;
+  const fromA = after("dari|dr", a);
+  const fromB = after("dari|dr", b);
+  if (fromA !== fromB) return fromA ? { from: a, to: b } : { from: b, to: a };
+  const toA = after("ke|kepada", a);
+  const toB = after("ke|kepada", b);
+  if (toA !== toB) return toA ? { from: b, to: a } : { from: a, to: b };
+  return null;
+}

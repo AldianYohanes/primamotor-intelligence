@@ -27,7 +27,8 @@ import type { PosProductViewModel } from "./mappers/mappers";
 import { mapPosProductResponseToViewModel } from "./mappers/mappers";
 import type { PaymentMethod, SaleSummaryPaymentMethod, PaymentLinePayload } from "./data/payload";
 import type { CustomerResponse, ShiftResponse, ShiftReportTotalsResponse } from "./data/response";
-import { formatRupiah, generateIdempotencyKey } from "./utils/utils";
+import { formatRupiah, generateIdempotencyKey, getQuickCashAmounts, moveHighlight } from "./utils/utils";
+import { Select } from "@/src/components/ui/select";
 
 interface CartLine {
   productId: string;
@@ -98,7 +99,10 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(searchInput.trim()), 300);
+    const t = setTimeout(() => {
+      setDebouncedSearch(searchInput.trim());
+      setHighlightIndex(-1); // hasil cari berubah → sorotan lama tidak berlaku lagi
+    }, 300);
     return () => clearTimeout(t);
   }, [searchInput]);
 
@@ -132,6 +136,22 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
   const [searchHint, setSearchHint] = useState<string | null>(null);
   const [showClearCartConfirm, setShowClearCartConfirm] = useState(false);
 
+  // Baris hasil cari yang disorot lewat panah atas/bawah (-1 = belum ada).
+  const [highlightIndex, setHighlightIndex] = useState(-1);
+  // Umpan balik singkat setelah barang masuk keranjang / ditolak (stok habis).
+  const [notice, setNotice] = useState<{ tone: "ok" | "warn"; text: string } | null>(null);
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cartListRef = useRef<HTMLDivElement>(null);
+  const payFooterRef = useRef<HTMLDivElement>(null);
+  const [payFooterVisible, setPayFooterVisible] = useState(false);
+  const hasCart = cart.length > 0;
+
+  function showNotice(tone: "ok" | "warn", text: string) {
+    setNotice({ tone, text });
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => setNotice(null), 2500);
+  }
+
   function focusSearch() {
     // Timeout 0 supaya focus terjadi SETELAH React commit render berikutnya —
     // langsung .focus() sinkron kadang kalah sama re-render (mis. tombol yang
@@ -139,19 +159,58 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
     setTimeout(() => searchInputRef.current?.focus(), 0);
   }
 
-  // F9 = Bayar tanpa mouse — dicek terhadap disabled state yang sama seperti
-  // tombol Bayar (bukan bypass, cuma trigger klik yang sama).
+  // Pintasan global: F9 = Bayar, F2 atau "/" = lompat ke kolom cari. Bayar
+  // dicek terhadap disabled state yang sama seperti tombolnya (bukan bypass,
+  // cuma trigger klik yang sama). `handleCheckout` dibaca lewat ref supaya
+  // listener tidak dipasang ulang tiap render.
+  const handleCheckoutRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    handleCheckoutRef.current = handleCheckout;
+  });
   useEffect(() => {
     function onGlobalKeyDown(e: KeyboardEvent) {
       if (e.key === "F9") {
         e.preventDefault();
-        if (!isCheckingOut && cart.length > 0) handleCheckout();
+        if (!e.repeat && !isCheckingOut && cart.length > 0) handleCheckoutRef.current();
+        return;
+      }
+      const target = e.target as HTMLElement | null;
+      const typing = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT");
+      if (e.key === "F2" || (e.key === "/" && !typing)) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
       }
     }
     window.addEventListener("keydown", onGlobalKeyDown);
     return () => window.removeEventListener("keydown", onGlobalKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCheckingOut, cart.length, handleCheckout]);
+  }, [isCheckingOut, cart.length]);
+
+  // Baris cari yang disorot ikut tergulung ke area terlihat.
+  useEffect(() => {
+    if (highlightIndex < 0) return;
+    const id = products[highlightIndex]?.id;
+    if (id) document.getElementById(`pos-product-${id}`)?.scrollIntoView({ block: "nearest" });
+  }, [highlightIndex, products]);
+
+  // Keranjang bertambah → gulung ke baris paling bawah (barang yang baru masuk).
+  const prevCartLength = useRef(0);
+  useEffect(() => {
+    if (cart.length > prevCartLength.current) {
+      const el = cartListRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    }
+    prevCartLength.current = cart.length;
+  }, [cart.length]);
+
+  // Bar bayar mengambang di HP disembunyikan kalau tombol Bayar asli sudah terlihat.
+  useEffect(() => {
+    const el = payFooterRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const obs = new IntersectionObserver(([entry]) => setPayFooterVisible(entry.isIntersecting));
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [hasCart]);
 
   const subtotal = useMemo(() => cart.reduce((sum, l) => sum + l.unitPrice * l.quantity, 0), [cart]);
   const total = Math.max(subtotal - discountAmount, 0);
@@ -160,11 +219,19 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
   const splitRemaining = Math.max(total - splitPaidTotal, 0);
 
   function addToCart(product: PosProductViewModel) {
-    if (product.isOutOfStock) return;
+    if (product.isOutOfStock) {
+      showNotice("warn", `${product.name}: stok habis`);
+      return;
+    }
+    const existing = cart.find((l) => l.productId === product.id);
+    if (existing && existing.quantity >= product.availableQuantity) {
+      // soft limit — RPC tetap validasi ulang saat checkout
+      showNotice("warn", `${product.name}: sudah maksimal (stok ${product.availableQuantity} ${product.unit})`);
+      return;
+    }
     setCart((prev) => {
-      const existing = prev.find((l) => l.productId === product.id);
-      if (existing) {
-        if (existing.quantity >= product.availableQuantity) return prev; // soft limit — RPC tetap validasi ulang saat checkout
+      const line = prev.find((l) => l.productId === product.id);
+      if (line) {
         return prev.map((l) => (l.productId === product.id ? { ...l, quantity: l.quantity + 1 } : l));
       }
       return [
@@ -179,6 +246,7 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
         },
       ];
     });
+    showNotice("ok", `${product.name} masuk keranjang (×${(existing?.quantity ?? 0) + 1})`);
   }
 
   /**
@@ -197,7 +265,21 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
       setSearchHint(null);
       return;
     }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightIndex((cur) => moveHighlight(cur, e.key === "ArrowDown" ? 1 : -1, products.length));
+      return;
+    }
     if (e.key !== "Enter" || !locationId) return;
+    const highlighted = highlightIndex >= 0 ? products[highlightIndex] : undefined;
+    if (highlighted) {
+      addToCart(highlighted);
+      setSearchInput("");
+      setDebouncedSearch("");
+      setSearchHint(null);
+      setHighlightIndex(-1);
+      return;
+    }
     const rawValue = e.currentTarget.value.trim();
     if (!rawValue) return;
     try {
@@ -213,7 +295,7 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
         // >1 hasil: biarkan hook pencarian normal yang menampilkan daftar
         // (kasir ketik manual biasanya bukan barcode, ambigu memang wajar
         // tidak auto-tambah) — tapi tetap kasih tahu kenapa tidak auto-add.
-        setSearchHint(`Ada ${results.length} produk cocok — pilih dari daftar di bawah.`);
+        setSearchHint(`Ada ${results.length} produk cocok. Tekan panah bawah untuk memilih dari daftar, lalu Enter.`);
       }
     } catch {
       // Diam-diam gagal di sini tidak masalah — hook pencarian normal (yang
@@ -240,16 +322,6 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
     setCart([]);
     setShowClearCartConfirm(false);
     focusSearch();
-  }
-
-  /** Estimasi nominal cepat: uang pas, lalu pembulatan ke atas kelipatan
-   * Rp 50rb terdekat (2 opsi berikutnya) — pola umum kasir Indonesia. */
-  function getQuickCashAmounts(amount: number): number[] {
-    if (amount <= 0) return [];
-    const step = 50000;
-    const roundedUp = Math.ceil(amount / step) * step;
-    const first = roundedUp === amount ? roundedUp + step : roundedUp;
-    return [amount, first, first + step];
   }
 
   function resetPaymentState() {
@@ -331,7 +403,7 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
       }
     } else if (paymentMode === "split") {
       if (paymentLines.length < 2) {
-        setCheckoutError("Split payment butuh minimal 2 metode — pakai metode tunggal kalau cuma 1");
+        setCheckoutError("Split payment butuh minimal 2 metode. Pakai metode tunggal kalau cuma 1.");
         return;
       }
       if (splitPaidTotal < total) {
@@ -364,7 +436,7 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
 
       const paymentSummaryLabel =
         paymentMode === "piutang"
-          ? `Piutang — ${selectedCustomer?.name}`
+          ? `Piutang: ${selectedCustomer?.name}`
           : paymentMode === "split"
             ? paymentLines.map((p) => PAYMENT_LABELS[p.method]).join(" + ")
             : PAYMENT_LABELS[paymentMode as PaymentMethod];
@@ -389,9 +461,9 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
   }
 
   return (
-    <div className="grid min-h-dvh grid-cols-1 gap-0 bg-[#f7f8fa] lg:grid-cols-[1fr_400px]">
+    <div className="grid grid-cols-1 gap-0 bg-[#f7f8fa] pb-20 lg:grid-cols-[1fr_400px] lg:pb-0">
       {/* Panel kiri: pencarian & katalog produk */}
-      <div className="flex min-h-dvh flex-col p-4 sm:p-6">
+      <div className="flex flex-col p-4 sm:p-6 lg:h-[calc(100dvh-52px)]">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold tracking-tight text-slate-900">Kasir (POS)</h1>
@@ -415,16 +487,19 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
                     key={h.id}
                     onClick={() => resumeHeldCart(h)}
                     className="flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100"
-                    title={`Ditahan ${h.heldAt} — ${h.cart.length} item`}
+                    title={`Ditahan ${h.heldAt}, ${h.cart.length} item`}
                   >
                     <PlayCircle size={13} /> {h.label}
                   </button>
                 ))}
               </div>
             )}
-            <select
+            <Select
               value={locationId}
-              onChange={(e) => setLocationId(e.target.value)}
+              onValueChange={(value) => {
+                setLocationId(value);
+                setHighlightIndex(-1);
+              }}
               disabled={isLoadingLocations}
               className="field-input w-auto"
             >
@@ -434,7 +509,7 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
                   {l.name} ({l.type === "toko" ? "Toko" : "Gudang"})
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         </div>
 
@@ -446,40 +521,59 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
             onChange={(e) => {
               setSearchInput(e.target.value);
               setSearchHint(null);
+              setHighlightIndex(-1);
             }}
             onKeyDown={handleSearchKeyDown}
-            placeholder="Cari nama produk, no. part, atau scan barcode… (Esc untuk hapus)"
+            placeholder="Cari nama produk, no. part, atau scan barcode…"
             className="field-input w-full pl-9"
             autoFocus
+            autoComplete="off"
+            enterKeyHint="search"
+            aria-label="Cari produk"
           />
         </div>
 
-        {searchHint && <p className="-mt-2 mb-3 text-xs text-slate-500">{searchHint}</p>}
+        <div className="mb-3 min-h-5 text-xs" aria-live="polite">
+          {notice ? (
+            <p className={notice.tone === "ok" ? "font-medium text-emerald-700" : "font-medium text-amber-700"}>
+              {notice.tone === "ok" ? "✓ " : "! "}
+              {notice.text}
+            </p>
+          ) : searchHint ? (
+            <p className="text-slate-500">{searchHint}</p>
+          ) : (
+            <p className="hidden text-slate-500 lg:block">
+              <Kbd>↑</Kbd> <Kbd>↓</Kbd> pilih · <Kbd>Enter</Kbd> tambah · <Kbd>Esc</Kbd> hapus · <Kbd>F2</Kbd> atau <Kbd>/</Kbd> ke
+              kolom cari · <Kbd>F9</Kbd> bayar
+            </p>
+          )}
+        </div>
 
-        <div className="grid flex-1 grid-cols-2 gap-3 overflow-y-auto sm:grid-cols-3 xl:grid-cols-4">
+        <div className="grid min-h-0 flex-1 content-start grid-cols-2 gap-3 sm:grid-cols-3 lg:overflow-y-auto xl:grid-cols-4">
           {isSearching && products.length === 0 && (
-            <p className="col-span-full py-8 text-center text-sm text-slate-400">Mencari…</p>
+            <p className="col-span-full py-8 text-center text-sm text-slate-500">Mencari…</p>
           )}
           {!isSearching && products.length === 0 && (
-            <p className="col-span-full py-8 text-center text-sm text-slate-400">
+            <p className="col-span-full py-8 text-center text-sm text-slate-500">
               {debouncedSearch ? "Tidak ada produk yang cocok." : "Ketik atau scan barcode untuk mencari produk."}
             </p>
           )}
-          {products.map((p) => (
+          {products.map((p, idx) => (
             <button
               key={p.id}
+              id={`pos-product-${p.id}`}
               onClick={() => {
                 addToCart(p);
                 setSearchHint(null);
                 focusSearch();
               }}
               disabled={p.isOutOfStock}
-              className="card flex flex-col items-start gap-1 p-3 text-left transition-colors hover:border-brand-300 hover:bg-brand-50/40 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-slate-200 disabled:hover:bg-white"
+              className={`card flex flex-col items-start gap-1 p-3 text-left transition-colors hover:border-brand-300 hover:bg-brand-50/40 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-slate-200 disabled:hover:bg-white ${idx === highlightIndex ? "border-brand-500 bg-brand-50 ring-2 ring-brand-300" : ""}`}
             >
               <span className="line-clamp-2 text-sm font-medium text-slate-900">{p.name}</span>
               <span className="text-xs text-slate-500">{p.partNumber}</span>
               {p.compatibleModelsSummary && (
-                <span className="line-clamp-1 text-[11px] text-slate-400" title={p.compatibleModels.join(', ')}>
+                <span className="line-clamp-1 text-[11px] text-slate-500" title={p.compatibleModels.join(', ')}>
                   Cocok: {p.compatibleModelsSummary}
                 </span>
               )}
@@ -493,7 +587,11 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
       </div>
 
       {/* Panel kanan: keranjang & pembayaran */}
-      <div className="flex min-h-dvh flex-col border-t border-slate-200 bg-white p-4 sm:p-6 lg:border-l lg:border-t-0">
+      <div
+        id="pos-cart-panel"
+        className="flex flex-col border-t border-slate-200 bg-white lg:sticky lg:top-0 lg:h-[calc(100dvh-52px)] lg:border-l lg:border-t-0"
+      >
+        <div className="flex min-h-0 flex-1 flex-col p-4 pb-0 sm:p-6 sm:pb-0">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
             <ShoppingCart size={16} /> Keranjang ({cart.length})
@@ -516,19 +614,22 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
           )}
         </div>
 
-        <div className="flex-1 space-y-2 overflow-y-auto">
-          {cart.length === 0 && <p className="py-6 text-center text-sm text-slate-400">Belum ada item.</p>}
+        <div ref={cartListRef} className="min-h-24 flex-1 space-y-2 overflow-y-auto lg:min-h-32">
+          {cart.length === 0 && <p className="py-6 text-center text-sm text-slate-500">Belum ada item.</p>}
           {cart.map((line) => (
-            <div key={line.productId} className="flex items-center gap-2 rounded-md border border-slate-200 p-2">
+            <div key={line.productId} className="flex items-center gap-1.5 rounded-md border border-slate-200 p-2">
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-slate-900">{line.name}</p>
+                <p className="line-clamp-2 text-sm font-medium text-slate-900" title={line.name}>
+                  {line.name}
+                </p>
                 <p className="text-xs text-slate-500">
-                  {formatRupiah(line.unitPrice)} / {line.unit}
+                  {formatRupiah(line.unitPrice)} / {line.unit} ·{" "}
+                  <span className="font-semibold text-slate-700">{formatRupiah(line.unitPrice * line.quantity)}</span>
                 </p>
               </div>
               <button
                 onClick={() => updateQuantity(line.productId, line.quantity - 1)}
-                className="rounded-md border border-slate-200 p-1 text-slate-500 hover:bg-slate-50"
+                className="flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 lg:h-8 lg:w-8"
                 aria-label="Kurangi"
               >
                 <Minus size={13} />
@@ -545,25 +646,30 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
                 min={1}
                 max={line.availableQuantity}
                 defaultValue={line.quantity}
+                onFocus={(e) => e.currentTarget.select()}
                 onBlur={(e) => updateQuantity(line.productId, Number(e.target.value) || 0)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") e.currentTarget.blur();
+                  if (e.key === "Enter") {
+                    e.currentTarget.blur();
+                    focusSearch();
+                  }
                 }}
-                className="w-12 rounded-md border border-slate-200 py-1 text-center text-sm font-medium text-slate-900 focus:border-brand-400 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                className="h-9 w-14 rounded-md border border-slate-200 text-center text-sm font-medium text-slate-900 focus:border-brand-400 focus:outline-none lg:h-8 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 aria-label={`Kuantitas ${line.name}`}
               />
               <button
                 onClick={() => updateQuantity(line.productId, line.quantity + 1)}
                 disabled={line.quantity >= line.availableQuantity}
-                className="rounded-md border border-slate-200 p-1 text-slate-500 hover:bg-slate-50 disabled:opacity-40"
+                className="flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 lg:h-8 lg:w-8"
                 aria-label="Tambah"
               >
                 <Plus size={13} />
               </button>
               <button
                 onClick={() => removeFromCart(line.productId)}
-                className="rounded-md p-1 text-red-500 hover:bg-red-50"
-                aria-label="Hapus"
+                className="flex h-9 w-9 items-center justify-center rounded-md text-red-500 hover:bg-red-50 lg:h-8 lg:w-8"
+                aria-label={`Hapus ${line.name}`}
+                title="Hapus dari keranjang"
               >
                 <Trash2 size={13} />
               </button>
@@ -571,12 +677,12 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
           ))}
         </div>
 
-        <div className="mt-4 space-y-3 border-t border-slate-200 pt-4">
+        <div className="mt-3 shrink-0 space-y-3 border-t border-slate-200 pt-3 lg:max-h-[46%] lg:overflow-y-auto lg:pb-3">
           <Input label="Nama Pelanggan (opsional)" value={customerName} onChange={setCustomerName} placeholder="Walk-in" />
 
           <div>
             <label className="field-label">Diskon Nota (Rp)</label>
-            <input
+            <input aria-label="Diskon Nota (Rp)"
               type="number"
               min={0}
               value={discountAmount || ""}
@@ -587,10 +693,10 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
 
           <div>
             <label className="field-label">Metode Pembayaran</label>
-            <select
+            <Select aria-label="Metode Pembayaran"
               value={paymentMode}
-              onChange={(e) => {
-                const next = e.target.value as SaleSummaryPaymentMethod;
+              onValueChange={(value) => {
+                const next = value as SaleSummaryPaymentMethod;
                 setPaymentMode(next);
                 setPaymentLines([]);
                 if (next !== "piutang") setSelectedCustomer(null);
@@ -604,13 +710,13 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
               ))}
               <option value="split">Split (Gabungan Metode)</option>
               <option value="piutang">Piutang (Bayar Nanti)</option>
-            </select>
+            </Select>
           </div>
 
           {paymentMode === "cash" && (
             <div>
               <label className="field-label">Jumlah Dibayar (Rp)</label>
-              <input
+              <input aria-label="Jumlah Dibayar (Rp)"
                 type="number"
                 min={0}
                 value={amountPaid || ""}
@@ -648,16 +754,29 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
             <CustomerPicker selected={selectedCustomer} onSelect={setSelectedCustomer} orderTotal={total} />
           )}
 
-          <div className="space-y-1 rounded-md bg-slate-50 p-3 text-sm">
+        </div>
+        </div>
+
+        <div
+          ref={payFooterRef}
+          className="shrink-0 space-y-2 border-t border-slate-200 bg-white p-4 shadow-[0_-4px_12px_-8px_rgba(15,23,42,0.25)] sm:px-6"
+        >
+          <div className="space-y-0.5 text-sm">
             <Row label="Subtotal" value={formatRupiah(subtotal)} />
             {discountAmount > 0 && <Row label="Diskon" value={`- ${formatRupiah(discountAmount)}`} />}
-            <Row label="Total" value={formatRupiah(total)} bold />
             {paymentMode === "cash" && <Row label="Kembalian" value={formatRupiah(change)} />}
             {paymentMode === "split" && <Row label="Sisa Belum Dibayar" value={formatRupiah(splitRemaining)} />}
+            <div className="flex items-baseline justify-between pt-1 text-slate-900">
+              <span className="text-sm font-semibold">Total</span>
+              <span className="text-2xl font-bold tracking-tight">{formatRupiah(total)}</span>
+            </div>
           </div>
 
           {checkoutError && (
-            <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <div
+              role="alert"
+              className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+            >
               <AlertCircle size={15} className="mt-0.5 shrink-0" />
               <span>{checkoutError}</span>
             </div>
@@ -666,7 +785,7 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
           <button
             onClick={handleCheckout}
             disabled={isCheckingOut || cart.length === 0}
-            className="btn btn-primary w-full py-2.5 text-base"
+            className="btn btn-primary w-full py-3.5 text-lg font-semibold"
           >
             {isCheckingOut
               ? "Memproses…"
@@ -674,9 +793,23 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
                 ? `Catat Piutang ${formatRupiah(total)}`
                 : `Bayar ${formatRupiah(total)}`}
           </button>
-          <p className="text-center text-[11px] text-slate-400">Tekan F9 untuk bayar cepat</p>
+          <p className="hidden text-center text-[11px] text-slate-500 lg:block">
+            Tekan <Kbd>F9</Kbd> untuk bayar cepat
+          </p>
         </div>
       </div>
+
+      {hasCart && !payFooterVisible && (
+        <div className="fixed inset-x-0 bottom-0 z-40 flex items-center gap-3 border-t border-slate-200 bg-white p-3 shadow-popover lg:hidden">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] text-slate-500">{cart.length} item</p>
+            <p className="truncate text-lg font-bold text-slate-900">{formatRupiah(total)}</p>
+          </div>
+          <a href="#pos-cart-panel" className="btn btn-primary px-6 py-3 text-base font-semibold">
+            Bayar
+          </a>
+        </div>
+      )}
 
       {showShiftPanel && (
         <ShiftPanel
@@ -717,7 +850,7 @@ function SplitPaymentEditor({
   return (
     <div className="space-y-2 rounded-md border border-slate-200 p-3">
       <p className="text-xs font-medium text-slate-500">
-        Split Payment — tidak ada kembalian untuk kombinasi metode (lihat catatan di migration 0027)
+        Split Payment: tidak ada kembalian untuk kombinasi metode ini.
       </p>
       {lines.map((line) => (
         <div key={line.method} className="flex items-center gap-2">
@@ -812,8 +945,8 @@ function CustomerPicker({
         />
       </div>
       <div className="max-h-32 space-y-1 overflow-y-auto">
-        {isLoading && <p className="text-xs text-slate-400">Mencari…</p>}
-        {!isLoading && customers.length === 0 && <p className="text-xs text-slate-400">Tidak ada pelanggan yang cocok.</p>}
+        {isLoading && <p className="text-xs text-slate-500">Mencari…</p>}
+        {!isLoading && customers.length === 0 && <p className="text-xs text-slate-500">Tidak ada pelanggan yang cocok.</p>}
         {customers.map((c) => (
           <button
             key={c.id}
@@ -863,7 +996,7 @@ function QuickAddCustomer({ onCreated, onCancel }: { onCreated: (c: CustomerResp
       <Input label="No. Telepon (opsional)" value={phone} onChange={setPhone} />
       <div>
         <label className="field-label">Limit Piutang (Rp)</label>
-        <input
+        <input aria-label="Limit Piutang (Rp)"
           type="number"
           min={0}
           value={creditLimit || ""}
@@ -987,7 +1120,7 @@ function ShiftPanel({
           <div className="space-y-3">
             <div>
               <label className="field-label">Kas Awal (Rp)</label>
-              <input
+              <input aria-label="Kas Awal (Rp)"
                 type="number"
                 min={0}
                 value={openingCash || ""}
@@ -1005,7 +1138,7 @@ function ShiftPanel({
         {!closedResult && currentShift && !showCloseForm && (
           <div className="space-y-3 text-sm">
             <p className="text-xs text-slate-500">Dibuka {new Date(currentShift.opened_at).toLocaleString("id-ID")}</p>
-            {isLoadingReport && <p className="text-xs text-slate-400">Memuat laporan…</p>}
+            {isLoadingReport && <p className="text-xs text-slate-500">Memuat laporan…</p>}
             {report && <ShiftTotalsSummary totals={report} />}
             {error && <p className="text-xs text-red-600">{error}</p>}
             <button onClick={() => setShowCloseForm(true)} className="btn btn-danger w-full py-2">
@@ -1023,7 +1156,7 @@ function ShiftPanel({
             )}
             <div>
               <label className="field-label">Kas Fisik Dihitung (Rp)</label>
-              <input
+              <input aria-label="Kas Fisik Dihitung (Rp)"
                 type="number"
                 min={0}
                 value={closingCash || ""}
@@ -1033,7 +1166,7 @@ function ShiftPanel({
             </div>
             <div>
               <label className="field-label">Catatan (opsional)</label>
-              <input value={closeNotes} onChange={(e) => setCloseNotes(e.target.value)} className="field-input mt-1" />
+              <input aria-label="Catatan (opsional)" value={closeNotes} onChange={(e) => setCloseNotes(e.target.value)} className="field-input mt-1" />
             </div>
             {error && <p className="text-xs text-red-600">{error}</p>}
             <div className="flex gap-2">
@@ -1056,11 +1189,11 @@ function ShiftTotalsSummary({ totals }: { totals: ShiftReportTotalsResponse }) {
     <div className="space-y-1 rounded-md bg-slate-50 p-3">
       <Row label="Jumlah Nota" value={String(totals.salesCount)} />
       <Row label="Total Penjualan" value={formatRupiah(totals.grossRevenue)} bold />
-      <Row label="— Tunai" value={formatRupiah(totals.cashTotal)} />
-      <Row label="— Transfer" value={formatRupiah(totals.transferTotal)} />
-      <Row label="— QRIS" value={formatRupiah(totals.qrisTotal)} />
-      <Row label="— Kartu" value={formatRupiah(totals.cardTotal)} />
-      <Row label="— Piutang" value={formatRupiah(totals.piutangTotal)} />
+      <Row label="- Tunai" value={formatRupiah(totals.cashTotal)} />
+      <Row label="- Transfer" value={formatRupiah(totals.transferTotal)} />
+      <Row label="- QRIS" value={formatRupiah(totals.qrisTotal)} />
+      <Row label="- Kartu" value={formatRupiah(totals.cardTotal)} />
+      <Row label="- Piutang" value={formatRupiah(totals.piutangTotal)} />
       {totals.voidCount > 0 && <Row label="Nota Dibatalkan" value={`${totals.voidCount} (${formatRupiah(totals.voidTotalAmount)})`} />}
     </div>
   );
@@ -1081,6 +1214,22 @@ type PaperWidth = keyof typeof PAPER_WIDTHS;
 function Receipt({ success, onNewSale }: { success: CheckoutSuccess; onNewSale: () => void }) {
   const [paperWidth, setPaperWidth] = useState<PaperWidth>("80mm");
 
+  // Enter = Transaksi Baru. Diabaikan 0,6 dtk pertama (Enter sisa dari layar
+  // sebelumnya jangan langsung menutup struk) dan saat fokus ada di tombol,
+  // supaya Enter di tombol "Cetak" tidak sekaligus membuka transaksi baru.
+  useEffect(() => {
+    const shownAt = Date.now();
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Enter" || e.repeat || Date.now() - shownAt < 600) return;
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "BUTTON" || tag === "A") return;
+      e.preventDefault();
+      onNewSale();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onNewSale]);
+
   return (
     <div className="flex min-h-dvh items-center justify-center bg-[#f7f8fa] p-4">
       <style>{`
@@ -1099,7 +1248,7 @@ function Receipt({ success, onNewSale }: { success: CheckoutSuccess; onNewSale: 
         }
       `}</style>
       <div id="pos-receipt" className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-6 shadow-popover print:rounded-none print:border-0 print:p-0 print:shadow-none">
-        <div className="mb-4 flex flex-col items-center gap-2 text-center">
+        <div className="mb-4 flex flex-col items-center gap-2 text-center" role="status">
           <CheckCircle2 size={32} className="text-emerald-600 print:hidden" />
           <h2 className="text-base font-semibold text-slate-900">Penjualan Berhasil</h2>
           <p className="text-xs text-slate-500">Nota #{success.saleNumber}</p>
@@ -1144,13 +1293,24 @@ function Receipt({ success, onNewSale }: { success: CheckoutSuccess; onNewSale: 
             <button onClick={() => window.print()} className="btn btn-secondary flex-1 py-2">
               <Printer size={14} className="mr-1.5 inline" /> Cetak
             </button>
-            <button onClick={onNewSale} className="btn btn-primary flex-1 py-2">
+            <button onClick={onNewSale} autoFocus className="btn btn-primary flex-1 py-3 text-base font-semibold">
               Transaksi Baru
             </button>
           </div>
+          <p className="hidden text-center text-[11px] text-slate-500 lg:block">
+            Tekan <Kbd>Enter</Kbd> untuk transaksi baru
+          </p>
         </div>
       </div>
     </div>
+  );
+}
+
+function Kbd({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="rounded border border-slate-300 bg-slate-50 px-1 py-px font-sans text-[10px] font-medium text-slate-600">
+      {children}
+    </kbd>
   );
 }
 
@@ -1177,7 +1337,7 @@ function Input({
   return (
     <div>
       <label className="field-label">{label}</label>
-      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="field-input mt-1" />
+      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} aria-label={label} className="field-input mt-1" />
     </div>
   );
 }

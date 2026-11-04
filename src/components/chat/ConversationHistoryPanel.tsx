@@ -91,7 +91,7 @@ export function ConversationHistoryPanel({
 
         <div className="flex-1 overflow-y-auto">
           {items === null && !failed && (
-            <p className="p-6 text-center text-sm text-slate-400">Memuat riwayat…</p>
+            <p className="p-6 text-center text-sm text-slate-500">Memuat riwayat…</p>
           )}
           {failed && (
             <p className="p-6 text-center text-sm text-red-600">
@@ -99,7 +99,7 @@ export function ConversationHistoryPanel({
             </p>
           )}
           {items?.length === 0 && (
-            <p className="p-6 text-center text-sm text-slate-400">
+            <p className="p-6 text-center text-sm text-slate-500">
               Belum ada percakapan sebelumnya.
             </p>
           )}
@@ -120,7 +120,7 @@ export function ConversationHistoryPanel({
                       <MessageSquare size={14} className="mt-0.5 shrink-0 text-slate-400" />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm text-slate-800">{c.title}</p>
-                        <p className="mt-0.5 text-[11px] text-slate-500">
+                        <p className="mt-0.5 text-xs text-slate-500">
                           {formatWhen(c.lastActivityAt)} · {c.messageCount} pesan
                         </p>
                       </div>
@@ -137,7 +137,7 @@ export function ConversationHistoryPanel({
           )}
         </div>
 
-        <p className="border-t border-slate-100 px-4 py-2.5 text-[11px] text-slate-400">
+        <p className="border-t border-slate-100 px-4 py-2.5 text-xs text-slate-500">
           Percakapan yang dilanjutkan tetap tampil utuh, tapi asisten hanya
           mengingat beberapa pesan terakhir.
         </p>

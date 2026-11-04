@@ -1,4 +1,6 @@
 import type { AgentMode } from "@/src/lib/agents/orchestrator";
+import { assessAnswerQuality, type AnswerQuality } from "@/src/lib/eval/answer-quality";
+import { codeAssistLabels, codeAssistOf } from "@/src/lib/eval/code-assist";
 import {
   ROUTES,
   type ExpectedAction,
@@ -95,6 +97,9 @@ export function entityFound(
 const CLAIMS_MISSING =
   /\b(tidak|tak|belum|ga|gak|nggak)\s+(ditemukan|ada|tersedia|ketemu)\b|\bkosong\b|\bhabis\b/i;
 
+// Jawaban masih menyebut ada stok di suatu tempat (dicek setelah frasa "kosong/habis/tidak ada" dibuang).
+const CLAIMS_AVAILABLE = /\b(masih|punya|tersedia|ready|sisa|ada)\b/i;
+
 /**
  * Faithfulness jawaban pertanyaan stok (heuristik deterministik, terpisah dari
  * ETSR): jawaban harus menyebut minimal satu angka stok tersedia yang benar dan
@@ -122,10 +127,14 @@ export function assessFaithfulness(s: Scenario, o: Observation, refs: RefMap): F
   const echoed = new Set([...digits(s.message), ...digits(String(row.name ?? ""))]);
   const numbers = digits(o.assistantText).filter((n) => !echoed.has(n));
   const mentionsStock = positive.some((q) => numbers.includes(q));
-  const claimsMissing = CLAIMS_MISSING.test(o.assistantText);
+  const text = o.assistantText;
+  const claimsMissing = CLAIMS_MISSING.test(text);
 
   if (positive.length === 0) return claimsMissing ? "faithful" : "review";
   if (!mentionsStock) {
+    // "Gudangnya masih punya, tapi toko kosong" tanpa angka: benar bila ada lokasi berstok nol dan ada lokasi berstok.
+    const claimsAvailable = CLAIMS_AVAILABLE.test(text.replace(new RegExp(CLAIMS_MISSING.source, "gi"), " "));
+    if (claimsMissing && numbers.length === 0 && claimsAvailable && quantities.some((q) => q === 0)) return "faithful";
     if (claimsMissing || numbers.length > 0) return "unfaithful";
     return "review"; // mis. "masih ada di gudang dan toko" tanpa angka: benar tapi tidak lengkap
   }
@@ -222,6 +231,16 @@ export function scoreScenario(s: Scenario, o: Observation, refs: RefMap): Scored
   };
 }
 
+/** Mutu jawaban baris ini; dihitung dari teks, jadi berlaku juga untuk berkas run lama. */
+export function answerQualityOf(r: ScoredRow): AnswerQuality | null {
+  return assessAnswerQuality(r.scenario, r.observation);
+}
+
+/** Berhasil menurut ETSR DAN jawabannya tidak ngelantur (lihat answer-quality.ts). */
+export function strictSuccess(r: ScoredRow): boolean {
+  return r.success && answerQualityOf(r)?.ok !== false;
+}
+
 export function quantile(sorted: number[], q: number): number | null {
   if (sorted.length === 0) return null;
   const pos = (sorted.length - 1) * q;
@@ -266,6 +285,12 @@ export interface ModeSummary {
   toolAccuracy: { correct: number; total: number };
   parameterAccuracy: { correct: number; total: number };
   etsr: { success: number; total: number; byRoute: Record<Route, { success: number; total: number }> };
+  /** ETSR yang juga menggugurkan jawaban ngelantur; ETSR di atas tidak berubah. */
+  etsrStrict: { success: number; total: number; flagged: number };
+  /** Berhasil tanpa bantuan kode sedikit pun (rute, alat, ulang, jawaban); "ETSR murni model". */
+  etsrRaw: { success: number; total: number };
+  /** Eksekusi yang dibantu kode, per jenis bantuan. */
+  codeAssist: { any: number; route: number; tool: number; retry: number; answer: number; total: number };
   failedStages: Partial<Record<FailedStage, number>>;
   latency: Record<Route | "all", ReturnType<typeof latencyStats>>;
   /**
@@ -347,6 +372,23 @@ export function summarize(mode: AgentMode, rows: ScoredRow[]): ModeSummary {
       total: functional.length,
       byRoute,
     },
+    etsrStrict: {
+      success: functional.filter(strictSuccess).length,
+      total: functional.length,
+      flagged: functional.filter((r) => r.success && !strictSuccess(r)).length,
+    },
+    etsrRaw: {
+      success: functional.filter((r) => r.success && !codeAssistOf(r.observation).any).length,
+      total: functional.length,
+    },
+    codeAssist: {
+      any: functional.filter((r) => codeAssistOf(r.observation).any).length,
+      route: functional.filter((r) => codeAssistOf(r.observation).route).length,
+      tool: functional.filter((r) => codeAssistOf(r.observation).tool).length,
+      retry: functional.filter((r) => codeAssistOf(r.observation).retry).length,
+      answer: functional.filter((r) => codeAssistOf(r.observation).answer).length,
+      total: functional.length,
+    },
     failedStages,
     latency: {
       all: latencyOf(() => true),
@@ -382,7 +424,7 @@ export function toCsv(rows: ScoredRow[]): string {
     "param_correct", "param_total", "entity_found",
     "pending", "location_prompt", "confirm_outcome", "pending_correct", "stock_correct",
     "success", "failed_stage", "security_invariant_held", "faithfulness", "latency_ms", "prompt_tokens", "completion_tokens", "prompt_padding",
-    "run_error", "confirm_error", "assistant_text", "tool_trace",
+    "answer_issues", "code_assist", "code_guards_off", "run_error", "confirm_error", "assistant_text", "tool_trace",
   ];
   const lines = rows.map((r) => {
     const o = r.observation;
@@ -393,7 +435,7 @@ export function toCsv(rows: ScoredRow[]): string {
       r.paramCorrectFields, r.paramTotalFields, r.entityFound,
       o.pending, o.locationPrompt ?? "", o.confirmOutcome, r.pendingCorrect, r.stockCorrect,
       r.success, r.failedStage, r.securityInvariantHeld, r.faithfulness, o.latencyMs, o.promptTokens, o.completionTokens, o.promptPadding ?? "",
-      o.runError, o.confirmError, o.assistantText, o.toolTrace,
+      answerQualityOf(r)?.issues.join(" | ") ?? "", codeAssistLabels(codeAssistOf(o)).join("|"), o.codeGuardsOff ?? "", o.runError, o.confirmError, o.assistantText, o.toolTrace,
     ].map(csvCell).join(",");
   });
   return [header.join(","), ...lines].join("\n");

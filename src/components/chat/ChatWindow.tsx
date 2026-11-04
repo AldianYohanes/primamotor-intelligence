@@ -13,7 +13,7 @@ import {
 import { createClient } from "@/src/lib/supabase/client";
 import type { Database, Json } from "@/src/lib/db/types";
 import { useModelStore } from "@/src/lib/stores/model-store";
-import { MODEL_OPTIONS } from "@/src/lib/agents/model-options";
+import { ModelPicker } from "@/src/components/model/ModelPicker";
 import { ModelSetupPanel } from "@/src/components/model/ModelSetupPanel";
 import { AppHeader } from "@/src/components/nav/AppHeader";
 import type { AppModule } from "@/src/lib/auth/rbac";
@@ -43,12 +43,16 @@ import {
 } from "@/src/lib/agents/conversation";
 import { ConversationHistoryPanel } from "./ConversationHistoryPanel";
 import { EnableNotificationsBanner } from "./EnableNotificationsBanner";
+import { InterruptedDivider } from "./InterruptedDivider";
 import { MessageBubble } from "./MessageBubble";
+import { InferenceStatsButton, LiveInferenceLine, type TurnRecord } from "./InferenceStats";
+import type { InferenceSnapshot } from "@/src/lib/agents/inference-stats";
 import { CANCELLED_MESSAGE, PinConfirmDialog } from "./PinConfirmDialog";
 import { StockSyncIndicator } from "./StockSyncIndicator";
 import { useStockSyncStore } from "@/src/lib/stores/stock-sync-store";
 import { MutationChoiceCard } from "./MutationChoiceCard";
 import { ProcessDetails } from "./ProcessDetails";
+import { EXAMPLE_QUESTIONS, MAX_CHAT_MESSAGE_LENGTH, interruptionReason, shouldSubmitOnEnter, turnErrorMessage, unansweredQuestion } from "./chat-ui";
 
 interface Props {
   /** Tenant aktif (bagi super admin bisa tenant lain). */
@@ -85,6 +89,7 @@ export function ChatWindow({
   const modelStatus = useModelStore((s) => s.status);
   const engine = useModelStore((s) => s.engine);
   const engineError = useModelStore((s) => s.error);
+  const compatNotice = useModelStore((s) => s.compatNotice);
   const modelId = useModelStore((s) => s.modelId);
   const prepareModel = useModelStore((s) => s.prepare);
   const retryModel = useModelStore((s) => s.retry);
@@ -94,12 +99,19 @@ export function ChatWindow({
   const [draftText, setDraftText] = useState("");
   // Langkah "Lihat proses" giliran yang sedang berjalan (live).
   const [liveSteps, setLiveSteps] = useState<ProcessStep[]>([]);
+  // Stopwatch dan statistik model giliran yang sedang berjalan.
+  const [turnStartedAt, setTurnStartedAt] = useState(0);
+  const [liveInference, setLiveInference] = useState<InferenceSnapshot | null>(null);
+  // Riwayat statistik giliran di sesi ini, untuk tombol dan modal statistik.
+  const [turns, setTurns] = useState<TurnRecord[]>([]);
   const [pendingConfirmation, setPendingConfirmation] =
     useState<PendingConfirmation | null>(null);
   const [mutationChoice, setMutationChoice] = useState<MutationChoice | null>(null);
   const [submittingChoice, setSubmittingChoice] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [resuming, setResuming] = useState(false);
+  // Pertanyaan terakhir yang tidak sempat dijawab, untuk pembatas "jawaban terputus".
+  const [interrupted, setInterrupted] = useState<{ reason: string; text: string } | null>(null);
   const isOnline = useOnlineStatus();
   const scrollRef = useRef<HTMLDivElement>(null);
   const stopRef = useRef<AbortController | null>(null);
@@ -117,6 +129,8 @@ export function ChatWindow({
         const withPending = await appendPendingMessages(id, history);
         setConversationId(id);
         setMessages(withPending);
+        const lost = unansweredQuestion(withPending);
+        if (lost) setInterrupted({ reason: interruptionReason("unknown"), text: lost });
         setLoadingHistory(false);
       })
       .catch((err) => {
@@ -210,11 +224,12 @@ export function ChatWindow({
     return () => window.removeEventListener("keydown", onKey);
   }, [isThinking]);
 
-  async function handleSend() {
-    const text = input.trim();
+  async function handleSend(override?: string) {
+    const text = (override ?? input).trim();
     if (!text || !engine || !conversationId || isThinking) return;
 
     setInput("");
+    setInterrupted(null);
     // Pesan baru berarti staf tidak memakai pilihan yang tertahan.
     setMutationChoice(null);
     const userMsg: ChatMessage = { role: "user", content: text };
@@ -226,8 +241,18 @@ export function ChatWindow({
     stopRef.current = controller;
     setDraftText("");
     setLiveSteps([]);
+    const startedAt = Date.now();
+    setTurnStartedAt(startedAt);
+    setLiveInference(null);
+    const turnId = `${startedAt}`;
+    const updateTurn = (patch: Partial<TurnRecord>) =>
+      setTurns((prev) => prev.map((t) => (t.id === turnId ? { ...t, ...patch } : t)));
+    setTurns((prev) => [...prev, { id: turnId, title: text, startedAt, snapshot: null }]);
     // Salinan terakhir dari onStep, dipakai bila giliran gagal di tengah jalan.
     let lastSteps: ProcessStep[] = [];
+    let lastInference: InferenceSnapshot | null = null;
+    let finalAnswer: string | undefined;
+    const inferenceOf = () => (lastInference ? { inference: { totalMs: Date.now() - startedAt } } : {});
 
     try {
       const result = await runAgentTurn(
@@ -243,16 +268,24 @@ export function ChatWindow({
             lastSteps = steps;
             setLiveSteps(steps);
           },
+          onInference: (snapshot) => {
+            lastInference = snapshot;
+            setLiveInference(snapshot);
+            updateTurn({ snapshot });
+          },
         },
       );
+      lastInference = result.inferenceStats ?? lastInference;
       const trace = result.processSteps ?? [];
       const assistantMsg: StoredChatMessage = {
         role: "assistant",
         content: result.assistantText,
         trace,
+        ...inferenceOf(),
       };
       setMessages((prev) => [...prev, assistantMsg]);
       persistMessage("assistant", result.assistantText, result.agentType, trace);
+      finalAnswer = result.assistantText;
 
       if (result.pendingConfirmation) {
         setPendingConfirmation(result.pendingConfirmation);
@@ -264,7 +297,7 @@ export function ChatWindow({
       if (err instanceof TurnStoppedError) {
         const partial = err.partialText.trim();
         const content = partial ? `${partial}\n\n(dihentikan)` : "Dihentikan.";
-        setMessages((prev) => [...prev, { role: "assistant", content, trace: lastSteps }]);
+        setMessages((prev) => [...prev, { role: "assistant", content, trace: lastSteps, ...inferenceOf() }]);
         persistMessage("assistant", content, undefined, lastSteps);
         return;
       }
@@ -273,17 +306,20 @@ export function ChatWindow({
         ...prev,
         {
           role: "assistant",
-          content: "Maaf, terjadi kesalahan. Coba lagi ya.",
+          content: turnErrorMessage(isOnline),
           // runAgentTurn menandai langkah yang terputus sebagai gagal sebelum melempar error.
           trace: lastSteps,
         },
       ]);
+      setInterrupted({ reason: interruptionReason(isOnline ? "error" : "offline"), text });
     } finally {
       stopRef.current = null;
       releaseWake();
       setIsThinking(false);
       setDraftText("");
       setLiveSteps([]);
+      setLiveInference(null);
+      updateTurn({ snapshot: lastInference, totalMs: Date.now() - startedAt, answer: finalAnswer });
     }
   }
 
@@ -364,6 +400,7 @@ export function ChatWindow({
         conversationId,
       );
       setConversationId(newId);
+      setInterrupted(null);
       setMessages([]);
     } catch (err) {
       console.error(err);
@@ -377,7 +414,10 @@ export function ChatWindow({
       const history = await resumeConversation(supabase, id, conversationId);
       abandonPendingActions();
       setConversationId(id);
-      setMessages(await appendPendingMessages(id, history));
+      const resumed = await appendPendingMessages(id, history);
+      setMessages(resumed);
+      const lost = unansweredQuestion(resumed);
+      setInterrupted(lost ? { reason: interruptionReason("unknown"), text: lost } : null);
       setHistoryOpen(false);
     } catch (err) {
       console.error(err);
@@ -397,15 +437,12 @@ export function ChatWindow({
             Perangkat ini belum bisa menjalankan Asisten AI
           </p>
           <p className="text-sm text-slate-600">
-            Asisten AI berjalan langsung di perangkat (tidak lewat server)
-            supaya gratis dan data toko tidak keluar dari perangkat ini — tapi
-            itu butuh dukungan WebGPU yang belum tersedia di browser/perangkat
-            ini.
+            Asisten AI butuh WebGPU, dan browser atau perangkat ini belum
+            mendukungnya.
           </p>
           <p className="text-xs text-slate-500">
-            Coba: (1) update browser ke versi terbaru, (2) pakai Chrome/Edge
-            kalau belum, atau (3) coba dari laptop/HP lain. Kalau masalah
-            berlanjut, sampaikan ke owner/admin toko.
+            Coba update browser, pakai Chrome atau Edge, atau buka dari
+            perangkat lain. Kalau tetap gagal, hubungi owner toko.
           </p>
         </div>
       </div>
@@ -425,9 +462,7 @@ export function ChatWindow({
           <p className="text-sm text-slate-600">{engineError}</p>
           {/(f16|WGSL|GPU)/i.test(engineError) && (
             <p className="text-xs text-slate-500">
-              Ini biasanya error dukungan GPU/browser terhadap model saat ini.
-              Coba ganti ke model lain di bawah (varian &ldquo;tanpa f16&rdquo;
-              biasanya lebih kompatibel).
+              Coba pilih model lain, misalnya varian &ldquo;tanpa f16&rdquo;.
             </p>
           )}
           <div className="mt-1 flex justify-center gap-2">
@@ -446,25 +481,19 @@ export function ChatWindow({
             <label htmlFor="model-switch" className="mb-1 block text-xs font-medium text-slate-600">
               Atau ganti model AI
             </label>
-            <select
+            <ModelPicker
               id="model-switch"
-              value={modelId}
+              modelId={modelId}
               disabled={switchingModel || !isOnline}
               title={isOnline ? undefined : OFFLINE_HINT}
-              onChange={async (e) => {
+              onChange={async (next) => {
                 setSwitchingModel(true);
-                await setModelId(e.target.value).catch(() => {});
+                await setModelId(next).catch(() => {});
                 setSwitchingModel(false);
               }}
               className="field-input w-full !py-1.5 text-xs disabled:opacity-60"
-            >
-              {MODEL_OPTIONS.map((opt) => (
-                <option key={opt.id} value={opt.id}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-[11px] text-slate-400">
+            />
+            <p className="mt-1 text-xs text-slate-500">
               {!isOnline
                 ? "Ganti model butuh koneksi internet untuk mengunduh model."
                 : switchingModel
@@ -490,8 +519,9 @@ export function ChatWindow({
               <button
                 onClick={() => setHistoryOpen(true)}
                 disabled={isThinking || loadingHistory || !isOnline}
-                className="btn btn-secondary rounded-full !text-xs !py-1.5 !px-3"
+                className="btn btn-secondary min-h-10 min-w-10 rounded-full !text-xs !py-1.5 !px-3"
                 title={isOnline ? "Riwayat percakapan" : undefined}
+                aria-label="Riwayat percakapan"
               >
                 <History size={13} />
                 <span className="hidden sm:inline">Riwayat</span>
@@ -501,8 +531,9 @@ export function ChatWindow({
               <button
                 onClick={handleNewConversation}
                 disabled={isThinking || !engine || !isOnline}
-                className="btn btn-secondary rounded-full !text-xs !py-1.5 !px-3"
+                className="btn btn-secondary min-h-10 min-w-10 rounded-full !text-xs !py-1.5 !px-3"
                 title={isOnline ? "Percakapan baru" : undefined}
+                aria-label="Percakapan baru"
               >
                 <Plus size={13} />
                 <span className="hidden sm:inline">Percakapan Baru</span>
@@ -514,22 +545,29 @@ export function ChatWindow({
 
       <EnableNotificationsBanner />
 
+      {compatNotice && (
+        <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">{compatNotice}</div>
+      )}
+
       {!isOnline && (
         <div className="flex items-start gap-2 border-b border-slate-200 bg-slate-100 px-4 py-2 text-xs text-slate-600">
           <WifiOff size={14} className="mt-0.5 shrink-0" />
           <span>
-            Sedang offline — cari stok masih bisa pakai data terakhir yang
-            tersimpan, tapi catat barang masuk/keluar/transfer butuh koneksi
-            untuk verifikasi PIN. Riwayat dan percakapan baru juga menunggu
-            koneksi. Pesan tetap tersimpan dan otomatis terkirim begitu sinyal
-            kembali.
+            Sedang offline. Cari stok memakai data tersimpan terakhir; mencatat barang masuk, keluar, atau
+            transfer butuh koneksi untuk verifikasi PIN. Pesan baru menunggu sinyal kembali.
           </span>
         </div>
       )}
 
-      <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-4">
+      <div
+        ref={scrollRef}
+        role="log"
+        aria-live="polite"
+        aria-label="Percakapan dengan asisten"
+        className="flex-1 space-y-3 overflow-y-auto p-4"
+      >
         {loadingHistory && (
-          <p className="mt-8 text-center text-sm text-slate-400">
+          <p className="mt-8 text-center text-sm text-slate-500">
             Memuat riwayat percakapan…
           </p>
         )}
@@ -538,15 +576,33 @@ export function ChatWindow({
             <div className="mx-auto mb-3 flex h-9 w-9 items-center justify-center rounded-full bg-brand-50 text-brand-600">
               <Send size={15} />
             </div>
-            <p className="text-sm text-slate-400">
-              Coba tanya: &quot;ada radiator 240 gak?&quot; atau &quot;masuk
-              barang 10 pcs filter oli&quot;
-            </p>
+            <p className="text-sm font-medium text-slate-600">Mau cek atau catat apa?</p>
+            <p className="mt-1 text-xs text-slate-500">Ketuk salah satu contoh, atau ketik sendiri.</p>
+            <div className="mt-3 flex flex-col gap-2">
+              {EXAMPLE_QUESTIONS.map((q) => (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => handleSend(q)}
+                  disabled={isThinking || !conversationId}
+                  className="btn btn-secondary min-h-11 justify-start !whitespace-normal rounded-xl text-left"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
           </div>
         )}
         {messages.map((m, i) => (
           <MessageBubble key={i} message={m} />
         ))}
+        {interrupted && !isThinking && (
+          <InterruptedDivider
+            reason={interrupted.reason}
+            disabled={!engine || !conversationId}
+            onRetry={() => handleSend(interrupted.text)}
+          />
+        )}
         {mutationChoice && !isThinking && (
           <MutationChoiceCard
             choice={mutationChoice}
@@ -567,7 +623,7 @@ export function ChatWindow({
                 message={{ role: "assistant", content: draftText }}
               />
             )}
-            <div className="mt-1 flex items-center gap-1.5 px-1 text-xs text-slate-400">
+            <div role="status" className="mt-1 flex items-center gap-1.5 px-1 text-xs text-slate-500">
               <span className="flex gap-0.5">
                 <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300 [animation-delay:-0.3s]" />
                 <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300 [animation-delay:-0.15s]" />
@@ -575,35 +631,43 @@ export function ChatWindow({
               </span>
               {liveStatusLabel(liveSteps)}
             </div>
+            <LiveInferenceLine snapshot={liveInference} startedAt={turnStartedAt} />
             <ProcessDetails steps={liveSteps} live />
           </div>
         )}
       </div>
 
-      <div className="border-t border-slate-200 bg-white p-3">
+      <div className="border-t border-slate-200 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="flex gap-2">
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSend()}
+            onKeyDown={(e) => shouldSubmitOnEnter(e.nativeEvent) && handleSend()}
             placeholder={engine ? "Ketik pesan…" : "Asisten AI belum siap…"}
+            aria-label="Pesan untuk asisten"
+            enterKeyHint="send"
+            autoComplete="off"
+            maxLength={MAX_CHAT_MESSAGE_LENGTH}
             disabled={!engine}
-            className="field-input flex-1 rounded-full"
+            className="field-input min-h-11 flex-1 rounded-full !text-base sm:!text-sm"
           />
+          <InferenceStatsButton turns={turns} className="min-h-11 rounded-full px-4" />
           {isThinking ? (
             <button
               onClick={handleStop}
-              className="btn btn-secondary rounded-full px-5"
+              className="btn btn-secondary min-h-11 rounded-full px-5"
               title="Hentikan (Esc)"
+              aria-label="Hentikan jawaban"
             >
               <Square size={14} />
               Stop
             </button>
           ) : (
             <button
-              onClick={handleSend}
-              disabled={!engine}
-              className="btn btn-primary rounded-full px-5"
+              onClick={() => handleSend()}
+              disabled={!engine || !input.trim()}
+              aria-label="Kirim pesan"
+              className="btn btn-primary min-h-11 rounded-full px-5"
             >
               <Send size={14} />
               Kirim

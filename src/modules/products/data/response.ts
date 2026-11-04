@@ -12,10 +12,7 @@ export interface ProductResponse {
   unit: string
   description: string | null
   min_threshold: number | null
-  // Dipakai Monitoring Agent (lihat app/api/cron/monitor/route.ts) untuk
-  // hitung reorder point — sebelumnya kolom ini sudah ada di DB & dipakai
-  // mappers.ts, tapi belum dideklarasikan di sini (gap type-safety, lihat
-  // TODO §"Gap lain" — ProductResponse belum punya lead_time_days/safety_stock).
+  // Dipakai Monitoring Agent (app/api/cron/monitor/route.ts) untuk menghitung reorder point.
   lead_time_days: number | null
   safety_stock: number | null
   unit_cost: number

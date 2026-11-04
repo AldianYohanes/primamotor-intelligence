@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { createClient } from "@/src/lib/supabase/client";
-import { getLastStockSync, syncStockCache } from "@/src/lib/cache/indexeddb";
+import { getLastStockSync, loadCatalogTerms, syncStockCache } from "@/src/lib/cache/indexeddb";
 
 export type StockSyncStatus = "idle" | "syncing" | "ok" | "error";
 
@@ -27,6 +27,7 @@ export const useStockSyncStore = create<StockSyncState>((set) => ({
   error: null,
   load: async (businessId) => {
     const last = await getLastStockSync(businessId).catch(() => null);
+    await loadCatalogTerms(businessId).catch(() => {});
     set((s) => ({ lastSyncedAt: s.lastSyncedAt ?? last }));
   },
   sync: (supabase, businessId) => {

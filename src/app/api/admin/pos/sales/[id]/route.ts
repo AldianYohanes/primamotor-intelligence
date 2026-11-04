@@ -10,7 +10,7 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const ctx = await requireStaff();
+  const ctx = await requireStaff("portal.access");
   if ("error" in ctx) return ctx.error;
   const { supabase, staffRow } = ctx;
   const { id } = await params;

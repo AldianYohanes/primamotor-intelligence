@@ -28,7 +28,32 @@ describe("parseRouterReply", () => {
     ["OFF_TOPIC", "off_topic"],
     ["Maaf, saya hanya membantu urusan stok.", "off_topic"],
     ["", "off_topic"],
+    ["query", "query"],
+    ["Transaction.", "transaction"],
+    ["off topic", "off_topic"],
+    ["  **QUERY_AGENT**", "query"],
   ])("%s → %s", (text: string, expected: ReturnType<typeof parseRouterReply>) => {
     expect(parseRouterReply(text)).toBe(expected);
+  });
+});
+
+describe("parseRouterReply dengan teks berpikir", () => {
+  it("<think> yang menyebut transaction tidak menentukan rute (pertanyaan stok)", () => {
+    const reply =
+      "<think>\nThe user asks about stock of a radiator, not a transaction. The agent should be QUERY_AGENT, not TRANSACTION_AGENT.\n</think>\n\nQUERY_AGENT";
+    expect(parseRouterReply(reply)).toBe("query");
+  });
+
+  it("<think> yang menyebut transaction tapi jawabannya OFF_TOPIC", () => {
+    const reply = "<think>Greeting only. No transaction or query is requested.</think>OFF_TOPIC";
+    expect(parseRouterReply(reply)).toBe("off_topic");
+  });
+
+  it("<think> tanpa penutup: tidak ada jawaban, jatuh ke off_topic", () => {
+    expect(parseRouterReply("<think>Maybe this is a transaction, since the user says masuk 3 busi")).toBe("off_topic");
+  });
+
+  it("jawaban transaksi sesudah <think> tetap terbaca", () => {
+    expect(parseRouterReply("<think>masuk = incoming goods</think>\nTRANSACTION_AGENT")).toBe("transaction");
   });
 });

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import {
+  Bell,
   BellRing,
   Building2,
   ChevronDown,
@@ -14,6 +15,7 @@ import {
   Rows3,
   Smartphone,
   Undo2,
+  UserRound,
 } from "lucide-react";
 import { DensitySetting } from "@/src/components/settings/DensitySetting";
 import { logoutAndClear } from "@/src/lib/auth/logout-client";
@@ -21,7 +23,8 @@ import { enablePushNotifications, getPushSupportStatus } from "@/src/lib/notific
 import { isStandalone, useInstallPrompt } from "@/src/lib/pwa/install-prompt";
 import { useModelStore } from "@/src/lib/stores/model-store";
 import { formatBytes } from "@/src/lib/agents/model-progress";
-import { MODEL_OPTIONS } from "@/src/lib/agents/model-options";
+import { ModelPicker } from "@/src/components/model/ModelPicker";
+import { ChangePinForm } from "@/src/modules/account/ChangePinForm";
 
 export interface AccountInfo {
   fullName: string;
@@ -70,68 +73,19 @@ function Section({
   );
 }
 
-function ChangePinForm() {
-  const [current, setCurrent] = useState("");
-  const [next, setNext] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
-  const digits = (v: string) => v.replace(/\D/g, "").slice(0, 12);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (next !== confirm) {
-      setMessage({ ok: false, text: "Konfirmasi PIN baru tidak sama" });
-      return;
-    }
-    setBusy(true);
-    setMessage(null);
-    const res = await fetch("/api/account/pin", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ current_pin: current, new_pin: next }),
-    });
-    const data = await res.json().catch(() => ({}));
-    setBusy(false);
-    if (!res.ok) {
-      setMessage({ ok: false, text: data.error ?? "Gagal mengganti PIN" });
-      return;
-    }
-    setCurrent("");
-    setNext("");
-    setConfirm("");
-    setMessage({ ok: true, text: "PIN berhasil diganti. Pakai PIN baru saat masuk dan konfirmasi transaksi." });
-  }
-
-  const field = "field-input !py-1.5 text-center tracking-widest";
-  return (
-    <form onSubmit={submit} className="space-y-2">
-      <input type="password" inputMode="numeric" autoComplete="current-password" placeholder="PIN lama" value={current} onChange={(e) => setCurrent(digits(e.target.value))} className={field} required />
-      <input type="password" inputMode="numeric" autoComplete="new-password" placeholder="PIN baru (min. 6 digit)" value={next} onChange={(e) => setNext(digits(e.target.value))} className={field} minLength={6} required />
-      <input type="password" inputMode="numeric" autoComplete="new-password" placeholder="Ulangi PIN baru" value={confirm} onChange={(e) => setConfirm(digits(e.target.value))} className={field} minLength={6} required />
-      {message && (
-        <p className={clsx("text-xs", message.ok ? "text-emerald-700" : "text-red-600")}>{message.text}</p>
-      )}
-      <button type="submit" disabled={busy} className="btn btn-primary w-full justify-center !py-1.5 !text-xs">
-        {busy ? "Menyimpan…" : "Simpan PIN baru"}
-      </button>
-    </form>
-  );
-}
-
 function DeviceRow({ title, detail, action }: { title: string; detail: string; action?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3">
       <div className="min-w-0">
         <p className="text-xs font-medium text-slate-800">{title}</p>
-        <p className="text-[11px] text-slate-500">{detail}</p>
+        <p className="text-xs text-slate-500">{detail}</p>
       </div>
       {action}
     </div>
   );
 }
 
-const smallBtn = "btn btn-secondary shrink-0 !px-2.5 !py-1 !text-[11px]";
+const smallBtn = "btn btn-secondary shrink-0 !px-2.5 !py-1 !text-xs";
 
 function DeviceSettings() {
   // Panel baru di-mount saat dibuka, jadi aman membaca API browser di initializer.
@@ -237,29 +191,22 @@ function DeviceSettings() {
         }
       />
       <div className="pt-1">
-        <label htmlFor="account-model-switch" className="mb-1 block text-[11px] font-medium text-slate-500">
+        <label htmlFor="account-model-switch" className="mb-1 block text-xs font-medium text-slate-500">
           Ganti model AI {modelBusy && "(tunggu sampai selesai dulu)"}
         </label>
-        <select
+        <ModelPicker
           id="account-model-switch"
-          value={modelId}
+          modelId={modelId}
           disabled={modelBusy || switchingModel}
-          onChange={async (e) => {
+          onChange={async (next) => {
             setSwitchingModel(true);
-            await setModelId(e.target.value).catch(() => {});
+            await setModelId(next).catch(() => {});
             setSwitchingModel(false);
           }}
           className="field-input w-full !py-1.5 text-xs disabled:opacity-60"
-        >
-          {MODEL_OPTIONS.map((opt) => (
-            <option key={opt.id} value={opt.id}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-        <p className="mt-1 text-[11px] text-slate-400">
-          Kalau asisten sering berhenti karena error GPU, coba varian
-          &ldquo;tanpa f16&rdquo;. Model baru perlu diunduh ulang.
+        />
+        <p className="mt-1 text-xs text-slate-500">
+          Sering error? Coba varian &ldquo;tanpa f16&rdquo;.
         </p>
       </div>
     </>
@@ -311,11 +258,27 @@ export function AccountPanel({ account, onNavigate }: { account: AccountInfo; on
         </div>
       )}
 
+      <Link
+        href="/account"
+        onClick={onNavigate}
+        className="flex w-full items-center gap-2.5 border-t border-slate-100 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
+      >
+        <UserRound size={15} className="shrink-0 text-slate-500" />
+        Akun saya
+      </Link>
+      <Link
+        href="/notifications"
+        onClick={onNavigate}
+        className="flex w-full items-center gap-2.5 border-t border-slate-100 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
+      >
+        <Bell size={15} className="shrink-0 text-slate-500" />
+        Notifikasi
+      </Link>
       <Section icon={Rows3} title="Tampilan">
         <DensitySetting />
       </Section>
       <Section icon={KeyRound} title="Ganti PIN">
-        <ChangePinForm />
+        <ChangePinForm compact />
       </Section>
       <Section icon={Cpu} title="Pengaturan perangkat">
         <DeviceSettings />

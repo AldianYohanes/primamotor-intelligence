@@ -148,3 +148,27 @@ describe("contradictsStock", () => {
     expect(contradictsStock("Kampas kosong di semua lokasi.", zero)).toBe(false);
   });
 });
+
+describe("summarizeStock, produk paling cocok", () => {
+  const item = (name: string, score: number) => ({
+    product_id: name,
+    name,
+    similarity_score: score,
+    stock_by_location: [row("Toko", 2), row("Gudang", 3)],
+  });
+
+  it("menyingkirkan produk mirip yang skornya jauh di bawah (Q-01: radiator, bukan karburator)", () => {
+    const s = summarizeStock({ results: [item("Radiator Volvo 240", 1), item("Karburator Volvo 240", 0.48)] });
+    expect(s?.products.map((p) => p.name)).toEqual(["Radiator Volvo 240"]);
+  });
+
+  it("mempertahankan semua produk bila tidak ada yang jelas paling cocok", () => {
+    const s = summarizeStock({ results: [item("Busi A", 0.7), item("Busi B", 0.6)] });
+    expect(s?.products).toHaveLength(2);
+  });
+
+  it("mempertahankan beberapa produk yang sama-sama cocok", () => {
+    const s = summarizeStock({ results: [item("Lampu A", 1), item("Lampu B", 0.9)] });
+    expect(s?.products).toHaveLength(2);
+  });
+});

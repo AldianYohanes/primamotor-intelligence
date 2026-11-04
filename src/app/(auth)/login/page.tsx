@@ -83,7 +83,7 @@ function LoginForm() {
           <div className="space-y-3.5">
             <div>
               <label className="field-label">Kode Toko</label>
-              <input
+              <input aria-label="Kode Toko"
                 value={businessSlug}
                 onChange={(e) => setBusinessSlug(e.target.value)}
                 placeholder="prima-motor-volvo"
@@ -93,7 +93,7 @@ function LoginForm() {
             </div>
             <div>
               <label className="field-label">Username</label>
-              <input
+              <input aria-label="Username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="field-input mt-1"
@@ -102,7 +102,7 @@ function LoginForm() {
             </div>
             <div>
               <label className="field-label">PIN</label>
-              <input
+              <input aria-label="PIN"
                 type="password"
                 inputMode="numeric"
                 value={pin}
@@ -131,6 +131,13 @@ function LoginForm() {
           <Link href="/signup" className="font-medium text-brand-600 hover:text-brand-700 hover:underline">
             Daftar di sini
           </Link>
+        </p>
+        <p className="mt-3 text-center text-xs text-slate-500">
+          <Link href="/about" className="underline">Tentang</Link>
+          {' · '}
+          <Link href="/privacy" className="underline">Kebijakan Privasi</Link>
+          {' · '}
+          <Link href="/terms" className="underline">Syarat Penggunaan</Link>
         </p>
       </div>
     </div>

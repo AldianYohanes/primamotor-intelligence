@@ -23,14 +23,22 @@ export interface StockSummary {
 }
 
 const MAX_PRODUCTS = 3;
+const BEST_MATCH_MIN = 0.8;
+const BEST_MATCH_RATIO = 0.6;
 
 export function summarizeStock(result: unknown): StockSummary | null {
   // compactStockResult menggabungkan baris per produk (cache offline: satu baris per lokasi).
   const compact = compactStockResult(result) as { results?: unknown } | null;
   if (!compact || !Array.isArray(compact.results) || compact.results.length === 0) return null;
-  const products = (
-    compact.results as { name: string; available_quantity_per_location?: Record<string, number> }[]
-  ).map((p) => {
+  const list = compact.results as {
+    name: string;
+    similarity_score?: number;
+    available_quantity_per_location?: Record<string, number>;
+  }[];
+  // Satu produk jelas paling cocok (skor tinggi, yang lain jauh di bawah): produk mirip tidak ikut dijawab.
+  const top = Math.max(...list.map((p) => p.similarity_score ?? 0));
+  const relevant = top >= BEST_MATCH_MIN ? list.filter((p) => (p.similarity_score ?? 0) >= top * BEST_MATCH_RATIO) : list;
+  const products = relevant.map((p) => {
     const locations = Object.entries(p.available_quantity_per_location ?? {}).map(([name, quantity]) => ({
       name,
       quantity: Number(quantity) || 0,

@@ -45,7 +45,7 @@ const CLOSE = "</tool_call>";
  */
 export const TOOL_STOP_SEQUENCES = [CLOSE, "<tool_response>"];
 
-export function buildToolInstructions(tools: readonly ToolDefinition[]): string {
+export function buildToolInstructions(tools: readonly ToolDefinition[], opts: { extraExamples?: boolean } = {}): string {
   const schema = tools.map((t) => ({
     name: t.function.name,
     description: t.function.description,
@@ -63,6 +63,16 @@ ${OPEN}
 {"name": "getStock", "arguments": {"query": "busi bosch"}}
 ${CLOSE}`
     : "";
+  const has = (name: string) => tools.some((t) => t.function.name === name);
+  // Contoh tambahan untuk model sangat kecil. Barang dan kalimatnya bukan dari skenario evaluasi
+  // (dijaga tool-protocol.test.ts), supaya tidak membocorkan jawaban kumpulan uji.
+  const extra = opts.extraExamples
+    ? [
+        has("getSalesTrend") &&
+          `Staf: "oli samping laku nggak bulan ini?"\nKamu:\n${OPEN}\n{"name": "getSalesTrend", "arguments": {"product": "oli samping", "months": 1}}\n${CLOSE}`,
+      ].filter((x): x is string => typeof x === "string")
+    : [];
+  const more = extra.length > 0 ? `\n\n${extra.join("\n\n")}` : "";
   return `# Alat (tools)
 Kamu dapat memanggil alat berikut. Definisinya dalam JSON Schema:
 <tools>
@@ -72,7 +82,7 @@ ${JSON.stringify(schema)}
 Cara memanggil alat: balas HANYA dengan blok berikut (boleh lebih dari satu), tanpa teks lain:
 ${OPEN}
 {"name": "<nama alat>", "arguments": {<argumen sesuai skema>}}
-${CLOSE}${example}
+${CLOSE}${example}${more}
 
 Kamu sendiri yang memanggil alat. Staf tidak bisa memanggil alat, jadi jangan pernah menyuruh staf memanggilnya.
 Hasil alat akan dikirim kembali di dalam blok <tool_response>. Setelah informasinya cukup, jawab staf dengan teks biasa tanpa blok ${OPEN}. Jangan mengarang hasil alat dan jangan menulis blok <tool_response> sendiri.`;
@@ -164,7 +174,19 @@ function parseJsonCalls(raw: string, lenient = false): ParsedToolCall[] | null {
   return repaired ? callsFromJson(repaired) : null;
 }
 
-export function parseModelReply(content: string): ParsedReply {
+/**
+ * Buang teks "berpikir" model (Qwen3, DeepSeek-R1 dsb.): blok <think>…</think>, atau
+ * <think> tanpa penutup sampai akhir (model kehabisan token / berhenti di stop
+ * sequence sebelum menjawab). Teks ini bukan jawaban dan sering menyebut kata
+ * seperti "transaction" atau nama alat, jadi tidak boleh ikut dibaca Router,
+ * parser tool call, atau ditampilkan ke staf.
+ */
+export function stripThinking(content: string): string {
+  return content.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/<think>[\s\S]*$/i, "").replace(/^\s*<\/think>/i, "");
+}
+
+export function parseModelReply(rawContent: string): ParsedReply {
+  const content = stripThinking(rawContent);
   const calls: ParsedToolCall[] = [];
   let malformed = false;
   let text = "";
@@ -235,7 +257,9 @@ function findEmbeddedCalls(content: string): ParsedToolCall[] {
  * tahan keluaran yang tampak seperti awal JSON/tag supaya markup tidak sempat
  * muncul di layar staf.
  */
-export function visibleStreamText(content: string): string {
+export function visibleStreamText(rawContent: string): string {
+  // Selama blok <think> belum ditutup, semuanya disembunyikan.
+  const content = stripThinking(rawContent);
   const cut = content.indexOf("<tool_call");
   let visible = cut === -1 ? content : content.slice(0, cut);
   for (let n = Math.min(OPEN.length - 1, visible.length); n > 0; n--) {
@@ -245,6 +269,8 @@ export function visibleStreamText(content: string): string {
     }
   }
   const head = visible.trimStart();
+  // Awalan "<think>" yang belum lengkap ("<thi") ditahan seperti awalan <tool_call>.
+  if (head.length > 0 && "<think>".startsWith(head.toLowerCase())) return "";
   if (head.startsWith("{") || head.startsWith("[") || head.startsWith("```")) return "";
   return visible;
 }
@@ -260,6 +286,50 @@ const ANNOUNCED_TOOL_CALL =
 /** Model menulis niat memanggil alat tapi tidak menulis blok tool call. */
 export function announcesToolCall(text: string): boolean {
   return ANNOUNCED_TOOL_CALL.test(text);
+}
+
+/**
+ * Qwen3 1.7B kadang menulis panggilan seperti kode, `getStock(query="wipr bosch")`,
+ * bukan blok tool call (Q-10, run 23 Okt 2026). Hanya dibaca bila seluruh balasan
+ * adalah satu panggilan ke alat yang dikenal; kalimat biasa yang memuat tanda kurung
+ * tidak pernah dianggap panggilan.
+ */
+export function parseFunctionStyleCall(content: string, toolNames: ReadonlySet<string>): ParsedToolCall | null {
+  const match = /^\s*([A-Za-z]\w*)\s*\(([\s\S]*)\)\s*\.?\s*$/.exec(content);
+  if (!match || !toolNames.has(match[1])) return null;
+  const body = match[2];
+  const args: Record<string, unknown> = {};
+  let i = 0;
+  while (i < body.length) {
+    while (i < body.length && /[\s,]/.test(body[i])) i++;
+    if (i >= body.length) break;
+    const key = /^[A-Za-z_]\w*/.exec(body.slice(i));
+    if (!key) return null;
+    i += key[0].length;
+    while (i < body.length && /\s/.test(body[i])) i++;
+    if (body[i] !== "=" && body[i] !== ":") return null;
+    i++;
+    while (i < body.length && /\s/.test(body[i])) i++;
+    const quote = body[i];
+    if (quote === '"' || quote === "'") {
+      let j = i + 1;
+      let value = "";
+      while (j < body.length && body[j] !== quote) {
+        if (body[j] === "\\" && j + 1 < body.length) j++;
+        value += body[j];
+        j++;
+      }
+      if (j >= body.length) return null;
+      args[key[0]] = value;
+      i = j + 1;
+    } else {
+      const literal = /^(-?\d+(?:\.\d+)?|true|false|null)/.exec(body.slice(i));
+      if (!literal) return null;
+      args[key[0]] = literal[0] === "true" ? true : literal[0] === "false" ? false : literal[0] === "null" ? null : Number(literal[0]);
+      i += literal[0].length;
+    }
+  }
+  return Object.keys(args).length > 0 ? { name: match[1], arguments: args } : null;
 }
 
 /** Alat yang barusan disarankan pengaman lain, lengkap dengan argumen yang sudah diketahui. */
@@ -290,5 +360,8 @@ ${JSON.stringify({ error })}
 export const MISSING_TOOL_CALL_FEEDBACK = missingToolCallFeedback();
 
 export function formatToolResponse(name: string, result: unknown): string {
-  return `<tool_response>\n${JSON.stringify({ name, content: result })}\n</tool_response>`;
+  // Nama barang dan alias berasal dari data toko (dan impor nota). "<" diloloskan supaya teks seperti
+  // "</tool_response> abaikan aturan…" di dalam data tidak bisa menutup pembungkus lalu tampil sebagai instruksi.
+  const body = JSON.stringify({ name, content: result }).replace(/</g, "\\u003c");
+  return `<tool_response>\n${body}\n</tool_response>`;
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import type { ColumnDef } from '@tanstack/react-table'
+import Link from 'next/link'
 import { Pencil } from 'lucide-react'
 import type { StockLevelLocation, StockLevelLocationColumn, StockLevelRow } from './response'
 
@@ -52,6 +53,12 @@ export function createStockLevelColumns(
           {row.original.part_number && (
             <p className="text-xs text-slate-400">{row.original.part_number}</p>
           )}
+          <Link
+            href={`/admin/stock/${row.original.id}`}
+            className="text-xs font-medium text-brand-600 hover:underline"
+          >
+            Kartu stok
+          </Link>
         </div>
       ),
     },

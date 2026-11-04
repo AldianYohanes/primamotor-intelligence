@@ -1,3 +1,4 @@
+import { readJson } from "@/src/lib/http/read-json";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { parsePagination, buildPaginatedResponse } from "@/src/lib/pagination";
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
   if ("error" in ctx) return ctx.error;
   const { supabase, staffRow } = ctx;
 
-  const parsed = locationSchema.safeParse(await req.json());
+  const parsed = locationSchema.safeParse(await readJson(req));
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Input tidak valid", details: parsed.error.flatten() },
