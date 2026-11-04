@@ -65,6 +65,35 @@ async function searchByWords(
 }
 
 /**
+ * search_products hanya mencocokkan nama dan alias, jadi nomor part ("LX443",
+ * "31372212") dicari terpisah. Nomor yang persis sama diberi skor 1, potongan
+ * nomor diberi skor yang sama dengan hasil kata.
+ */
+async function searchByPartNumber(
+  supabase: StaffContext["supabase"],
+  businessId: string,
+  query: string,
+  limit: number,
+) {
+  const q = query.trim();
+  if (q.length < 3) return [];
+  const { data } = await supabase
+    .from("products")
+    .select("id, name, part_number")
+    .eq("business_id", businessId)
+    .eq("is_active", true)
+    .ilike("part_number", `%${q.replace(/[\\%_]/g, "\\$&")}%`)
+    .limit(limit);
+  return (data ?? []).map((p) => ({
+    product_id: p.id,
+    name: p.name,
+    part_number: p.part_number,
+    matched_via: "part_number",
+    similarity_score: p.part_number?.toLowerCase() === q.toLowerCase() ? 1 : WORD_MATCH_SCORE,
+  }));
+}
+
+/**
  * Read-only, tidak butuh HITL. Dipanggil Query Agent & Transaction Agent (untuk
  * konfirmasi product_id sebelum updateStock/transferStock).
  *
@@ -108,6 +137,9 @@ export async function GET(req: NextRequest) {
   // Satu produk bisa cocok lewat nama dan beberapa alias sekaligus; model
   // cukup melihatnya sekali (dengan skor terbaik).
   let matches = dedupeResults(rawMatches ?? []);
+  if (matches.length === 0) {
+    matches = await searchByPartNumber(supabase, staffRow.business_id, parsed.data.query, parsed.data.limit);
+  }
   if (matches.length === 0) {
     matches = await searchByWords(supabase, staffRow.business_id, parsed.data.query, parsed.data.limit);
   }
