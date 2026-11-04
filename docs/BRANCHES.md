@@ -38,7 +38,7 @@ Semua branch berikut isinya sudah ada di `master` (kecuali `agent/effort-akurasi
 
 ## Catatan
 
-- Remote `origin` repo ini menunjuk ke repo portofolio (`aldianyhs`), bukan repo aplikasi. Jangan push sebelum remote dirapikan.
+- Remote `origin` sebelumnya menunjuk ke repo portofolio (`aldianyhs`); sejak 4 November 2026 diarahkan ke `https://github.com/AldianYohanes/primamotor-intelligence`. Belum pernah di-fetch atau di-push dari sini. Ref `origin/*` yang tersimpan lokal masih sisa repo portofolio, jadi angka "ahead/behind" terhadap `origin/master` belum berarti sampai `git fetch` pertama.
 - `bun test src` gagal memuat beberapa file karena paket `server-only`. Runner resmi: `bunx vitest run`.
 - `supabase/seed.sql` ada di folder ini sebagai berkas tidak terlacak setelah gabung; periksa sebelum dihapus.
 
