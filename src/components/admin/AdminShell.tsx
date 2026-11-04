@@ -54,10 +54,12 @@ interface Props {
   tenantName: string;
   /** Super admin sedang bekerja di tenant yang bukan miliknya. */
   isForeignTenant: boolean;
+  /** Notifikasi yang belum dibaca, tampil sebagai angka di menu Notifikasi. */
+  unreadNotifications?: number;
   children: React.ReactNode;
 }
 
-export function AdminShell({ role, staffName, tenantName, isForeignTenant, children }: Props) {
+export function AdminShell({ role, staffName, tenantName, isForeignTenant, unreadNotifications = 0, children }: Props) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const canSwitchTenant = can(role, "tenant.switch");
@@ -76,6 +78,7 @@ export function AdminShell({ role, staffName, tenantName, isForeignTenant, child
           staffName={staffName}
           isActive={isActive}
           canSwitchTenant={canSwitchTenant}
+          unread={unreadNotifications}
         />
       </aside>
 
@@ -101,6 +104,7 @@ export function AdminShell({ role, staffName, tenantName, isForeignTenant, child
               staffName={staffName}
               isActive={isActive}
               canSwitchTenant={canSwitchTenant}
+              unread={unreadNotifications}
               onNavigate={() => setMobileOpen(false)}
             />
           </aside>
@@ -145,6 +149,7 @@ function SidebarContent({
   staffName,
   isActive,
   canSwitchTenant,
+  unread = 0,
   onNavigate,
 }: {
   /** Di bawah lg label disembunyikan (jalur ikon); nama menu tetap lewat tooltip dan aria-label. */
@@ -153,6 +158,7 @@ function SidebarContent({
   staffName?: string | null;
   isActive: (href: string, exact?: boolean) => boolean;
   canSwitchTenant: boolean;
+  unread?: number;
   onNavigate?: () => void;
 }) {
   const nav = canSwitchTenant
@@ -193,6 +199,11 @@ function SidebarContent({
             >
               <Icon size={16} strokeWidth={2} className="shrink-0" />
               <span className={rail ? "truncate max-lg:hidden" : "truncate"}>{item.label}</span>
+              {item.href === "/notifications" && unread > 0 && (
+                <span className={"ml-auto rounded-full bg-brand-600 px-1.5 text-[11px] font-semibold leading-5 text-white" + (rail ? " max-lg:hidden" : "")}>
+                  {unread}
+                </span>
+              )}
             </Link>
           );
         })}

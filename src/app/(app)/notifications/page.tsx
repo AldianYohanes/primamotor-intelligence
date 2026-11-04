@@ -9,6 +9,8 @@ import {
   NOTIFICATION_TYPES,
   NOTIFICATION_TYPE_LABELS,
 } from "@/src/modules/notifications/utils";
+import { NotificationRow } from "@/src/modules/notifications/NotificationRow";
+import { MarkAllReadButton } from "@/src/modules/notifications/MarkAllReadButton";
 
 export const metadata: Metadata = {
   title: "Notifikasi — Prima Motor Volvo",
@@ -58,6 +60,20 @@ export default async function NotificationsPage({
   const items = data ?? [];
   const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
 
+  // Status baca per staf (tabel notification_reads) dan jumlah yang belum dibaca di semua halaman.
+  const { data: readRows } = items.length
+    ? await supabase
+        .from("notification_reads")
+        .select("notification_id")
+        .eq("staff_id", staff.id)
+        .in("notification_id", items.map((n) => n.id))
+    : { data: [] as { notification_id: string }[] };
+  const readIds = new Set((readRows ?? []).map((r) => r.notification_id));
+  const { data: unreadTotal } = await supabase.rpc("unread_notification_count", {
+    p_staff_id: staff.id,
+    p_business_id: tenant.id,
+  });
+
   const href = (next: { type?: string | null; page?: number }) => {
     const sp = new URLSearchParams();
     const t = next.type === undefined ? type : next.type;
@@ -87,7 +103,7 @@ export default async function NotificationsPage({
           <p className="text-sm text-slate-500">Peringatan stok menipis dan saran belanja dari Monitoring Agent.</p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Link href={href({ type: null })} className={chip(!type)}>
             Semua
           </Link>
@@ -96,6 +112,10 @@ export default async function NotificationsPage({
               {NOTIFICATION_TYPE_LABELS[t]}
             </Link>
           ))}
+          <span className="ml-auto flex items-center gap-2 text-xs text-slate-500">
+            {(unreadTotal ?? 0) > 0 && <span>{unreadTotal} belum dibaca</span>}
+            <MarkAllReadButton disabled={(unreadTotal ?? 0) === 0} />
+          </span>
         </div>
 
         {error && (
@@ -113,24 +133,21 @@ export default async function NotificationsPage({
           )}
           {items.map((n) => {
             const target = notificationHref(n.type, n.related_id, canOpenPortal);
+            const unread = !readIds.has(n.id);
             const body = (
               <>
                 <div className="flex items-start justify-between gap-3">
-                  <p className="text-sm font-medium text-slate-900">{n.title}</p>
+                  <p className={unread ? "text-sm font-semibold text-slate-900" : "text-sm font-medium text-slate-700"}>{n.title}</p>
                   <span className="badge badge-blue shrink-0">{NOTIFICATION_TYPE_LABELS[n.type]}</span>
                 </div>
                 {n.body && <p className="mt-0.5 text-xs text-slate-500">{n.body}</p>}
                 <p className="mt-1 text-[11px] text-slate-400">{formatDateTime(n.created_at)}</p>
               </>
             );
-            return target ? (
-              <Link key={n.id} href={target} className="block p-4 hover:bg-slate-50">
+            return (
+              <NotificationRow key={n.id} id={n.id} href={target} unread={unread}>
                 {body}
-              </Link>
-            ) : (
-              <div key={n.id} className="p-4">
-                {body}
-              </div>
+              </NotificationRow>
             );
           })}
         </div>

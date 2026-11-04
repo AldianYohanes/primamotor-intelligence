@@ -596,6 +596,21 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['notifications']['Row']>
         Relationships: []
       }
+      // Migration 0039 — status baca notifikasi per staf.
+      notification_reads: {
+        Row: {
+          notification_id: string
+          staff_id: string
+          read_at: string
+        }
+        Insert: {
+          notification_id: string
+          staff_id: string
+          read_at?: string
+        }
+        Update: Partial<Database['public']['Tables']['notification_reads']['Row']>
+        Relationships: []
+      }
       // Migration 0034 — jejak super admin masuk/keluar tenant.
       tenant_access_log: {
         Row: {
@@ -615,6 +630,14 @@ export interface Database {
     }
     Views: Record<string, never>
     Functions: {
+      mark_all_notifications_read: {
+        Args: { p_staff_id: string; p_business_id: string }
+        Returns: number
+      }
+      unread_notification_count: {
+        Args: { p_staff_id: string; p_business_id: string }
+        Returns: number
+      }
       search_products: {
         Args: { p_business_id: string; p_query: string; p_limit?: number }
         Returns: {

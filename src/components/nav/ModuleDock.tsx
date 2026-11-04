@@ -167,13 +167,19 @@ export function ModuleDock({ modules, account }: Props) {
           aria-haspopup="dialog"
           title="Akun"
           className={clsx(
-            "flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold transition-colors",
+            "relative flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold transition-colors",
             account.isForeignTenant ? "bg-amber-500 text-white" : "bg-brand-50 text-brand-700 hover:bg-brand-100",
             open && "ring-2 ring-brand-300",
           )}
         >
           {initials(account.fullName)}
-          <span className="sr-only">Akun {account.fullName}</span>
+          {(account.unreadNotifications ?? 0) > 0 && (
+            <span aria-hidden className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-brand-600" />
+          )}
+          <span className="sr-only">
+            Akun {account.fullName}
+            {(account.unreadNotifications ?? 0) > 0 ? `, ${account.unreadNotifications} notifikasi belum dibaca` : ""}
+          </span>
         </button>
       </nav>
 

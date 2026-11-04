@@ -11,6 +11,11 @@ export default async function AdminLayout({
   // diarahkan ke menu.
   const ctx = await requirePage("portal.access");
 
+  const { data: unread } = await ctx.supabase.rpc("unread_notification_count", {
+    p_staff_id: ctx.staff.id,
+    p_business_id: ctx.tenant.id,
+  });
+
   return (
     <>
       <AdminShell
@@ -18,6 +23,7 @@ export default async function AdminLayout({
         staffName={ctx.staff.fullName}
         tenantName={ctx.tenant.name}
         isForeignTenant={ctx.isForeignTenant}
+        unreadNotifications={unread ?? 0}
       >
         {children}
       </AdminShell>

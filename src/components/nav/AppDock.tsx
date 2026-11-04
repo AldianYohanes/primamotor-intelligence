@@ -11,7 +11,12 @@ import { ModuleDock } from "./ModuleDock";
 export async function AppDock() {
   const result = await getStaffContext();
   if (!result.ok || !result.ctx.tenant) return null;
-  const { staff, tenant, isForeignTenant } = result.ctx;
+  const { staff, tenant, isForeignTenant, supabase } = result.ctx;
+
+  const { data: unread } = await supabase.rpc("unread_notification_count", {
+    p_staff_id: staff.id,
+    p_business_id: tenant.id,
+  });
 
   const evalAvailable = process.env.ENABLE_EVAL_PAGE === "true" && tenant.slug === EVAL_TENANT_SLUG;
 
@@ -24,6 +29,7 @@ export async function AppDock() {
         tenantName: tenant.name,
         isForeignTenant,
         canSwitchTenant: can(staff.role, "tenant.switch"),
+        unreadNotifications: unread ?? 0,
       }}
     />
   );

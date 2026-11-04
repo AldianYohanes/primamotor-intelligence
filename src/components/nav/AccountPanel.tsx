@@ -32,6 +32,8 @@ export interface AccountInfo {
   tenantName: string;
   isForeignTenant: boolean;
   canSwitchTenant: boolean;
+  /** Jumlah notifikasi yang belum dibaca staf ini. */
+  unreadNotifications?: number;
 }
 
 export function initials(name: string) {
@@ -273,6 +275,11 @@ export function AccountPanel({ account, onNavigate }: { account: AccountInfo; on
       >
         <Bell size={15} className="shrink-0 text-slate-500" />
         Notifikasi
+        {(account.unreadNotifications ?? 0) > 0 && (
+          <span className="ml-auto rounded-full bg-brand-600 px-1.5 text-[11px] font-semibold leading-5 text-white">
+            {account.unreadNotifications}
+          </span>
+        )}
       </Link>
       <Section icon={Rows3} title="Tampilan">
         <DensitySetting />
