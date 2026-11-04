@@ -60,7 +60,8 @@ import {
   staffMentionsPin,
 } from "@/src/lib/agents/read-only-reply";
 import { agentInputMessage } from "@/src/lib/agents/normalize-shorthand";
-import { guardRoute, isClearStockMovement, looksStockRelated } from "@/src/lib/agents/route-guard";
+import { guardRoute, isClearStockMovement, looksStockRelated, routeByCode } from "@/src/lib/agents/route-guard";
+import { isCodeRouterOn, isSingleParityOn } from "@/src/lib/agents/eval-conditions";
 import { agentHistory } from "@/src/lib/agents/router-context";
 import {
   isOfflineNoMatch,
@@ -115,6 +116,9 @@ export async function runAgentTurnInner(
   const toolTrace: AgentTurnResult["toolTrace"] = [];
   // Pengaman tambahan hanya untuk model dengan profil khusus (model-profile.ts).
   const modelProfile = getModelProfile(getActiveModelId());
+  // Kondisi pembanding /eval (eval-conditions.ts): single-agent mendapat pengaman yang sama dengan multi-agent.
+  const singleParity = mode === "single_agent" && isSingleParityOn();
+  const multiGuards = mode === "multi_agent" || singleParity;
   // Agent membaca kata utuh ("klr" → "keluar"); riwayat dan balasan kode tetap teks asli.
   const agentMessage = agentInputMessage(userMessage);
   // Mode single_agent: nilai ini placeholder, diganti inferAgentTypeFromTrace di runAgentTurn.
@@ -122,7 +126,12 @@ export async function runAgentTurnInner(
   let systemPrompt = SINGLE_AGENT_SYSTEM_PROMPT;
 
   if (mode === "multi_agent") {
-    if (modelProfile.skipRouterForMovement && isClearStockMovement(userMessage)) {
+    if (isCodeRouterOn()) {
+      // Kondisi pembanding /eval: rute dari kata kunci saja, Router LLM tidak dipanggil.
+      agentType = routeByCode(userMessage, { catalog: modelProfile.catalogRouting });
+      meta.routedByCode = true;
+      rec.add({ kind: "route", label: `Kondisi pembanding: rute ditentukan kode tanpa Router (${agentType})`, status: "done", assist: "route" });
+    } else if (modelProfile.skipRouterForMovement && isClearStockMovement(userMessage)) {
       // guardRoute selalu mengalihkan pesan seperti ini ke transaksi apa pun tebakan Router,
       // jadi memanggil Router hanya menambah waktu (sekitar 13 detik di Qwen3 1.7B).
       agentType = "transaction";
@@ -257,6 +266,13 @@ export async function runAgentTurnInner(
         rec.add({ kind: "action", label: `Panggilan ${styled.name} ditulis seperti kode, dibaca sebagai tool call`, status: "done", assist: "tool" });
       }
     }
+    // Kondisi pembanding: seperti Router + balasan kode di multi-agent, pesan tanpa kaitan stok yang tidak
+    // diberi panggilan alat dijawab kode sebagai di luar topik.
+    if (singleParity && reply.calls.length === 0 && toolTrace.length === 0 && !looksStockRelated(userMessage, { catalog: modelProfile.catalogRouting })) {
+      rec.add({ kind: "route", label: "Kondisi pembanding: pesan tidak berkaitan dengan stok, dijawab kode sebagai di luar topik", status: "done", assist: "route" });
+      rec.add(answerStep("code"));
+      return { agentType: "off_topic", assistantText: offTopicReply(userMessage), toolTrace };
+    }
     // Model kecil kadang menulis JSON tool call yang rusak; beri satu kesempatan
     // memperbaiki selama masih ada sisa iterasi, alih-alih langsung menyerah.
     if (reply.calls.length === 0 && reply.malformed && i < MAX_TOOL_ITERATIONS - 1) {
@@ -315,7 +331,7 @@ export async function runAgentTurnInner(
     // kalau tetap tanpa alat, jawabannya diganti kode (lihat di bawah).
     const readsData = toolTrace.some((t) => t.name === "getStock" || t.name === "getSalesTrend");
     const unbackedNumbers =
-      reply.calls.length === 0 && mode === "multi_agent" && agentType === "query" && !readsData && looksUnbacked(reply.text);
+      reply.calls.length === 0 && multiGuards && agentType === "query" && !readsData && looksUnbacked(reply.text);
     if (unbackedNumbers && !nudgedUnbacked && i < MAX_TOOL_ITERATIONS - 1) {
       nudgedUnbacked = true;
       messages.push({ role: "assistant", content });
@@ -391,7 +407,7 @@ export async function runAgentTurnInner(
       // terdekat". Sebelum alat baca pertama jalan, pesan tanpa kaitan stok dijawab kode sebagai
       // off-topic, seperti jalur OFF_TOPIC di multi-agent.
       if (
-        agentRecovery &&
+        (agentRecovery || singleParity) &&
         mode === "single_agent" &&
         toolTrace.length === 0 &&
         (call.name === "getStock" || call.name === "getSalesTrend") &&
@@ -410,7 +426,7 @@ export async function runAgentTurnInner(
       if (
         allowed &&
         call.name === "updateStock" &&
-        mode === "multi_agent" &&
+        multiGuards &&
         !checkedTwoLocations &&
         i < MAX_TOOL_ITERATIONS - 1
       ) {

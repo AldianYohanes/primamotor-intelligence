@@ -35,6 +35,9 @@ export interface SavedRun {
   promptPadding?: boolean;
   /** Kondisi "model mentah" saat run dimulai; dipulihkan saat run dilanjutkan. */
   codeGuardsOff?: boolean;
+  /** Kondisi pembanding saat run dimulai; dipulihkan saat run dilanjutkan. */
+  singleParity?: boolean;
+  codeRouter?: boolean;
   rows: StoredRow[];
   /** Penghentian sebelumnya (run dilanjutkan sesudahnya). */
   interruptions: Interruption[];
@@ -131,6 +134,8 @@ export function runFromExport(
       environment: json.environment,
       promptPadding: typeof env.promptPadding === "boolean" ? env.promptPadding : undefined,
       codeGuardsOff: typeof env.codeGuardsOff === "boolean" ? env.codeGuardsOff : undefined,
+      singleParity: typeof env.singleParity === "boolean" ? env.singleParity : undefined,
+      codeRouter: typeof env.codeRouter === "boolean" ? env.codeRouter : undefined,
       rows,
       interruptions,
       resumed: Array.isArray(json.resumed) ? (json.resumed as SavedRun["resumed"]) : [],

@@ -117,7 +117,7 @@ const MOVE_BETWEEN_RE = /(?<![\p{L}\p{N}])(dari|ke)\s+(stok\s+)?(toko|gudang)(?!
  */
 function looksLikeQuestionOnly(message: string): boolean {
   const text = normalizeShorthand(message);
-  if (STRONG_MOVEMENT_RE.test(text) || CHANGE_VERB_RE.test(text) || SOLD_QUANTITY_RE.test(text) || MOVE_BETWEEN_RE.test(text)) return false;
+  if (hasMovementWords(text)) return false;
   return AVAILABILITY_RE.test(text) || TREND_RE.test(text) || STOCK_WORD_RE.test(text) || /(?<![\p{L}\p{N}])(berapa|brp)(?![\p{L}\p{N}])|\?/iu.test(text);
 }
 
@@ -153,4 +153,22 @@ export function looksStockRelated(message: string, options: GuardOptions = {}): 
     mentionsSparePart(text, options.catalog === true) ||
     (options.catalog === true && mentionsCatalogProduct(text))
   );
+}
+
+/** Ada kata pergerakan, perubahan, jumlah terjual, atau perpindahan antar lokasi di pesan (sudah dinormalkan). */
+function hasMovementWords(text: string): boolean {
+  return STRONG_MOVEMENT_RE.test(text) || CHANGE_VERB_RE.test(text) || SOLD_QUANTITY_RE.test(text) || MOVE_BETWEEN_RE.test(text);
+}
+
+/**
+ * Kondisi pembanding /eval "router kode": rute ditentukan kata kunci saja, tanpa Router LLM, lalu pesan
+ * diteruskan ke agent spesialis seperti biasa. Aturan ini ditetapkan 4 Nov 2026 sebelum dijalankan di /eval
+ * dan tidak boleh disetel ke skenario. Fungsi pendukungnya (looksStockRelated dan kawan-kawannya) pernah
+ * disetel pada skenario yang sama, jadi hasilnya cenderung optimistis dan harus dibaca begitu.
+ */
+export function routeByCode(message: string, options: GuardOptions = {}): RoutedAgent {
+  const text = normalizeShorthand(message);
+  if (CAPABILITY_RE.test(text) || NOT_OUR_STOCK_RE.test(text)) return "off_topic";
+  if (!looksStockRelated(message, options)) return "off_topic";
+  return hasMovementWords(text) ? "transaction" : "query";
 }

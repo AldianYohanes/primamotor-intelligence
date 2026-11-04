@@ -61,6 +61,7 @@ import {
 } from "@/src/lib/agents/prefill-preference";
 import { isPromptPaddingOn, setPromptPadding } from "@/src/lib/agents/prompt-padding";
 import { isCodeGuardsOff, setCodeGuardsOff } from "@/src/lib/agents/model-profile";
+import { isCodeRouterOn, isSingleParityOn, setCodeRouter, setSingleParity } from "@/src/lib/agents/eval-conditions";
 import { isGrammarUnavailable } from "@/src/lib/agents/grammar-status";
 import { Select } from "@/src/components/ui/select";
 
@@ -138,6 +139,9 @@ async function collectEnvironment(modelId: string) {
     promptPadding: isPromptPaddingOn(),
     /** Kondisi "model mentah": pengaman profil model dimatikan; lihat model-profile.ts. */
     codeGuardsOff: isCodeGuardsOff(),
+    /** Kondisi pembanding: single-agent dengan pengaman setara, dan router kode; lihat eval-conditions.ts. */
+    singleParity: isSingleParityOn(),
+    codeRouter: isCodeRouterOn(),
   };
 }
 
@@ -180,14 +184,20 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
   const [evalTurns, setEvalTurns] = useState<TurnRecord[]>([]);
   const [prefillChunk, setPrefillChunk] = useState<number | null>(null);
   const [padPrompt, setPadPrompt] = useState(false);
+  const [parity, setParity] = useState(false);
+  const [codeRoute, setCodeRoute] = useState(false);
   // Opsi ablasi selalu mulai mati di setiap kunjungan halaman.
   useEffect(() => {
     setPromptPadding(false);
     setCodeGuardsOff(false);
+    setSingleParity(false);
+    setCodeRouter(false);
     // Opsi ablasi dan model mentah tidak boleh ikut ke /chat bila halaman ini ditutup tanpa muat ulang.
     return () => {
       setPromptPadding(false);
       setCodeGuardsOff(false);
+      setSingleParity(false);
+      setCodeRouter(false);
     };
   }, []);
   const [gpuProbes, setGpuProbes] = useState<GpuProbe[] | null>(null);
@@ -449,6 +459,14 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
       setGuardsOff(resume.codeGuardsOff);
       setCodeGuardsOff(resume.codeGuardsOff);
     }
+    if (resume && typeof resume.singleParity === "boolean" && resume.singleParity !== isSingleParityOn()) {
+      setParity(resume.singleParity);
+      setSingleParity(resume.singleParity);
+    }
+    if (resume && typeof resume.codeRouter === "boolean" && resume.codeRouter !== isCodeRouterOn()) {
+      setCodeRoute(resume.codeRouter);
+      setCodeRouter(resume.codeRouter);
+    }
     if (alertsOn) enableAlerts();
     let resetEngine: (() => void) | undefined;
     const releaseWake = holdWakeLock();
@@ -464,6 +482,8 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
     // Dikunci di awal run: nilai awal dipertahankan sepanjang run, juga lintas resume.
     const runPadding = typeof resume?.promptPadding === "boolean" ? resume.promptPadding : isPromptPaddingOn();
     const runGuardsOff = typeof resume?.codeGuardsOff === "boolean" ? resume.codeGuardsOff : isCodeGuardsOff();
+    const runParity = typeof resume?.singleParity === "boolean" ? resume.singleParity : isSingleParityOn();
+    const runCodeRouter = typeof resume?.codeRouter === "boolean" ? resume.codeRouter : isCodeRouterOn();
     let autosaveOk = true;
     const persist = () => {
       autosaveOk = saveRun({
@@ -474,6 +494,8 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
         environment: runEnvironment,
         promptPadding: runPadding,
         codeGuardsOff: runGuardsOff,
+        singleParity: runParity,
+        codeRouter: runCodeRouter,
         rows: collected.map(toStoredRow),
         interruptions,
         resumed,
@@ -621,6 +643,8 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
           completionTokens: null,
           promptPadding: isPromptPaddingOn(),
           ...(isCodeGuardsOff() && { codeGuardsOff: true }),
+          ...(isSingleParityOn() && { singleParity: true }),
+          ...(isCodeRouterOn() && { codeRouter: true }),
         };
         let observation: Observation;
         setLiveSteps([]);
@@ -1025,6 +1049,30 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
               disabled={running}
             />
             Model mentah: matikan pengaman model kecil
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={parity}
+              onChange={(e) => {
+                setParity(e.target.checked);
+                setSingleParity(e.target.checked);
+              }}
+              disabled={running}
+            />
+            Pembanding: single-agent dengan pengaman setara multi-agent
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={codeRoute}
+              onChange={(e) => {
+                setCodeRoute(e.target.checked);
+                setCodeRouter(e.target.checked);
+              }}
+              disabled={running}
+            />
+            Pembanding: multi-agent dengan router kode, tanpa Router LLM
           </label>
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={autoResume} onChange={(e) => setAutoResume(e.target.checked)} />

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { guardRoute, isClearStockMovement } from "@/src/lib/agents/route-guard";
+import { guardRoute, isClearStockMovement, routeByCode } from "@/src/lib/agents/route-guard";
 import scenarioFile from "@/src/lib/eval/scenarios.json";
 
 describe("isClearStockMovement", () => {
@@ -124,5 +124,29 @@ describe("guardRoute queryGuard (Router salah memilih transaksi)", () => {
 
   it("tanpa opsi queryGuard perilaku lama (transaksi tidak diubah)", () => {
     expect(guard("aki gs 70ah masih ada ga?", false).agentType).toBe("transaction");
+  });
+});
+
+describe("routeByCode (kondisi pembanding router kode)", () => {
+  it.each<[string, "query" | "transaction" | "off_topic"]>([
+    ["Radiator Volvo 240 ada stoknya?", "query"],
+    ["penjualan radiator volvo 240 6 bulan", "query"],
+    ["Keluar 2 kampas rem depan bosch dari toko, laku ke bengkel", "transaction"],
+    ["Pindahin gril depan 740 ke gudang 2 biji", "transaction"],
+    ["Siapa presiden Indonesia sekarang?", "off_topic"],
+    ["Halo, selamat pagi", "off_topic"],
+  ])("%s -> %s", (message, expected) => {
+    expect(routeByCode(message, { catalog: false })).toBe(expected);
+  });
+
+  it("pertanyaan kemampuan tetap di luar topik walau menyebut stok", () => {
+    expect(routeByCode("Kamu bisa apa soal stok?", { catalog: false })).toBe("off_topic");
+  });
+
+  // Batas yang diketahui: aturan dibekukan 4 Nov 2026 dan tidak disetel ke skenario. Kata "dateng" dan
+  // "simpen" tidak dikenali sebagai pergerakan barang, jadi H-28 dibaca sebagai pertanyaan. Mengubah aturan
+  // berarti mengubah tes ini dengan sengaja dan menjalankan ulang kondisi pembanding di /eval.
+  it("batas aturan: kata dateng dan simpen belum dikenali sebagai pencatatan", () => {
+    expect(routeByCode("Dateng 12 filter oli mahle, simpen di gudang", { catalog: false })).toBe("query");
   });
 });
