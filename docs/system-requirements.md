@@ -8,9 +8,9 @@ Label: **terverifikasi** = dibaca dari kode/konfigurasi paket atau diukur di run
 
 | | Minimal (jalan, lambat) | Rekomendasi (nyaman) |
 |---|---|---|
-| Model | Qwen3 1.7B `q4f16_1` | Qwen3 1.7B `q4f16_1` (Qwen2.5 3B bila GPU kuat) |
+| Model | Qwen3 1.7B `q4f16_1` (Ballad) | Qwen2.5 3B `q4f16_1` (Saga, bawaan aplikasi) |
 | Browser | Chrome atau Edge versi 113 ke atas (WebGPU aktif) | Chrome/Edge terbaru (uji: Edge 156) |
-| GPU | WebGPU dengan fitur `shader-f16`, memori GPU (atau memori bersama) ≥ 3 GB kosong | `shader-f16`, ≥ 4 GB memori GPU kosong |
+| GPU | WebGPU dengan fitur `shader-f16`, memori GPU (atau memori bersama) ≥ 3 GB kosong | `shader-f16`, ≥ 4 GB memori GPU kosong (Saga butuh sekitar 2,5 GB untuk model, ditambah sisa untuk browser) |
 | RAM | 8 GB | 16 GB |
 | Batas buffer | `maxStorageBufferBindingSize` 256 MB (nilai yang terbukti jalan) | ≥ 256 MB |
 | Waktu per giliran | beberapa menit | ±1 menit atau kurang |
@@ -22,9 +22,9 @@ Dibaca dari `prebuiltAppConfig` paket `@mlc-ai/web-llm` 0.2.84 (jendela konteks 
 
 | Model | VRAM menurut WebLLM | Catatan |
 |---|---|---|
-| Qwen3 1.7B `q4f16_1` | 2.037 MB | Rekomendasi proyek ini |
+| Qwen3 1.7B `q4f16_1` | 2.037 MB | Pilihan lebih ringan (Ballad) |
 | Qwen3 1.7B `q4f32_1` | 2.635 MB | Untuk GPU tanpa `shader-f16` |
-| Qwen2.5 3B `q4f16_1` | 2.505 MB | Model pembanding utama |
+| Qwen2.5 3B `q4f16_1` | 2.505 MB | Model utama dan bawaan aplikasi (Saga) |
 | Qwen2.5 3B `q4f32_1` | 2.894 MB | Tanpa `shader-f16` |
 | Qwen3 0.6B `q4f16_1` | 1.403 MB | Paling ringan, akurasi belum diuji |
 
@@ -54,5 +54,5 @@ Perangkat uji: laptop Windows 11, Snapdragon X (GPU Qualcomm Adreno), RAM 16 GB,
 
 ## Untuk pengembang
 
-- Bun 1.3.9 (`packageManager`), Next.js 16.2.10, React 19.2.4, `@mlc-ai/web-llm` ^0.2.84; Node 22 dipakai di mesin uji.
+- Bun 1.3.9 (`packageManager`), Next.js 16.4.3, React 19.2.4, `@mlc-ai/web-llm` 0.2.84 (versi dipasang pasti, tanpa `^`, supaya biner model sama di semua run evaluasi); Node 22 dipakai di mesin uji.
 - Server dev: `bun run dev`; model dimuat di browser, bukan di server.

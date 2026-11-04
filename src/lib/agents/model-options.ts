@@ -46,8 +46,11 @@ export const MODEL_TIERS = [
 
 export type ModelTier = (typeof MODEL_TIERS)[number];
 
-/** Tingkat awal di perangkat baru. */
-export const DEFAULT_TIER: ModelTier = MODEL_TIERS[1];
+/**
+ * Tingkat awal di perangkat baru: Saga (Qwen2.5-3B), model yang dievaluasi di Bab IV. Perangkat yang GPU-nya
+ * tidak cukup diturunkan otomatis ke tingkat yang muat (gpu-compat.ts).
+ */
+export const DEFAULT_TIER: ModelTier = MODEL_TIERS[0];
 
 export function tierOfModel(modelId: string): ModelTier | undefined {
   return MODEL_TIERS.find((t) => t.f16 === modelId || t.f32 === modelId);

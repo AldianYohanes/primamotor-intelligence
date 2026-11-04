@@ -6,7 +6,7 @@
       "name": "primamotor-intelligence",
       "dependencies": {
         "@heroicons/react": "^2.2.0",
-        "@mlc-ai/web-llm": "^0.2.84",
+        "@mlc-ai/web-llm": "0.2.84",
         "@supabase/ssr": "^0.12.3",
         "@supabase/supabase-js": "^2.110.5",
         "@tabler/icons-react": "^3.46.0",

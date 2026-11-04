@@ -25,7 +25,7 @@ describe("tingkat model", () => {
       expect(tierOfModel(t.f16)).toBe(t);
       expect(tierOfModel(tierModelId(t, true))).toBe(t);
     }
-    expect(DEFAULT_TIER.id).toBe("ballad");
+    expect(DEFAULT_TIER.id).toBe("saga");
   });
 
   it("model di luar tiga tingkat masuk Lainnya dan memakai label teknis", () => {
