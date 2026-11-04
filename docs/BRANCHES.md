@@ -26,6 +26,7 @@ Semua branch berikut isinya sudah ada di `master` (kecuali `agent/effort-akurasi
 | `fix2-gabungan` | `primamotor-fix2-gabungan` | sudah di `master` |
 | `agent/effort-akurasi` | `primamotor-effort` | tidak di `master`; ada tag `arsip/effort-akurasi` |
 | `agent/refactor-orchestrator`, `agent/router-think`, `eval/tooling`, `eval/model-kecil`, `ui/chat`, `ui/pos`, `ui/dashboard`, `ui/new-pages` | (tanpa folder) | sudah di `master` |
+| `eval/kondisi-pembanding` | (tanpa folder) | sudah di `master` (4 November 2026), aman dihapus |
 
 ## Arsip (tag, bukan branch)
 
@@ -33,7 +34,7 @@ Semua branch berikut isinya sudah ada di `master` (kecuali `agent/effort-akurasi
 - `arsip/effort-akurasi` (76e9fb0): lihat di atas.
 - `arsip/eval-h-baseline` (ac0f662): kode sebelum perbaikan pasca-evaluasi + skenario H; pembanding Run 34, 35, 41.
 - `arsip/development` (2013e26): branch lama 27 Sep 2026; 4 commit tidak ada di master, diduga tergantikan.
-- `eval-freeze-1` sampai `eval-freeze-5`, termasuk `eval-freeze-3b`: titik beku run evaluasi.
+- `eval-freeze-1` sampai `eval-freeze-6`, termasuk `eval-freeze-3b`: titik beku run evaluasi. `eval-freeze-6` (4 November 2026) memuat dua saklar pembanding di `/eval` (single-agent dengan pengaman setara, router kode), Saga sebagai model bawaan, dan WebLLM dipasang pasti di 0.2.84. Dipakai untuk run final.
 - `backup-before-trailer-strip`: tag lama, asal tidak tercatat di sini.
 
 ## Catatan
