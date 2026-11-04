@@ -118,13 +118,26 @@ export async function executeTool(
   }
 }
 
+/** Alasan galat pemanggilan fetchTenantLocations terakhir; null bila berhasil. Hanya untuk ekspor evaluasi. */
+let locationsFailure: string | null = null;
+
+export function getLocationsFailure(): string | null {
+  return locationsFailure;
+}
+
 export async function fetchTenantLocations(): Promise<TenantLocation[] | null> {
   try {
     const res = await fetch("/api/agent/tools/locations");
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { error?: unknown } | null;
+      locationsFailure = `HTTP ${res.status}${typeof body?.error === "string" ? `: ${body.error}` : ""}`;
+      return null;
+    }
     const body = (await res.json()) as { locations?: TenantLocation[] };
+    locationsFailure = body.locations ? null : "Respons lokasi tidak berisi daftar lokasi";
     return body.locations ?? null;
-  } catch {
+  } catch (err) {
+    locationsFailure = err instanceof Error ? err.message : String(err);
     return null;
   }
 }
@@ -137,10 +150,16 @@ export async function searchProducts(query: string, conversationId: string, busi
   const res = (await executeTool("getStock", { query, limit: 5 }, conversationId, businessId)) as {
     results?: ProductSearchResult[];
     source?: string;
+    fallback_reason?: string;
   } | null;
   // getStock jatuh ke cache offline bila request ke server gagal; saat online
   // itu berarti server bermasalah, bukan barangnya tidak ada.
-  return { results: res?.results ?? [], fromCache: res?.source === "offline_cache" };
+  return {
+    results: res?.results ?? [],
+    fromCache: res?.source === "offline_cache",
+    // Alasan teknis fallback (mis. "HTTP 503: ..."); hanya dicatat ke ekspor, tidak dikirim ke model.
+    failureReason: res?.source === "offline_cache" ? res.fallback_reason : undefined,
+  };
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -158,7 +177,7 @@ export async function runSalesTrend(
   userMessage = "",
   /** Periode yang disebut jelas di pesan staf menang atas angka tulisan model (profil model kecil). */
   messagePeriodWins = false,
-): Promise<{ result: unknown; resolvedArgs?: Record<string, unknown> }> {
+): Promise<{ result: unknown; resolvedArgs?: Record<string, unknown>; serverFailure?: string }> {
   const rawMonths = Number(args.months);
   const rawProduct = String(args.product ?? args.product_name ?? "");
   // Q-14: model menaruh "3 bln" di nama barang dan mengosongkan months. Bila months
@@ -187,7 +206,10 @@ export async function runSalesTrend(
 
   const search = await searchProducts(query, conversationId, businessId);
   if (search.fromCache) {
-    return { result: { error: "Server tidak bisa dihubungi, tren penjualan belum bisa dicek. Sampaikan ke staf untuk coba lagi." } };
+    return {
+      result: { error: "Server tidak bisa dihubungi, tren penjualan belum bisa dicek. Sampaikan ke staf untuk coba lagi." },
+      ...(search.failureReason && { serverFailure: search.failureReason }),
+    };
   }
   const pick = pickProduct(search.results);
   if (pick.status === "none") {

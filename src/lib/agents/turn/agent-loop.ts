@@ -474,6 +474,7 @@ export async function runAgentTurnInner(
           result: outcome.result,
           ...(outcome.resolvedArgs && { resolvedArgs: outcome.resolvedArgs }),
           ...(outcome.executedArgs && { executedArgs: outcome.executedArgs }),
+          ...(outcome.serverFailure && { serverFailure: outcome.serverFailure }),
         });
         return {
           agentType,
@@ -485,15 +486,16 @@ export async function runAgentTurnInner(
       }
 
       let resolvedArgs: Record<string, unknown> | undefined;
+      let serverFailure: string | undefined;
       let result: unknown;
       if (!allowed) {
         result = { error: `Tool ${call.name} tidak tersedia untuk agent ini.` };
       } else if (call.name === "getSalesTrend") {
-        ({ result, resolvedArgs } = await runSalesTrend(args, conversationId, businessId, agentMessage, agentRecovery));
+        ({ result, resolvedArgs, serverFailure } = await runSalesTrend(args, conversationId, businessId, agentMessage, agentRecovery));
       } else {
         result = await executeTool(call.name, args, conversationId, businessId);
       }
-      toolTrace.push({ name: call.name, args, result, ...(resolvedArgs && { resolvedArgs }) });
+      toolTrace.push({ name: call.name, args, result, ...(resolvedArgs && { resolvedArgs }), ...(serverFailure && { serverFailure }) });
       rec.finish(running, { ...start, label: start.label.replace(/…$/, ""), status: "done" });
       rec.add(toolResultStep(call.name, result));
 

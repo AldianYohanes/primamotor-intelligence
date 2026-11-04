@@ -41,7 +41,15 @@ export interface AgentTurnResult {
    * args = keluaran asli model; resolvedArgs = tulisan model dipetakan ke UUID
    * (dasar ParameterAccuracy); executedArgs = yang benar-benar dikirim ke server.
    */
-  toolTrace: { name: string; args: unknown; result: unknown; resolvedArgs?: unknown; executedArgs?: unknown }[];
+  toolTrace: {
+    name: string;
+    args: unknown;
+    result: unknown;
+    resolvedArgs?: unknown;
+    executedArgs?: unknown;
+    /** Alasan teknis (status HTTP atau galat jaringan) bila pencarian produk atau daftar lokasi gagal; hanya untuk ekspor, tidak dikirim ke model. */
+    serverFailure?: string;
+  }[];
   latencyMs?: number;
   /** Keluaran mentah model per iterasi, untuk analisis evaluasi. */
   modelReplies?: string[];
@@ -89,6 +97,8 @@ export interface MutationOutcome {
   choice?: MutationChoice;
   /** Ringkasan untuk toolTrace/evaluasi. */
   result: Record<string, unknown>;
+  /** Alasan teknis bila pencarian produk atau daftar lokasi gagal; hanya untuk ekspor evaluasi. */
+  serverFailure?: string;
   /** Nama barang & lokasi TULISAN MODEL dipetakan ke UUID, tanpa bantuan kata staf (dasar ParameterAccuracy). */
   resolvedArgs?: Record<string, unknown>;
   /** Argumen yang benar-benar dikirim ke server. */

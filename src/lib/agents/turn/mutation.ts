@@ -10,7 +10,7 @@ import {
 import { describeStock, largeQuantityWarning, pickProduct, type ProductSearchResult } from "@/src/lib/agents/product-resolution";
 import { ProcessRecorder, answerStep, mutationOutcomeStep, type ProcessStep } from "@/src/lib/agents/process-trace";
 import { OFFLINE_MUTATION_MESSAGE } from "@/src/lib/agents/turn/replies";
-import { executeTool, fetchTenantLocations, searchProducts } from "@/src/lib/agents/turn/tools";
+import { executeTool, fetchTenantLocations, getLocationsFailure, searchProducts } from "@/src/lib/agents/turn/tools";
 import { MAX_REASONING_LENGTH } from "@/src/lib/agents/tool-schemas";
 import type { MutationChoice, MutationOutcome, MutationTool, PendingConfirmation } from "@/src/lib/agents/turn/types";
 
@@ -68,6 +68,8 @@ export async function advanceMutation(
   if (!navigator.onLine) return { message: OFFLINE_MUTATION_MESSAGE, result: { status: "offline" } };
 
   const locations = await fetchTenantLocations();
+  // Dibaca sekarang: pemanggilan berikutnya menimpa nilainya.
+  const locationsFailure = locations ? undefined : (getLocationsFailure() ?? undefined);
   const locRef = (v: unknown) => (locations ? resolveLocationRef(v, locations)?.id ?? null : null);
 
   // 1. Produk: dari pilihan staf (product_id) atau dicari dari nama tulisan model.
@@ -83,6 +85,7 @@ export async function advanceMutation(
       return {
         message: "Pencarian barang ke server sedang gagal. Coba kirim ulang sebentar lagi.",
         result: { status: "product_search_failed", query },
+        ...(search.failureReason && { serverFailure: search.failureReason }),
       };
     }
     const pick = pickProduct(search.results);
@@ -143,7 +146,7 @@ export async function advanceMutation(
     return { message: `Berapa jumlah ${name} yang mau dicatat?`, result: { status: "quantity_missing" }, resolvedArgs };
   }
   if (!locations) {
-    return { message: "Daftar lokasi toko tidak bisa dimuat. Coba lagi sebentar lagi.", result: { status: "locations_unavailable" }, resolvedArgs };
+    return { message: "Daftar lokasi toko tidak bisa dimuat. Coba lagi sebentar lagi.", result: { status: "locations_unavailable" }, resolvedArgs, ...(locationsFailure && { serverFailure: locationsFailure }) };
   }
 
   if (toolName === "updateStock") {
