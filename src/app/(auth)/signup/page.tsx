@@ -51,7 +51,7 @@ export default function SignupPage() {
 
   if (success) {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-[#f7f8fa] p-4">
+      <div className="flex flex-1 items-center justify-center p-4">
         <div className="card w-full max-w-sm p-6 text-center">
           <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
             <CheckCircle2 size={22} />
@@ -69,7 +69,7 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-[#f7f8fa] p-4">
+    <div className="flex flex-1 items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">
@@ -116,8 +116,8 @@ export default function SignupPage() {
               yang berpotensi memuat harga beli dan data supplier — ke Gemini API (Google) sebagai
               pihak ketiga untuk diproses. Fitur lain (asisten chat stok) tetap berjalan sepenuhnya
               di perangkat tanpa data toko keluar ke cloud. Rinciannya ada di{' '}
-              <Link href="/privacy" target="_blank" className="underline">Kebijakan Privasi</Link> dan{' '}
-              <Link href="/terms" target="_blank" className="underline">Syarat Penggunaan</Link>.
+              <Link href="/privacy" className="underline">Kebijakan Privasi</Link> dan{' '}
+              <Link href="/terms" className="underline">Syarat Penggunaan</Link>.
             </span>
           </label>
 

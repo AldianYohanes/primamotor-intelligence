@@ -21,7 +21,7 @@ const SESSION_ERRORS: Record<string, string> = {
 // export supaya boundary-nya jelas di satu titik.
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-dvh items-center justify-center bg-[#f7f8fa]" />}>
+    <Suspense fallback={<div className="flex flex-1 items-center justify-center" />}>
       <LoginForm />
     </Suspense>
   )
@@ -67,7 +67,7 @@ function LoginForm() {
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-[#f7f8fa] p-4">
+    <div className="flex flex-1 items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">
@@ -131,13 +131,6 @@ function LoginForm() {
           <Link href="/signup" className="font-medium text-brand-600 hover:text-brand-700 hover:underline">
             Daftar di sini
           </Link>
-        </p>
-        <p className="mt-3 text-center text-xs text-slate-500">
-          <Link href="/about" className="underline">Tentang</Link>
-          {' · '}
-          <Link href="/privacy" className="underline">Kebijakan Privasi</Link>
-          {' · '}
-          <Link href="/terms" className="underline">Syarat Penggunaan</Link>
         </p>
       </div>
     </div>
