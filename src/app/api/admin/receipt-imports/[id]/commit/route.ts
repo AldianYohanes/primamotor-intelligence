@@ -148,6 +148,13 @@ export async function POST(
     committed.push(item.id);
   }
 
+  // Semua baris gagal = tidak ada stok masuk; biarkan impor tetap terbuka supaya bisa dicoba lagi.
+  if (committed.length === 0)
+    return NextResponse.json(
+      { error: "Tidak ada stok yang berhasil dicatat. Cek baris yang gagal lalu coba lagi.", committed_count: 0, failed },
+      { status: 422 },
+    );
+
   const { error: finalizeError } = await admin
     .from("receipt_imports")
     .update({ status: "completed" })
