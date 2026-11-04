@@ -30,7 +30,7 @@ Balas HANYA JSON array tanpa markdown fence, tanpa penjelasan apa pun. Kalau ada
 kuantitasnya, gunakan 1. Abaikan baris subtotal/total/pajak.`
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent`,
     {
       method: 'POST',
       // Kunci lewat header, bukan query string, supaya tidak tercatat di log URL.
