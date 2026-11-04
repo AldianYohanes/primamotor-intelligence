@@ -1,51 +1,46 @@
 # Peta branch
 
-Ditata 19 Oktober 2026. Repo ini tidak di-push dari sesi kerja lokal; merge ke `master` hanya atas keputusan Aldian.
+Diperbarui 4 November 2026. Repo ini tidak di-push dari sesi kerja lokal; merge ke `master` hanya atas keputusan Aldian.
 
-## Alur
+## Keadaan sekarang
 
-```
-master (0bd22eb, tag eval-freeze-4, sama dengan origin/master)
-├── fix2-gabungan          putaran perbaikan kedua + alat eval (reset data, modal error)
-│   ├── agent/refactor-orchestrator   orchestrator.ts dipecah ke src/lib/agents/turn/, perilaku sama
-│   ├── agent/router-think            Router dan jawaban kebal blok <think>, mode berpikir Qwen3 dimatikan
-│   ├── eval/tooling                  commit di ekspor, test stok terkuras, faithfulness "kosong", progres besar
-│   └── rc/uji-program                gabungan semua branch aktif, untuk diuji sekali sebelum uji program 2 Nov
-├── eval/model-kecil       pilihan model Qwen3 1.7B dan Gemma 3 1B (dipakai Run 41)
-├── ui/chat                UX chat staf (audit: docs/ux-audit-chat.md)
-├── ui/pos                 kasir lebih cepat (audit: docs/ux-audit-pos.md)
-├── ui/dashboard           grafik penjualan, terlaris, stok menipis (audit: docs/ux-audit-dashboard.md)
-└── ui/new-pages           kartu stok, saran belanja ulang, akun/ganti PIN, pusat notifikasi
-```
+`master` (c6ac202) sudah memuat semua pekerjaan aktif. Isinya, digabung 4 November 2026:
 
-`rc/uji-program` = `fix2-gabungan` + semua branch di atas, digabung urut: refactor, router, eval/tooling, eval/model-kecil, ui/dashboard, ui/pos, ui/chat, ui/new-pages. Satu-satunya bentrok (orchestrator: router vs refactor) diselesaikan dengan memindahkan perubahan router ke modul `turn/` (stream, router-step, agent-loop, final-answer).
+- `agent/qwen3-small` (876ff7e), yang sendiri sudah memuat `rc/uji-program`, `fix2-gabungan`, `ui/*`, `eval/*`, `agent/router-think`, dan `agent/refactor-orchestrator`.
+- `agent/koreksi-stok` (76ff014). Satu bentrok di `stock-summary.test.ts` diselesaikan dengan menyimpan kedua blok tes.
+- Dua commit `master` lama (merge `fix2-gabungan` dan perbaikan galat API admin).
 
-## Status uji
+Hasil uji `master`: `vitest run` 703 tes lulus, `tsc --noEmit` bersih.
 
-| Branch | Test | Diuji dengan model | Dicek di browser |
-|---|---|---|---|
-| fix2-gabungan | lulus | Qwen2.5-3B (Run 38, sebelum `48f3f08`); Llama-3.2-3B sedang jalan | eval saja |
-| agent/router-think | lulus | belum (perlu run Qwen2.5 pendek skenario Q dan O) | belum |
-| agent/refactor-orchestrator | lulus | belum | belum |
-| ui/* | lulus | tidak perlu | belum (butuh login PIN) |
-| rc/uji-program | vitest 536/536, typecheck lulus | belum | belum |
+Yang **tidak** masuk: `agent/effort-akurasi` (tingkat cepat/normal/teliti dengan Router voting, dan `search_products_fuzzy`). Bentroknya di inti Router (14 bagian di `agent-loop.ts`, `EvalRunner.tsx`, `router-step.ts`, `run-store.ts`) karena `master` memakai Router versi baru. Disimpan sebagai tag `arsip/effort-akurasi` (76e9fb0). Mau dipakai lagi, fitur voting harus ditulis ulang di atas Router yang sekarang dan diuji ulang.
 
-`bun test src` gagal memuat 5-6 file karena paket `server-only` tidak terpasang; sudah begitu di `master`. Runner resmi `vitest run` lulus.
+## Branch dan folder kerja yang masih ada
 
-## Urutan merge ke master (usulan, keputusan Aldian)
+Semua branch berikut isinya sudah ada di `master` (kecuali `agent/effort-akurasi`), jadi aman dihapus kapan saja. Belum dihapus atas permintaan Aldian.
 
-1. Tunggu hasil run Llama-3.2-3B di `fix2-gabungan`, lalu merge `fix2-gabungan` + tag `eval-freeze-5`.
-2. `agent/refactor-orchestrator`, lalu `agent/router-think` (bentrok di orchestrator; contoh penyelesaian ada di commit merge `rc/uji-program`).
-3. `eval/tooling`, `eval/model-kecil`.
-4. `ui/*` setelah dicoba di browser.
-
-Atau: setelah `rc/uji-program` lolos uji di browser dan run singkat, merge `rc/uji-program` sekaligus.
+| Branch | Folder kerja | Status |
+|---|---|---|
+| `agent/qwen3-small` | `primamotor-qwen3-small` | sudah di `master` |
+| `agent/koreksi-stok` | `primamotor-koreksi-stok` | sudah di `master` |
+| `rc/uji-program` | `primamotor-rc-uji-program` | sudah di `master` |
+| `fix2-gabungan` | `primamotor-fix2-gabungan` | sudah di `master` |
+| `agent/effort-akurasi` | `primamotor-effort` | tidak di `master`; ada tag `arsip/effort-akurasi` |
+| `agent/refactor-orchestrator`, `agent/router-think`, `eval/tooling`, `eval/model-kecil`, `ui/chat`, `ui/pos`, `ui/dashboard`, `ui/new-pages` | (tanpa folder) | sudah di `master` |
 
 ## Arsip (tag, bukan branch)
 
+- `arsip/master-sebelum-gabung` (c3aa0a4): `master` tepat sebelum digabung, untuk jalan mundur.
+- `arsip/effort-akurasi` (76e9fb0): lihat di atas.
 - `arsip/eval-h-baseline` (ac0f662): kode sebelum perbaikan pasca-evaluasi + skenario H; pembanding Run 34, 35, 41.
 - `arsip/development` (2013e26): branch lama 27 Sep 2026; 4 commit tidak ada di master, diduga tergantikan.
-- `eval-freeze-1` … `eval-freeze-4`: titik beku run evaluasi.
+- `eval-freeze-1` sampai `eval-freeze-5`, termasuk `eval-freeze-3b`: titik beku run evaluasi.
+- `backup-before-trailer-strip`: tag lama, asal tidak tercatat di sini.
+
+## Catatan
+
+- Remote `origin` repo ini menunjuk ke repo portofolio (`aldianyhs`), bukan repo aplikasi. Jangan push sebelum remote dirapikan.
+- `bun test src` gagal memuat beberapa file karena paket `server-only`. Runner resmi: `bunx vitest run`.
+- `supabase/seed.sql` ada di folder ini sebagai berkas tidak terlacak setelah gabung; periksa sebelum dihapus.
 
 ## Aturan
 
