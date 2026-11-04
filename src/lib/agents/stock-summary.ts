@@ -82,14 +82,57 @@ export function claimsRecorded(text: string): boolean {
   });
 }
 
-const EMPTY_RE = /\b(kosong|habis|tidak\s+ada\s+stok|tidak\s+tersedia|stok\s+nol)\b/i;
+// Ungkapan "barang tidak ada". Run 43 (Llama): "tidak ditemukan", "tidak ada di stok",
+// "stok … di gudang tidak ada" lolos dari daftar lama yang hanya mengenal kosong/habis.
+// "tidak ada" yang jelas bukan soal barang ("tidak ada perubahan/transaksi") dikecualikan.
+const EMPTY_RE =
+  /\b(?:kosong|habis|stok\s+nol|tidak\s+tersedia|tidak\s+ditemukan|tidak\s+(?:ada|punya)(?!\s+(?:perubahan|transaksi|masalah|catatan|yang\s+(?:di)?catat))|belum\s+ada\s+stok)\b/i;
 const ALL_LOCATIONS_RE = /(semua|seluruh)\s+lokasi|di\s+mana[- ]?mana/i;
+// Potongan kalimat untuk klaim kosong: "Gudangnya masih punya, tapi toko kosong" dinilai per bagian.
+const CLAUSE_SPLIT_RE = /[,;]|\b(?:tapi|tetapi|namun|sedangkan|sementara)\b/i;
 
 // Pemisah yang boleh ada antara nama lokasi dan angkanya, lalu angka yang bukan tanggal.
 const QTY_AFTER_NAME = String.raw`(?:\s*[:=]\s*|\s+(?:ada|masih|sisa|stok|tinggal|sebanyak|punya|berjumlah)(?:\s+(?:ada|masih|sebanyak))?\s+|\s+)(\d+)(?![\d.,]*\d)(?!\s*(?:jan|feb|mar|apr|mei|jun|jul|agu|sep|okt|nov|des)\w*)`;
 
 function escapeRe(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Lokasi yang disebut di teks; nama yang lebih panjang ("Toko Cabang") dicocokkan lebih dulu. */
+function mentionedLocations(text: string, locations: StockLocation[]): StockLocation[] {
+  let rest = text;
+  const found: StockLocation[] = [];
+  for (const l of [...locations].sort((a, b) => b.name.length - a.name.length)) {
+    // Tanpa batas di akhir supaya "Gudangnya" tetap terbaca Gudang.
+    const re = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(l.name)}`, "giu");
+    if (re.test(rest)) {
+      found.push(l);
+      rest = rest.replace(re, " ");
+    }
+  }
+  return found;
+}
+
+/**
+ * Klaim "tidak ada / kosong" yang bertentangan dengan data. Per potongan kalimat
+ * (pertanyaan dilewati): tanpa lokasi atau "semua lokasi" = klaim untuk barangnya,
+ * salah bila total > 0; menyebut lokasi = salah bila lokasi itu punya stok
+ * (H-18: "di toko ini kosong" padahal Toko 9). "Toko kosong" saat Toko 0 tetap benar.
+ */
+function contradictsEmptyClaim(text: string, p: StockProduct): boolean {
+  const sentences = text.split(/(?<=[.!?])\s+|\n+/).filter((s) => !s.trim().endsWith("?"));
+  for (const sentence of sentences) {
+    for (const clause of sentence.split(CLAUSE_SPLIT_RE)) {
+      if (!EMPTY_RE.test(clause)) continue;
+      const named = mentionedLocations(clause, p.locations);
+      if (named.length === 0 || ALL_LOCATIONS_RE.test(clause)) {
+        if (p.total > 0) return true;
+      } else if (named.some((l) => l.quantity > 0)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 /**
@@ -101,10 +144,7 @@ export function contradictsStock(text: string, s: StockSummary): boolean {
   if (s.products.length !== 1) return false;
   const p = s.products[0];
 
-  if (p.total > 0 && EMPTY_RE.test(text)) {
-    const namesLocation = p.locations.some((l) => new RegExp(escapeRe(l.name), "i").test(text));
-    if (!namesLocation || ALL_LOCATIONS_RE.test(text)) return true;
-  }
+  if (contradictsEmptyClaim(text, p)) return true;
   // Angka tepat sesudah nama lokasi harus sama dengan data ("Toko ada 5" padahal 0).
   // Hanya pola jelas yang dibandingkan ("Toko 0", "Toko: 0", "Toko ada 0"); kata lain di
   // antaranya ("Gudang dan Toko total 2", "Gudang (cek 12 Okt): 4") dilewati.
