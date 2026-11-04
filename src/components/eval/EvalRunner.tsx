@@ -31,6 +31,7 @@ import {
 } from "@/src/lib/eval/run-store";
 import { holdWakeLock } from "@/src/lib/pwa/wake-lock";
 import { alertUser, notificationPermission, primeAlerts } from "@/src/lib/eval/alerts";
+import { stockDrift } from "@/src/lib/eval/stock-drift";
 import { MAX_CONSECUTIVE_SERVER_FALLBACKS, checkAgentServer, hasServerFallback } from "@/src/lib/eval/server-check";
 import type {
   ConfirmOutcome,
@@ -550,6 +551,32 @@ export function EvalRunner({ businessId, businessSlug, staffId, username }: Prop
       await guard(runAgentTurn(engine, [], "halo", await createConversation("multi_agent"), businessId));
 
       const todo = remainingPlan(plan, collected.map(toStoredRow));
+      // Dilanjutkan: stok tenant harus sama dengan keadaan akhir eksekusi terakhir. Run 27 Okt 2026
+      // menemukan 29 kunci stok berubah selagi run berhenti, dan T-05 gagal karena stok sudah habis.
+      // Dilewati bila eksekusi berikutnya memulai ulangan baru, karena data direset di sana.
+      const nextStep = todo[0];
+      const lastRow = collected[collected.length - 1];
+      const resetsFirst =
+        nextStep !== undefined &&
+        (nextStep.repetition ?? 1) > 1 &&
+        !collected.some((r) => (r.observation.repetition ?? 1) === (nextStep.repetition ?? 1));
+      if (resume && nextStep && lastRow?.observation.stockAfter && !resetsFirst) {
+        during = "memeriksa stok";
+        const drift = stockDrift(lastRow.observation.stockAfter, await snapshotStock());
+        if (drift.length > 0) {
+          resumed[resumed.length - 1] = { ...resumed[resumed.length - 1], stockDrift: drift.length };
+          persist();
+          const proceed = window.confirm(
+            `Stok tenant eval berubah di ${drift.length} item sejak run terakhir berhenti.\n\n` +
+              "Kemungkinan penyebab: pengujian manual di tenant yang sama, atau transaksi yang terputus saat GPU berhenti. " +
+              "Hasil sesudah titik ini bisa gagal karena stok, bukan karena model.\n\n" +
+              "OK = lanjutkan tetap (perbedaannya dicatat di ekspor).\nBatal = berhenti; klik Reset data eval lalu mulai run baru.",
+          );
+          if (!proceed) {
+            throw Object.assign(new Error(`Dihentikan: stok tenant eval berubah di ${drift.length} item sejak run berhenti.`), { name: "TurnStoppedError" });
+          }
+        }
+      }
       const durations: number[] = [];
       let consecutiveServerFallbacks = 0;
       const segmentStart = performance.now();

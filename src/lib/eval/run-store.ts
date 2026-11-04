@@ -39,7 +39,7 @@ export interface SavedRun {
   /** Penghentian sebelumnya (run dilanjutkan sesudahnya). */
   interruptions: Interruption[];
   /** Setiap kali run dilanjutkan, beserta lingkungan perangkat saat itu (prefill, GPU). */
-  resumed: { at: string; environment: unknown }[];
+  resumed: { at: string; environment: unknown; stockDrift?: number }[];
   updatedAt: string;
 }
 
