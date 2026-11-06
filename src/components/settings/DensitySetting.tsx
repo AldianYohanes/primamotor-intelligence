@@ -29,7 +29,7 @@ export function DensitySetting() {
         ))}
       </ToggleGroup>
       <p className="text-[11px] text-slate-400">
-        {current?.hint}. Berlaku untuk tombol, kolom isian, tabel, dan jarak halaman di perangkat ini.
+        {current?.hint}. Berlaku untuk ukuran teks, jarak, tombol, tabel, dan kartu di perangkat ini.
       </p>
     </div>
   );

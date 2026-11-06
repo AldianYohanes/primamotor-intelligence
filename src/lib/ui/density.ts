@@ -4,9 +4,9 @@ import { useCallback, useSyncExternalStore } from "react";
 import { DEFAULT_DENSITY, DENSITY_STORAGE_KEY, isDensity, type Density } from "./density-config";
 
 export const DENSITY_OPTIONS: { value: Density; label: string; hint: string }[] = [
-  { value: "compact", label: "Padat", hint: "Lebih banyak data per layar" },
+  { value: "compact", label: "Padat", hint: "Teks kecil, lebih banyak data per layar" },
   { value: "medium", label: "Sedang", hint: "Seimbang (bawaan)" },
-  { value: "spacious", label: "Lega", hint: "Jarak besar, mudah disentuh" },
+  { value: "spacious", label: "Lega", hint: "Teks dan jarak besar, mudah disentuh" },
 ];
 
 const listeners = new Set<() => void>();
