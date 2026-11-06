@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Building2, ChevronRight, FlaskConical, LayoutDashboard, MessageSquare, ShoppingCart } from "lucide-react";
+import { Building2, ChevronRight, FlaskConical, LayoutDashboard, MessageSquare, Settings, ShoppingCart } from "lucide-react";
 import { EVAL_TENANT_SLUG } from "@/src/lib/eval/tenant";
 import { requirePage } from "@/src/lib/auth/staff-context";
 import { modulesFor, ROLE_LABELS, type ModuleKey } from "@/src/lib/auth/rbac";
@@ -65,6 +65,11 @@ export default async function MenuPage() {
             );
           })}
         </nav>
+
+        <Link href="/settings" className="flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500 no-underline hover:text-slate-900">
+          <Settings size={13} />
+          Pengaturan tampilan dan perangkat
+        </Link>
       </div>
     </main>
   );
