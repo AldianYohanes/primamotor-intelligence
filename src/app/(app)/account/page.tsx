@@ -37,7 +37,7 @@ export default async function AccountPage() {
   ];
 
   return (
-    <main className="flex min-h-dvh justify-center bg-[#f7f8fa] px-4 py-10">
+    <main className="flex min-h-dvh justify-center bg-background px-4 py-10">
       <div className="w-full max-w-md space-y-5">
         <div>
           <Link href="/menu" className="mb-2 inline-flex items-center gap-1 text-sm font-medium text-brand-600 hover:underline">

@@ -89,7 +89,7 @@ export default async function NotificationsPage({
       : "rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50";
 
   return (
-    <main className="flex min-h-dvh justify-center bg-[#f7f8fa] px-4 py-10">
+    <main className="flex min-h-dvh justify-center bg-background px-4 py-10">
       <div className="w-full max-w-2xl space-y-4">
         <div>
           <Link

@@ -11,7 +11,7 @@ export const metadata: Metadata = {
  */
 export default function OfflinePage() {
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-[#f7f8fa] p-6 text-center">
+    <main className="flex min-h-dvh items-center justify-center bg-background p-6 text-center">
       <div className="card max-w-sm space-y-3 p-6">
         <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-500">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>

@@ -77,24 +77,26 @@ export function DashboardOverviewModule() {
             >
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={monthly} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" vertical={false} />
                   <XAxis
                     dataKey="label"
-                    tick={{ fontSize: 11, fill: "#64748b" }}
-                    axisLine={{ stroke: "#e2e8f0" }}
+                    tick={{ fontSize: 11, fill: "var(--chart-tick)" }}
+                    axisLine={{ stroke: "var(--chart-axis)" }}
                     tickLine={false}
                   />
                   <YAxis
-                    tick={{ fontSize: 11, fill: "#64748b" }}
+                    tick={{ fontSize: 11, fill: "var(--chart-tick)" }}
                     axisLine={false}
                     tickLine={false}
                     tickFormatter={formatRupiahShort}
                   />
                   <Tooltip
-                    cursor={{ fill: "#f1f5f9" }}
+                    cursor={{ fill: "var(--chart-cursor)" }}
                     contentStyle={{
                       borderRadius: 8,
-                      border: "1px solid #e2e8f0",
+                      border: "1px solid var(--chart-axis)",
+                      backgroundColor: "var(--surface)",
+                      color: "var(--foreground)",
                       boxShadow: "0 4px 12px -2px rgb(15 23 42 / 0.08)",
                       fontSize: 12,
                     }}

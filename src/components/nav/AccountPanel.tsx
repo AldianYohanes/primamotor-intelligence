@@ -18,6 +18,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { DensitySetting } from "@/src/components/settings/DensitySetting";
+import { ThemeSetting } from "@/src/components/settings/ThemeSetting";
 import { logoutAndClear } from "@/src/lib/auth/logout-client";
 import { enablePushNotifications, getPushSupportStatus } from "@/src/lib/notifications/subscribe-client";
 import { isStandalone, useInstallPrompt } from "@/src/lib/pwa/install-prompt";
@@ -282,6 +283,7 @@ export function AccountPanel({ account, onNavigate }: { account: AccountInfo; on
         )}
       </Link>
       <Section icon={Rows3} title="Tampilan">
+        <ThemeSetting />
         <DensitySetting />
       </Section>
       <Section icon={KeyRound} title="Ganti PIN">

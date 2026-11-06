@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Outfit, Forum } from "next/font/google";
 import "../styles/globals.css";
 import { densityBootScript } from "../lib/ui/density-config";
+import { themeBootScript } from "../lib/ui/theme-config";
 import { PwaProvider } from "../components/pwa/PwaProvider";
 
 const inter = Inter({
@@ -44,7 +45,10 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
-  themeColor: "#2563eb",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#2563eb" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b1120" },
+  ],
 };
 
 export default function RootLayout({
@@ -60,6 +64,7 @@ export default function RootLayout({
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: densityBootScript }} />
+        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
       <body>
         <PwaProvider>{children}</PwaProvider>

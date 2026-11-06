@@ -21,7 +21,7 @@ export async function PublicShell({ children }: { children: ReactNode }) {
   } = await supabase.auth.getUser();
 
   return (
-    <div className="flex min-h-dvh flex-col bg-[#f7f8fa]">
+    <div className="flex min-h-dvh flex-col bg-background">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
           <Link href="/" className="flex items-center gap-2 text-sm font-bold text-slate-900 no-underline">

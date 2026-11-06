@@ -22,7 +22,7 @@ export const Information = ({
       </h6>
 
       <Link href={ctaHref} className="no-underline">
-        <span className="mt-2 inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-xs font-medium text-white">
+        <span className="mt-2 inline-flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-xs font-medium text-background">
           {ctaLabel}
           <span className="flex h-4 w-4 items-center justify-center rounded-full bg-white">
             <ChevronRight size={12} color="black" />
