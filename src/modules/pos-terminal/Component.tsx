@@ -29,6 +29,7 @@ import type { PaymentMethod, SaleSummaryPaymentMethod, PaymentLinePayload } from
 import type { CustomerResponse, ShiftResponse, ShiftReportTotalsResponse } from "./data/response";
 import { formatRupiah, generateIdempotencyKey, getQuickCashAmounts, moveHighlight } from "./utils/utils";
 import { Select } from "@/src/components/ui/select";
+import { SkeletonList } from "@/src/components/ui/skeleton";
 
 interface CartLine {
   productId: string;
@@ -1138,7 +1139,7 @@ function ShiftPanel({
         {!closedResult && currentShift && !showCloseForm && (
           <div className="space-y-3 text-sm">
             <p className="text-xs text-slate-500">Dibuka {new Date(currentShift.opened_at).toLocaleString("id-ID")}</p>
-            {isLoadingReport && <p className="text-xs text-slate-500">Memuat laporan…</p>}
+            {isLoadingReport && <SkeletonList rows={3} label="Memuat laporan" />}
             {report && <ShiftTotalsSummary totals={report} />}
             {error && <p className="text-xs text-red-600">{error}</p>}
             <button onClick={() => setShowCloseForm(true)} className="btn btn-danger w-full py-2">

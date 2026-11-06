@@ -12,6 +12,7 @@ import { createSaleColumns } from "./data/coldef";
 import type { SaleListParams, SaleStatusFilter, SaleSortableColumn } from "./data/params";
 import type { SaleViewModel, SaleItemViewModel } from "./mappers/mappers";
 import { Select } from "@/src/components/ui/select";
+import { SkeletonList } from "@/src/components/ui/skeleton";
 
 const PAGE_SIZE = 20;
 
@@ -193,7 +194,7 @@ function SaleDetailDialog({
           </button>
         </div>
 
-        {isLoading && <p className="py-6 text-center text-sm text-slate-400">Memuat…</p>}
+        {isLoading && <SkeletonList rows={4} label="Memuat detail penjualan" />}
         {error && <p className="text-sm text-red-600">Gagal memuat detail: {error.message}</p>}
 
         {detail && !showVoidForm && (

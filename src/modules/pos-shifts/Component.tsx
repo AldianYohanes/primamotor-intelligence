@@ -7,6 +7,7 @@ import { useGetShiftReport } from "./hooks/use-get-shift-report";
 import type { ShiftStatusFilter } from "./data/params";
 import { formatRupiah } from "./utils/utils";
 import { Select } from "@/src/components/ui/select";
+import { SkeletonList, SkeletonTable } from "@/src/components/ui/skeleton";
 
 /**
  * modules/pos-shifts/Component.tsx — riwayat shift SEMUA kasir, untuk
@@ -36,7 +37,7 @@ export function PosShiftsModule() {
       </div>
 
       {error && <p className="text-sm text-red-600">Gagal memuat shift: {error.message}</p>}
-      {isLoading && <p className="text-sm text-slate-400">Memuat…</p>}
+      {isLoading && <SkeletonTable rows={5} cols={4} label="Memuat riwayat shift" />}
 
       <div className="overflow-hidden rounded-lg border border-slate-200">
         <table className="w-full text-sm">
@@ -100,7 +101,7 @@ function ShiftReportDialog({ shiftId, onClose }: { shiftId: string; onClose: () 
           </button>
         </div>
 
-        {isLoading && <p className="py-6 text-center text-sm text-slate-400">Memuat…</p>}
+        {isLoading && <SkeletonList rows={4} label="Memuat detail shift" />}
         {error && <p className="text-sm text-red-600">Gagal memuat: {error.message}</p>}
 
         {report && (

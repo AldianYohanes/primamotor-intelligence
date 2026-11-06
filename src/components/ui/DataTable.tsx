@@ -2,6 +2,7 @@
 
 import { flexRender, getCoreRowModel, useReactTable, type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight, Inbox } from 'lucide-react'
+import { Skeleton } from "@/src/components/ui/skeleton";
 
 /**
  * Wrapper tipis di atas TanStack Table (headless — table.getHeaderGroups()/getRowModel()
@@ -147,15 +148,11 @@ export function DataTable<T>({
 
 function TableSkeletonRows({ columns }: { columns: number }) {
   return (
-    <div className="divide-y divide-slate-100">
+    <div role="status" aria-busy="true" aria-label="Memuat tabel" className="divide-y divide-slate-100">
       {Array.from({ length: 5 }).map((_, r) => (
-        <div key={r} className="flex items-center gap-6 px-4 py-3.5">
+        <div key={r} className="dt-cell flex items-center gap-6">
           {Array.from({ length: Math.min(columns, 5) }).map((_, c) => (
-            <div
-              key={c}
-              className="h-3 flex-1 animate-pulse rounded bg-slate-100"
-              style={{ maxWidth: c === 0 ? '40%' : '18%' }}
-            />
+            <Skeleton key={c} className="h-4 flex-1" style={{ maxWidth: c === 0 ? '40%' : '18%' }} />
           ))}
         </div>
       ))}

@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { StockCardModule } from "@/src/modules/stock-card/Component";
+import { SkeletonPage } from "@/src/components/ui/skeleton";
 
 export default async function StockCardPage({
   params,
@@ -9,11 +10,7 @@ export default async function StockCardPage({
   const { productId } = await params;
   return (
     <Suspense
-      fallback={
-        <div className="p-6 text-sm text-slate-400">
-          Memuat kartu stok…
-        </div>
-      }
+      fallback={<SkeletonPage />}
     >
       <StockCardModule productId={productId} />
     </Suspense>

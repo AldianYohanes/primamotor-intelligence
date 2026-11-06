@@ -7,6 +7,7 @@ import { useGetCustomerDetail } from "./hooks/use-get-customer-detail";
 import { usePostCustomer } from "./hooks/use-post-customer";
 import { usePostCustomerPayment } from "./hooks/use-post-payment";
 import { Select } from "@/src/components/ui/select";
+import { SkeletonList, SkeletonTable } from "@/src/components/ui/skeleton";
 
 const PAYMENT_LABELS: Record<string, string> = { cash: "Tunai", transfer: "Transfer Bank", qris: "QRIS", card: "Kartu" };
 
@@ -42,7 +43,7 @@ export function CustomersModule() {
       </div>
 
       {error && <p className="text-sm text-red-600">Gagal memuat pelanggan: {error.message}</p>}
-      {isLoading && <p className="text-sm text-slate-400">Memuat…</p>}
+      {isLoading && <SkeletonTable rows={5} cols={3} label="Memuat pelanggan" />}
 
       <div className="overflow-hidden rounded-lg border border-slate-200">
         <table className="w-full text-sm">
@@ -211,7 +212,7 @@ function CustomerDetailDialog({
           </button>
         </div>
 
-        {isLoading && <p className="py-6 text-center text-sm text-slate-400">Memuat…</p>}
+        {isLoading && <SkeletonList rows={4} label="Memuat detail pelanggan" />}
 
         {detail && !showPaymentForm && (
           <div className="space-y-4 text-sm">

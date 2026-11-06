@@ -5,6 +5,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { useGetReportProductOptions } from './hooks/use-get-report-options'
 import { useGetSalesTrend } from './hooks/use-get-sales-trend'
 import { Select } from "@/src/components/ui/select";
+import { SkeletonDashboard } from "@/src/components/ui/skeleton";
 
 export function ReportsModule() {
   const [productId, setProductId] = useState('')
@@ -28,7 +29,7 @@ export function ReportsModule() {
         ))}
       </Select>
 
-      {isLoading && <p className="text-sm text-slate-400">Memuat data…</p>}
+      {isLoading && <SkeletonDashboard label="Memuat laporan" />}
 
       {!isLoading && productId && trend.length > 0 && (
         <div className="h-80 card p-5">

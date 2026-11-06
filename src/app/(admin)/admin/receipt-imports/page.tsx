@@ -1,14 +1,11 @@
 import { Suspense } from "react";
 import { ReceiptImportsModule } from "@/src/modules/receipt-imports/Component";
+import { SkeletonPage } from "@/src/components/ui/skeleton";
 
 export default function ReceiptImportsPage() {
   return (
     <Suspense
-      fallback={
-        <div className="p-6 text-sm text-slate-400">
-          Memuat halaman review bon…
-        </div>
-      }
+      fallback={<SkeletonPage />}
     >
       <ReceiptImportsModule />
     </Suspense>
