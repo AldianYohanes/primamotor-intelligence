@@ -63,10 +63,7 @@
   --chart-axis: #e2e8f0;
   --chart-tick: #64748b;
   --chart-cursor: #f1f5f9;
-  /* Latar hidup: tiga cahaya lembut + tekstur tipis (lihat body::before/::after). */
-  --glow-a: rgb(37 99 235 / 0.1);
-  --glow-b: rgb(14 165 233 / 0.08);
-  --glow-c: rgb(20 184 166 / 0.06);
+  /* Latar: pita sutra abu-abu + butiran noise (lihat html::before, body::before/::after). */
   --grain-opacity: 0.05;
 }
 
@@ -78,48 +75,45 @@
  */
 .dark {
   color-scheme: dark;
-  --background: #0b1120;
-  --foreground: #f1f5f9;
-  --card: #131b2e;
-  --card-foreground: #f1f5f9;
-  --popover: #131b2e;
-  --popover-foreground: #f1f5f9;
-  --secondary: #1b2539;
-  --secondary-foreground: #cbd5e1;
-  --muted: #1b2539;
-  --muted-foreground: #94a3b8;
-  --accent: #1b2539;
-  --accent-foreground: #f1f5f9;
+  --background: #18181b;
+  --foreground: #f4f4f5;
+  --card: #202023;
+  --card-foreground: #f4f4f5;
+  --popover: #202023;
+  --popover-foreground: #f4f4f5;
+  --secondary: #2a2a2e;
+  --secondary-foreground: #d4d4d8;
+  --muted: #2a2a2e;
+  --muted-foreground: #a1a1aa;
+  --accent: #2a2a2e;
+  --accent-foreground: #f4f4f5;
   --destructive: #ef4444;
-  --border: #263249;
-  --input: #263249;
+  --border: #3a3a3f;
+  --input: #3a3a3f;
   --ring: var(--color-brand-400);
-  --surface: #131b2e;
-  --surface-border: #263249;
-  --chart-grid: #1f2a40;
-  --chart-axis: #2c3a55;
-  --chart-tick: #94a3b8;
-  --chart-cursor: #1b2539;
-  --glow-a: rgb(59 130 246 / 0.16);
-  --glow-b: rgb(14 165 233 / 0.1);
-  --glow-c: rgb(20 184 166 / 0.08);
+  --surface: #202023;
+  --surface-border: #34343a;
+  --chart-grid: #2e2e33;
+  --chart-axis: #3f3f46;
+  --chart-tick: #a1a1aa;
+  --chart-cursor: #2a2a2e;
   --grain-opacity: 0.07;
 
-  --color-slate-50: #172033;
-  --color-slate-100: #1b2539;
-  --color-slate-200: #263249;
-  --color-slate-300: #34425e;
-  --color-slate-400: #7d8ca6;
-  --color-slate-500: #9aa8bf;
-  --color-slate-600: #b3bfd2;
-  --color-slate-700: #cbd5e1;
-  --color-slate-800: #e2e8f0;
-  --color-slate-900: #f1f5f9;
-  --color-slate-950: #f8fafc;
+  --color-slate-50: #26262a;
+  --color-slate-100: #2a2a2e;
+  --color-slate-200: #3a3a3f;
+  --color-slate-300: #4a4a50;
+  --color-slate-400: #85858d;
+  --color-slate-500: #a1a1aa;
+  --color-slate-600: #b8b8bf;
+  --color-slate-700: #d4d4d8;
+  --color-slate-800: #e4e4e7;
+  --color-slate-900: #f4f4f5;
+  --color-slate-950: #fafafa;
 
-  --color-brand-50: #14213d;
-  --color-brand-100: #1a2c52;
-  --color-brand-200: #1e3a8a;
+  --color-brand-50: #2a2a2e;
+  --color-brand-100: #34343a;
+  --color-brand-200: #4a4a50;
   --color-brand-700: #93c5fd;
   --color-brand-800: #bfdbfe;
   --color-brand-900: #dbeafe;
@@ -246,11 +240,14 @@ body {
 }
 
 /**
- * Latar: gradien lembut yang bergeser pelan + tekstur noise tipis. Hanya
- * transform pada satu lapisan fixed (diproses compositor, tanpa filter/blur),
- * jadi nyaris tanpa beban GPU dan tidak mengganggu WebLLM. Lapisan ada di
- * belakang konten (z-index -1); wrapper halaman harus transparan agar terlihat.
+ * Latar: pita sutra abu-abu yang melengkung dan bergeser pelan, lalu butiran noise
+ * tipis. Pitanya gambar SVG yang sudah di-blur sekali saat digambar; sesudah itu
+ * hanya transform yang dianimasikan (diproses compositor, tanpa filter berjalan),
+ * jadi nyaris tanpa beban GPU dan tidak mengganggu WebLLM. Dua lapisan (html dan
+ * body) bergerak berlawanan arah dengan kecepatan beda supaya terasa berlapis.
+ * Lapisan di belakang konten (z-index -1); wrapper halaman harus transparan.
  */
+html::before,
 body::before,
 body::after {
   content: "";
@@ -258,29 +255,48 @@ body::after {
   pointer-events: none;
   z-index: -1;
 }
+html::before,
 body::before {
-  inset: -25%;
-  background:
-    radial-gradient(38% 34% at 18% 22%, var(--glow-a), transparent 70%),
-    radial-gradient(34% 30% at 82% 18%, var(--glow-b), transparent 70%),
-    radial-gradient(40% 36% at 62% 88%, var(--glow-c), transparent 70%);
-  animation: bg-drift 60s ease-in-out infinite alternate;
+  inset: -10% -30%;
+  background: var(--silk) center / 100% 100% no-repeat;
   will-change: transform;
+}
+html::before {
+  animation: silk-a 40s ease-in-out infinite alternate;
+}
+body::before {
+  opacity: 0.7;
+  animation: silk-b 55s ease-in-out infinite alternate;
 }
 body::after {
   inset: 0;
   opacity: var(--grain-opacity);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
-@keyframes bg-drift {
+:root {
+  --silk: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 1600 900%22 preserveAspectRatio=%22none%22%3E%3Cdefs%3E%3ClinearGradient id=%22g%22 x1=%220%22 x2=%221%22 y1=%220%22 y2=%220%22%3E%3Cstop offset=%220%22 stop-color=%22%23000%22 stop-opacity=%220%22/%3E%3Cstop offset=%22.35%22 stop-color=%22%23000%22 stop-opacity=%221%22/%3E%3Cstop offset=%22.7%22 stop-color=%22%23000%22 stop-opacity=%22.35%22/%3E%3Cstop offset=%221%22 stop-color=%22%23000%22 stop-opacity=%220%22/%3E%3C/linearGradient%3E%3Cfilter id=%22b%22 x=%22-10%25%22 y=%22-10%25%22 width=%22120%25%22 height=%22120%25%22%3E%3CfeGaussianBlur stdDeviation=%2216%22/%3E%3C/filter%3E%3C/defs%3E%3Cg filter=%22url(%23b)%22%3E%3Cpath d=%22M-100 520 C250 330 550 700 850 520 S1350 330 1700 480 L1700 600 C1350 460 1100 650 850 640 S250 500 -100 650Z%22 fill=%22url(%23g)%22 fill-opacity=%220.1%22/%3E%3Cpath d=%22M-100 300 C300 150 600 420 900 270 S1400 120 1700 250 L1700 330 C1400 200 1150 380 900 350 S300 230 -100 400Z%22 fill=%22url(%23g)%22 fill-opacity=%220.07%22/%3E%3Cpath d=%22M-100 760 C300 640 650 900 1000 740 S1450 600 1700 720 L1700 820 C1450 700 1200 860 1000 850 S300 760 -100 880Z%22 fill=%22url(%23g)%22 fill-opacity=%220.08%22/%3E%3Cpath d=%22M-100 110 C250 20 650 260 1000 110 S1450 -20 1700 90 L1700 190 C1450 80 1200 240 1000 220 S300 90 -100 230Z%22 fill=%22url(%23g)%22 fill-opacity=%220.05%22/%3E%3C/g%3E%3C/svg%3E");
+}
+.dark {
+  --silk: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 1600 900%22 preserveAspectRatio=%22none%22%3E%3Cdefs%3E%3ClinearGradient id=%22g%22 x1=%220%22 x2=%221%22 y1=%220%22 y2=%220%22%3E%3Cstop offset=%220%22 stop-color=%22%23fff%22 stop-opacity=%220%22/%3E%3Cstop offset=%22.35%22 stop-color=%22%23fff%22 stop-opacity=%221%22/%3E%3Cstop offset=%22.7%22 stop-color=%22%23fff%22 stop-opacity=%22.35%22/%3E%3Cstop offset=%221%22 stop-color=%22%23fff%22 stop-opacity=%220%22/%3E%3C/linearGradient%3E%3Cfilter id=%22b%22 x=%22-10%25%22 y=%22-10%25%22 width=%22120%25%22 height=%22120%25%22%3E%3CfeGaussianBlur stdDeviation=%2216%22/%3E%3C/filter%3E%3C/defs%3E%3Cg filter=%22url(%23b)%22%3E%3Cpath d=%22M-100 520 C250 330 550 700 850 520 S1350 330 1700 480 L1700 600 C1350 460 1100 650 850 640 S250 500 -100 650Z%22 fill=%22url(%23g)%22 fill-opacity=%220.12%22/%3E%3Cpath d=%22M-100 300 C300 150 600 420 900 270 S1400 120 1700 250 L1700 330 C1400 200 1150 380 900 350 S300 230 -100 400Z%22 fill=%22url(%23g)%22 fill-opacity=%220.08%22/%3E%3Cpath d=%22M-100 760 C300 640 650 900 1000 740 S1450 600 1700 720 L1700 820 C1450 700 1200 860 1000 850 S300 760 -100 880Z%22 fill=%22url(%23g)%22 fill-opacity=%220.09%22/%3E%3Cpath d=%22M-100 110 C250 20 650 260 1000 110 S1450 -20 1700 90 L1700 190 C1450 80 1200 240 1000 220 S300 90 -100 230Z%22 fill=%22url(%23g)%22 fill-opacity=%220.06%22/%3E%3C/g%3E%3C/svg%3E");
+}
+@keyframes silk-a {
   from {
-    transform: translate3d(-3%, -2%, 0) scale(1);
+    transform: translate3d(-9%, -2%, 0) rotate(-1.5deg);
   }
   to {
-    transform: translate3d(3%, 3%, 0) scale(1.12);
+    transform: translate3d(9%, 3%, 0) rotate(1.5deg);
+  }
+}
+@keyframes silk-b {
+  from {
+    transform: scaleX(-1) translate3d(-7%, 3%, 0) rotate(1deg);
+  }
+  to {
+    transform: scaleX(-1) translate3d(7%, -3%, 0) rotate(-1deg);
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  html::before,
   body::before {
     animation: none;
   }
