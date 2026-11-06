@@ -461,7 +461,7 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-0 bg-background pb-20 lg:grid-cols-[1fr_400px] lg:pb-0">
+    <div className="grid grid-cols-1 gap-0 pb-20 lg:grid-cols-[1fr_400px] lg:pb-0">
       {/* Panel kiri: pencarian & katalog produk */}
       <div className="flex flex-col p-4 sm:p-6 lg:h-[calc(100dvh-52px)]">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -1231,7 +1231,7 @@ function Receipt({ success, onNewSale }: { success: CheckoutSuccess; onNewSale: 
   }, [onNewSale]);
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-background p-4">
+    <div className="flex min-h-dvh items-center justify-center p-4">
       <style>{`
         @media print {
           @page { size: ${PAPER_WIDTHS[paperWidth]}mm auto; margin: 0; }

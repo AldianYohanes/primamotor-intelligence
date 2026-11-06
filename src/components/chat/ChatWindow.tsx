@@ -428,7 +428,7 @@ export function ChatWindow({
 
   if (modelStatus === "unsupported") {
     return (
-      <div className="flex h-dvh items-center justify-center bg-background p-6 text-center">
+      <div className="flex h-dvh items-center justify-center p-6 text-center">
         <div className="card max-w-sm space-y-2.5 p-6">
           <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-500">
             <MonitorX size={20} />
@@ -451,7 +451,7 @@ export function ChatWindow({
 
   if (modelStatus === "error" && engineError) {
     return (
-      <div className="flex h-dvh items-center justify-center bg-background p-6 text-center">
+      <div className="flex h-dvh items-center justify-center p-6 text-center">
         <div className="card max-w-sm space-y-2.5 p-6">
           <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-red-50 text-red-600">
             <AlertTriangle size={20} />
@@ -507,7 +507,7 @@ export function ChatWindow({
   }
 
   return (
-    <div className="flex h-dvh flex-col bg-background">
+    <div className="flex h-dvh flex-col">
       <AppHeader
         title="Asisten Stok"
         subtitle={`${fullName} · ${tenantName}`}
