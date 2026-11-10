@@ -7,8 +7,103 @@ import {
   REORDER_OBSERVATION_DAYS,
   shouldCreateReorderSuggestion,
 } from "@/src/lib/inventory/reorder-calculation";
+import {
+  calculateDeadStock,
+  DEAD_STOCK_DAYS,
+  DEAD_STOCK_REMINDER_DAYS,
+  shouldCreateDeadStockNotification,
+} from "@/src/lib/inventory/dead-stock";
 
 export const maxDuration = 300; // Vercel Cron: analisis semua tenant bisa memakan waktu
+
+type AdminClient = ReturnType<typeof createAdminClient>;
+
+/**
+ * Kandidat dead stock: stok masih ada, tetapi tidak ada transaksi keluar lebih
+ * dari DEAD_STOCK_DAYS hari. Hanya membuat notifikasi untuk ditinjau staf, stok
+ * tidak diubah. Mengembalikan true bila notifikasi baru dibuat. Kegagalan
+ * dicatat dan tidak menghentikan perhitungan restock produk yang sama.
+ */
+async function flagDeadStock(
+  admin: AdminClient,
+  businessId: string,
+  product: { id: string; name: string; created_at: string },
+  totalOutbound: number,
+  totalAvailable: number,
+): Promise<boolean> {
+  // Ada transaksi keluar dalam 90 hari terakhir atau tidak ada stok: pasti
+  // bukan kandidat, jadi tidak perlu query tambahan.
+  if (totalOutbound > 0 || totalAvailable <= 0) return false;
+
+  const { data: lastOutbound, error: lastOutboundError } = await admin
+    .from("stock_transactions")
+    .select("created_at")
+    .eq("product_id", product.id)
+    .eq("transaction_type", "keluar")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (lastOutboundError) {
+    logger.error("Gagal ambil transaksi keluar terakhir untuk dead stock", {
+      route: "cron/monitor",
+      business_id: businessId,
+      product_id: product.id,
+      error: lastOutboundError,
+    });
+    return false;
+  }
+
+  const calculation = calculateDeadStock({
+    totalAvailable,
+    lastOutboundAt: lastOutbound?.created_at ?? null,
+    productCreatedAt: product.created_at,
+  });
+  if (!calculation.isCandidate) return false;
+
+  const since = new Date(
+    Date.now() - DEAD_STOCK_REMINDER_DAYS * 86_400_000,
+  ).toISOString();
+  const { data: recent, error: recentError } = await admin
+    .from("notifications")
+    .select("id")
+    .eq("business_id", businessId)
+    .eq("type", "dead_stock")
+    .eq("related_id", product.id)
+    .gte("created_at", since)
+    .limit(1)
+    .maybeSingle();
+  if (recentError) {
+    logger.error("Gagal cek notifikasi dead stock sebelumnya", {
+      route: "cron/monitor",
+      business_id: businessId,
+      product_id: product.id,
+      error: recentError,
+    });
+    return false;
+  }
+  if (!shouldCreateDeadStockNotification(calculation, !!recent)) return false;
+
+  const { error: notificationError } = await admin.from("notifications").insert({
+    business_id: businessId,
+    staff_id: null,
+    type: "dead_stock",
+    title: `Kandidat dead stock: ${product.name}`,
+    body:
+      `Stok tersedia ${calculation.totalAvailable} unit, tidak ada transaksi ` +
+      `keluar selama ${calculation.idleDays} hari (batas ${DEAD_STOCK_DAYS} hari)`,
+    related_id: product.id,
+  });
+  if (notificationError) {
+    logger.error("Gagal menyimpan notification dead stock", {
+      route: "cron/monitor",
+      business_id: businessId,
+      product_id: product.id,
+      error: notificationError,
+    });
+    return false;
+  }
+  return true;
+}
 
 /**
  * Monitoring Agent — TIDAK reaktif, dijalankan Vercel Cron (lihat vercel.json),
@@ -31,7 +126,11 @@ export async function GET(req: NextRequest) {
   }
 
   const admin = createAdminClient();
-  const results: { business_id: string; suggestions_created: number }[] = [];
+  const results: {
+    business_id: string;
+    suggestions_created: number;
+    dead_stock_flagged: number;
+  }[] = [];
   const runStartedAt = performance.now();
 
   const { data: businesses, error: businessesError } = await admin
@@ -67,7 +166,7 @@ export async function GET(req: NextRequest) {
       const { data: products, error: productsError } = await admin
         .from("products")
         .select(
-          "id, name, min_threshold, lead_time_days, safety_stock, preferred_supplier_id",
+          "id, name, created_at, min_threshold, lead_time_days, safety_stock, preferred_supplier_id",
         )
         .eq("business_id", business.id)
         .eq("is_active", true);
@@ -78,11 +177,16 @@ export async function GET(req: NextRequest) {
           error: productsError,
         });
         businessesWithErrors += 1;
-        results.push({ business_id: business.id, suggestions_created: 0 });
+        results.push({
+          business_id: business.id,
+          suggestions_created: 0,
+          dead_stock_flagged: 0,
+        });
         continue;
       }
 
       let created = 0;
+      let deadStockFlagged = 0;
 
       for (const product of products ?? []) {
         const { data: totalOutboundData, error: outboundError } =
@@ -142,6 +246,20 @@ export async function GET(req: NextRequest) {
           leadTimeDays: product.lead_time_days ?? 0,
           safetyStock: product.safety_stock ?? 0,
         });
+
+        // Dead stock dinilai terpisah dari saran restock dan dijalankan lebih dulu,
+        // supaya `continue` pada blok restock di bawah tidak melewatinya.
+        if (
+          await flagDeadStock(
+            admin,
+            business.id,
+            product,
+            calculation.totalOutbound,
+            totalAvailable,
+          )
+        ) {
+          deadStockFlagged += 1;
+        }
 
         if (calculation.shouldReorder) {
           const { data: existing, error: existingError } = await admin
@@ -246,7 +364,11 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      results.push({ business_id: business.id, suggestions_created: created });
+      results.push({
+        business_id: business.id,
+        suggestions_created: created,
+        dead_stock_flagged: deadStockFlagged,
+      });
     } catch (err) {
       businessesWithErrors += 1;
       logger.error("Monitoring cron gagal total untuk satu business", {
@@ -254,7 +376,11 @@ export async function GET(req: NextRequest) {
         business_id: business.id,
         error: err,
       });
-      results.push({ business_id: business.id, suggestions_created: 0 });
+      results.push({
+        business_id: business.id,
+        suggestions_created: 0,
+        dead_stock_flagged: 0,
+      });
     }
   }
 
@@ -264,6 +390,10 @@ export async function GET(req: NextRequest) {
     businesses_with_errors: businessesWithErrors,
     total_suggestions_created: results.reduce(
       (sum, r) => sum + r.suggestions_created,
+      0,
+    ),
+    total_dead_stock_flagged: results.reduce(
+      (sum, r) => sum + r.dead_stock_flagged,
       0,
     ),
     duration_ms: Math.round(performance.now() - runStartedAt),
