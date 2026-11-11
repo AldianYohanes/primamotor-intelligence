@@ -60,6 +60,12 @@ Bandingkan dua run per skenario (pulih, turun, McNemar, per kelompok skenario):
 bun scripts/eval-compare.ts <sebelum.json> <sesudah.json> --out banding.md
 ```
 
+Pindah tempat di tengah run (stok di DB sudah berubah oleh skenario tulis): ekspor JSON, bikin SQL pengulang perubahan stok yang sudah dikonfirmasi, reset data eval, jalankan SQL itu di SQL editor (bagian akhirnya mengecek stok sama dengan akhir run), lalu impor JSON yang sama di `/eval` dan lanjutkan.
+
+```bash
+bun scripts/eval-run-to-sql.ts <hasil.json> pulihkan.sql
+```
+
 ## Test
 
 ```bash
