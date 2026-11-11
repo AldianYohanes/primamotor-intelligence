@@ -24,6 +24,7 @@ export function TenantApprovalList() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- muat data awal dari API saat mount
     load()
   }, [])
 

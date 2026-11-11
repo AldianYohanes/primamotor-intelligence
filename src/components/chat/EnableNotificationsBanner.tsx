@@ -31,8 +31,10 @@ export function EnableNotificationsBanner() {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- baca API browser/localStorage hanya bisa setelah mount (hindari mismatch SSR) */
     setStatus(getPushSupportStatus());
     setDismissed(recentlyDismissed());
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
   function dismiss() {

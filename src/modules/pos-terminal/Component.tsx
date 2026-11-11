@@ -92,6 +92,7 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
   useEffect(() => {
     if (!locationId && locationOptions.length > 0) {
       const toko = locationOptions.find((l) => l.type === "toko");
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- pilih lokasi bawaan setelah daftar lokasi termuat
       setLocationId((toko ?? locationOptions[0]).id);
     }
   }, [locationOptions, locationId]);
@@ -1053,6 +1054,7 @@ function ShiftPanel({
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- muat laporan shift saat shift berganti
     if (currentShift) loadReport(currentShift.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentShift?.id]);
