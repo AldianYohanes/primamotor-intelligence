@@ -4,6 +4,7 @@ import { ArrowLeft, ChevronRight, KeyRound } from "lucide-react";
 import { requirePage } from "@/src/lib/auth/staff-context";
 import { DensitySetting } from "@/src/components/settings/DensitySetting";
 import { DeviceSettings } from "@/src/components/settings/DeviceSettings";
+import { ModelDetailsSetting } from "@/src/components/settings/ModelDetailsSetting";
 import { ThemeSetting } from "@/src/components/settings/ThemeSetting";
 
 export const metadata: Metadata = {
@@ -11,11 +12,11 @@ export const metadata: Metadata = {
 };
 
 /**
- * Pengaturan per perangkat: tema, kerapatan, notifikasi, pasang aplikasi, dan model AI.
- * Semua disimpan di perangkat ini (bukan di akun), jadi boleh dibuka semua role.
+ * Pengaturan: tema, kerapatan, notifikasi, pasang aplikasi, dan model AI disimpan di
+ * perangkat ini; saklar detail teknis chat disimpan di akun. Boleh dibuka semua role.
  */
 export default async function SettingsPage() {
-  await requirePage(null, { requireTenant: false });
+  const ctx = await requirePage(null, { requireTenant: false });
 
   return (
     <main className="flex min-h-dvh justify-center px-4 py-10">
@@ -38,6 +39,11 @@ export default async function SettingsPage() {
             <p className="text-xs font-medium text-slate-500">Kerapatan</p>
             <DensitySetting />
           </div>
+        </section>
+
+        <section className="card space-y-3 p-4">
+          <h2 className="text-sm font-semibold text-slate-900">Chat</h2>
+          <ModelDetailsSetting initial={ctx.staff.showModelDetails} />
         </section>
 
         <section className="card space-y-3 p-4">

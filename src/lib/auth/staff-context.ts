@@ -28,6 +28,8 @@ export interface StaffContext {
     role: Role;
     username: string;
     fullName: string;
+    /** Saklar Pengaturan: tampilkan statistik model dan detail proses di chat. */
+    showModelDetails: boolean;
   };
   /** Tenant tempat akun staf terdaftar (dipakai untuk re-konfirmasi PIN). */
   ownBusiness: TenantInfo;
@@ -56,7 +58,7 @@ export const getStaffContext = cache(async (): Promise<StaffContextResult> => {
 
   const { data: staffRow } = await supabase
     .from("staff")
-    .select("id, role, username, full_name, business_id, is_active")
+    .select("id, role, username, full_name, business_id, is_active, show_model_details")
     .eq("auth_user_id", user.id)
     .maybeSingle();
   if (!staffRow || !isRole(staffRow.role)) return { ok: false, reason: "no_staff" };
@@ -93,7 +95,13 @@ export const getStaffContext = cache(async (): Promise<StaffContextResult> => {
     ok: true,
     ctx: {
       userId: user.id,
-      staff: { id: staffRow.id, role, username: staffRow.username, fullName: staffRow.full_name },
+      staff: {
+        id: staffRow.id,
+        role,
+        username: staffRow.username,
+        fullName: staffRow.full_name,
+        showModelDetails: staffRow.show_model_details === true,
+      },
       ownBusiness,
       tenant,
       isForeignTenant: !!tenant && tenant.id !== ownBusiness.id,

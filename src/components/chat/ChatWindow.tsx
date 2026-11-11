@@ -65,6 +65,8 @@ interface Props {
   username: string;
   fullName: string;
   modules: AppModule[];
+  /** Tampilkan statistik model dan detail proses (saklar di Pengaturan, default mati). */
+  showModelDetails: boolean;
 }
 
 type AgentMessageInsert = Database["public"]["Tables"]["agent_messages"]["Insert"];
@@ -79,6 +81,7 @@ export function ChatWindow({
   fullName,
   tenantName,
   modules,
+  showModelDetails,
 }: Props) {
   const supabase = createClient();
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -591,7 +594,7 @@ export function ChatWindow({
           </div>
         )}
         {messages.map((m, i) => (
-          <MessageBubble key={i} message={m} />
+          <MessageBubble key={i} message={m} showDetails={showModelDetails} />
         ))}
         {interrupted && !isThinking && (
           <InterruptedDivider
@@ -628,8 +631,12 @@ export function ChatWindow({
               </span>
               {liveStatusLabel(liveSteps)}
             </div>
-            <LiveInferenceLine snapshot={liveInference} startedAt={turnStartedAt} />
-            <ProcessDetails steps={liveSteps} live />
+            {showModelDetails && (
+              <>
+                <LiveInferenceLine snapshot={liveInference} startedAt={turnStartedAt} />
+                <ProcessDetails steps={liveSteps} live />
+              </>
+            )}
           </div>
         )}
       </div>
@@ -648,7 +655,7 @@ export function ChatWindow({
             disabled={!engine}
             className="field-input min-h-11 flex-1 rounded-full !text-base sm:!text-sm"
           />
-          <InferenceStatsButton turns={turns} className="min-h-11 rounded-full px-4" />
+          {showModelDetails && <InferenceStatsButton turns={turns} className="min-h-11 rounded-full px-4" />}
           {isThinking ? (
             <button
               onClick={handleStop}
