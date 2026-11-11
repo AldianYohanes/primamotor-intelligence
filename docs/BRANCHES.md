@@ -1,6 +1,6 @@
 # Peta branch
 
-Diperbarui 4 November 2026. Repo ini tidak di-push dari sesi kerja lokal; merge ke `master` hanya atas keputusan Aldian.
+Diperbarui 11 November 2026. Repo ini tidak di-push dari sesi kerja lokal; merge ke `master` hanya atas keputusan Aldian.
 
 ## Keadaan sekarang
 
@@ -10,7 +10,16 @@ Diperbarui 4 November 2026. Repo ini tidak di-push dari sesi kerja lokal; merge 
 - `agent/koreksi-stok` (76ff014). Satu bentrok di `stock-summary.test.ts` diselesaikan dengan menyimpan kedua blok tes.
 - Dua commit `master` lama (merge `fix2-gabungan` dan perbaikan galat API admin).
 
-Hasil uji `master`: `vitest run` 703 tes lulus, `tsc --noEmit` bersih.
+Hasil uji `master` (4 November): `vitest run` 703 tes lulus, `tsc --noEmit` bersih.
+
+Digabung lagi ke `master` lokal (tanpa push) pada 11 November 2026:
+
+- `agent/dead-stock` (sudah sama dengan `master` sebelumnya).
+- `agent/tampilan-abu`: mode gelap (terang/gelap/ikut sistem), halaman Pengaturan, jarak Padat/Sedang/Lega, latar gradien, kerangka muat, dan versi abu-abu netral dengan pita sutra. Dipilih menggantikan warna gelap awal di `agent/tampilan`.
+- `agent/tampilan`: saklar "Detail teknis di chat" per akun (kolom `staff.show_model_details`, migrasi `0040`, default mati). **Migrasi 0040 sudah dijalankan di Supabase hosted.**
+- `agent/qwen3-small` (31a3c60): impor bon tetap terbuka bila semua baris yang dikonfirmasi gagal mencatat stok.
+
+Hasil uji sesudah gabung: `vitest run` 733 tes lulus, `tsc --noEmit` bersih. `bun run lint` masih punya 5 galat lama di berkas yang tidak disentuh (TenantApprovalList, EnableNotificationsBanner, DataTable, online-status, pos-terminal).
 
 Yang **tidak** masuk: `agent/effort-akurasi` (tingkat cepat/normal/teliti dengan Router voting, dan `search_products_fuzzy`). Bentroknya di inti Router (14 bagian di `agent-loop.ts`, `EvalRunner.tsx`, `router-step.ts`, `run-store.ts`) karena `master` memakai Router versi baru. Disimpan sebagai tag `arsip/effort-akurasi` (76e9fb0). Mau dipakai lagi, fitur voting harus ditulis ulang di atas Router yang sekarang dan diuji ulang.
 
@@ -20,11 +29,12 @@ Semua branch berikut isinya sudah ada di `master` (kecuali `agent/effort-akurasi
 
 | Branch | Folder kerja | Status |
 |---|---|---|
-| `agent/qwen3-small` | `primamotor-qwen3-small` | sudah di `master` |
+| `agent/qwen3-small` | `primamotor-qwen3-small` | sudah di `master` (termasuk perbaikan bon 11 November) |
 | `agent/koreksi-stok` | `primamotor-koreksi-stok` | sudah di `master` |
 | `rc/uji-program` | `primamotor-rc-uji-program` | sudah di `master` |
 | `fix2-gabungan` | `primamotor-fix2-gabungan` | sudah di `master` |
-| `agent/effort-akurasi` | `primamotor-effort` | tidak di `master`; ada tag `arsip/effort-akurasi` |
+| `agent/effort-akurasi` | `primamotor-effort` | sengaja tidak di `master` (keputusan 11 November: tetap diarsipkan); ada tag `arsip/effort-akurasi` |
+| `agent/tampilan`, `agent/tampilan-abu`, `agent/dead-stock` | `primamotor-tampilan` (abu), `primamotor-deadstock` | sudah di `master` (11 November) |
 | `agent/refactor-orchestrator`, `agent/router-think`, `eval/tooling`, `eval/model-kecil`, `ui/chat`, `ui/pos`, `ui/dashboard`, `ui/new-pages` | (tanpa folder) | sudah di `master` |
 | `eval/kondisi-pembanding` | (tanpa folder) | sudah di `master` (4 November 2026), aman dihapus |
 
