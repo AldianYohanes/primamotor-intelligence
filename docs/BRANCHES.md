@@ -1,6 +1,6 @@
 # Peta branch
 
-Diperbarui 11 November 2026. Repo ini tidak di-push dari sesi kerja lokal; merge ke `master` hanya atas keputusan Aldian.
+Diperbarui 12 November 2026. Repo ini tidak di-push dari sesi kerja lokal; merge ke `master` hanya atas keputusan Aldian.
 
 ## Keadaan sekarang
 
@@ -19,7 +19,9 @@ Digabung lagi ke `master` lokal (tanpa push) pada 11 November 2026:
 - `agent/tampilan`: saklar "Detail teknis di chat" per akun (kolom `staff.show_model_details`, migrasi `0040`, default mati). **Migrasi 0040 sudah dijalankan di Supabase hosted.**
 - `agent/qwen3-small` (31a3c60): impor bon tetap terbuka bila semua baris yang dikonfirmasi gagal mencatat stok.
 
-Hasil uji sesudah gabung: `vitest run` 733 tes lulus, `tsc --noEmit` bersih. `bun run lint` masih punya 5 galat lama di berkas yang tidak disentuh (TenantApprovalList, EnableNotificationsBanner, DataTable, online-status, pos-terminal).
+Hasil uji sesudah gabung: `vitest run` 733 tes lulus, `tsc --noEmit` bersih. Saat itu `bun run lint` masih punya 5 galat lama (sudah selesai 12 November, lihat di bawah).
+
+Pada 12 November 2026, 5 galat lint lama (TenantApprovalList, EnableNotificationsBanner, online-status, pos-terminal) diselesaikan di `master`: `online-status` memakai `useSyncExternalStore`, sisanya diberi komentar `eslint-disable` beserta alasan. `bun run lint` sekarang 0 galat (6 peringatan). `vitest run` 733 tes lulus, `tsc --noEmit` bersih.
 
 Yang **tidak** masuk: `agent/effort-akurasi` (tingkat cepat/normal/teliti dengan Router voting, dan `search_products_fuzzy`). Bentroknya di inti Router (14 bagian di `agent-loop.ts`, `EvalRunner.tsx`, `router-step.ts`, `run-store.ts`) karena `master` memakai Router versi baru. Disimpan sebagai tag `arsip/effort-akurasi` (76e9fb0). Mau dipakai lagi, fitur voting harus ditulis ulang di atas Router yang sekarang dan diuji ulang.
 

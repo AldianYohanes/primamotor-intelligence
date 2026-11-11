@@ -7,6 +7,7 @@ Aplikasi stok dan kasir untuk bengkel Prima Motor (spesialis Volvo), dengan asis
 - **Asisten chat** (`/chat`): Router memilih Query Agent (cek stok, tren penjualan) atau Transaction Agent (barang masuk, keluar, pindah). Model bahasa (Qwen2.5-3B lewat WebLLM) berjalan di GPU perangkat, jadi data stok tidak dikirim ke layanan LLM luar. Semua perubahan stok dari chat harus dikonfirmasi PIN staf.
 - **Monitoring Agent**: dijalankan terjadwal (Vercel Cron, `vercel.json`), menghitung titik pesan ulang dan membuat saran restock serta notifikasi. Tidak mengubah stok.
 - **Evaluasi** (`/eval`): menjalankan skenario uji multi-agent vs single-agent di browser dan mengekspor JSON/CSV untuk Bab 4.
+- **Tampilan dan pengaturan**: mode gelap (terang/gelap/ikut sistem), halaman Pengaturan (kerapatan tampilan Padat/Sedang/Lega), dan saklar per akun untuk menampilkan statistik model dan detail proses di chat.
 
 ## Teknologi
 
@@ -31,9 +32,9 @@ Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS, Supabase (Postgres,
    | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_SUBJECT` | push notification |
    | `GEMINI_API_KEY`, `OCR_RATE_LIMIT_MAX`, `OCR_RATE_LIMIT_WINDOW_MINUTES` | impor nota lewat OCR |
    | `ENABLE_EVAL_PAGE` | `true` untuk mengaktifkan `/eval` (hanya di tenant evaluasi) |
-| `SEED_STAFF_PIN` | opsional, PIN (minimal 6 digit) untuk akun kasir dan staf gudang yang dibuat tombol "Reset data eval". Isi di `.env.local` saja. Kalau kosong, dipakai PIN acak yang tidak disimpan |
+   | `SEED_STAFF_PIN` | opsional, PIN (minimal 6 digit) untuk akun kasir dan staf gudang yang dibuat tombol "Reset data eval". Isi di `.env.local` saja. Kalau kosong, dipakai PIN acak yang tidak disimpan |
 
-3. Siapkan database: jalankan file di `supabase/migrations/` berurutan (`0001` sampai `0038`) di SQL editor Supabase atau lewat Supabase CLI.
+3. Siapkan database: jalankan file di `supabase/migrations/` berurutan (`0001` sampai `0040`) di SQL editor Supabase atau lewat Supabase CLI.
 
 4. Jalankan:
 
