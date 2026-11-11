@@ -5,6 +5,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { useGetReportProductOptions } from './hooks/use-get-report-options'
 import { useGetSalesTrend } from './hooks/use-get-sales-trend'
 import { Select } from "@/src/components/ui/select";
+import { SkeletonDashboard } from "@/src/components/ui/skeleton";
 
 export function ReportsModule() {
   const [productId, setProductId] = useState('')
@@ -28,28 +29,30 @@ export function ReportsModule() {
         ))}
       </Select>
 
-      {isLoading && <p className="text-sm text-slate-400">Memuat data…</p>}
+      {isLoading && <SkeletonDashboard label="Memuat laporan" />}
 
       {!isLoading && productId && trend.length > 0 && (
         <div className="h-80 card p-5">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={trend} margin={{ top: 4, right: 8, left: -12, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" vertical={false} />
               <XAxis
                 dataKey="periodLabel"
-                tick={{ fontSize: 12, fill: '#64748b' }}
-                axisLine={{ stroke: '#e2e8f0' }}
+                tick={{ fontSize: 12, fill: "var(--chart-tick)" }}
+                axisLine={{ stroke: "var(--chart-axis)" }}
                 tickLine={false}
               />
               <YAxis
-                tick={{ fontSize: 12, fill: '#64748b' }}
+                tick={{ fontSize: 12, fill: "var(--chart-tick)" }}
                 axisLine={false}
                 tickLine={false}
               />
               <Tooltip
                 contentStyle={{
                   borderRadius: 8,
-                  border: '1px solid #e2e8f0',
+                  border: "1px solid var(--chart-axis)",
+                  backgroundColor: "var(--surface)",
+                  color: "var(--foreground)",
                   boxShadow: '0 4px 12px -2px rgb(15 23 42 / 0.08)',
                   fontSize: 12,
                 }}

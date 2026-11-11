@@ -1,14 +1,11 @@
 import { Suspense } from "react";
 import { ReorderSuggestionsModule } from "@/src/modules/reorder-suggestions/Component";
+import { SkeletonPage } from "@/src/components/ui/skeleton";
 
 export default function ReorderSuggestionsPage() {
   return (
     <Suspense
-      fallback={
-        <div className="p-6 text-sm text-slate-400">
-          Memuat saran belanja ulang…
-        </div>
-      }
+      fallback={<SkeletonPage />}
     >
       <ReorderSuggestionsModule />
     </Suspense>

@@ -1,9 +1,10 @@
 import { Suspense } from "react";
 import { PosShiftsModule } from "@/src/modules/pos-shifts/Component";
+import { SkeletonPage } from "@/src/components/ui/skeleton";
 
 export default function PosShiftsPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-slate-400">Memuat riwayat shift…</div>}>
+    <Suspense fallback={<SkeletonPage />}>
       <PosShiftsModule />
     </Suspense>
   );

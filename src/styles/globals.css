@@ -56,6 +56,102 @@
   --border: #e2e8f0;
   --input: #e2e8f0;
   --ring: var(--color-brand-500);
+  /* Warna permukaan dan grafik: dipakai kelas bersama dan chart. */
+  --surface: #ffffff;
+  --surface-border: #e5e9f0;
+  --chart-grid: #eef1f5;
+  --chart-axis: #e2e8f0;
+  --chart-tick: #64748b;
+  --chart-cursor: #f1f5f9;
+  /* Latar: pita sutra abu-abu + butiran noise (lihat html::before, body::before/::after). */
+  --grain-opacity: 0.05;
+}
+
+/**
+ * Tema gelap. Kode UI memakai kelas slate/white/merah/kuning/hijau bawaan Tailwind
+ * di ratusan tempat, jadi paletnya DIBALIK lewat variabel (slate-50 jadi gelap,
+ * slate-900 jadi terang) alih-alih menambah dark: di tiap komponen. Teks putih di
+ * atas warna brand tetap putih; hanya bg-white yang dialihkan ke warna kartu.
+ */
+.dark {
+  color-scheme: dark;
+  --background: #18181b;
+  --foreground: #f4f4f5;
+  --card: #202023;
+  --card-foreground: #f4f4f5;
+  --popover: #202023;
+  --popover-foreground: #f4f4f5;
+  --secondary: #2a2a2e;
+  --secondary-foreground: #d4d4d8;
+  --muted: #2a2a2e;
+  --muted-foreground: #a1a1aa;
+  --accent: #2a2a2e;
+  --accent-foreground: #f4f4f5;
+  --destructive: #ef4444;
+  --border: #3a3a3f;
+  --input: #3a3a3f;
+  --ring: var(--color-brand-400);
+  --surface: #202023;
+  --surface-border: #34343a;
+  --chart-grid: #2e2e33;
+  --chart-axis: #3f3f46;
+  --chart-tick: #a1a1aa;
+  --chart-cursor: #2a2a2e;
+  --grain-opacity: 0.07;
+
+  --color-slate-50: #26262a;
+  --color-slate-100: #2a2a2e;
+  --color-slate-200: #3a3a3f;
+  --color-slate-300: #4a4a50;
+  --color-slate-400: #85858d;
+  --color-slate-500: #a1a1aa;
+  --color-slate-600: #b8b8bf;
+  --color-slate-700: #d4d4d8;
+  --color-slate-800: #e4e4e7;
+  --color-slate-900: #f4f4f5;
+  --color-slate-950: #fafafa;
+
+  --color-brand-50: #2a2a2e;
+  --color-brand-100: #34343a;
+  --color-brand-200: #4a4a50;
+  --color-brand-700: #93c5fd;
+  --color-brand-800: #bfdbfe;
+  --color-brand-900: #dbeafe;
+
+  --color-red-50: #3a1519;
+  --color-red-100: #4a1a20;
+  --color-red-200: #7f1d1d;
+  --color-red-500: #f87171;
+  --color-red-600: #f87171;
+  --color-red-700: #fca5a5;
+  --color-red-800: #fecaca;
+  --color-amber-50: #2e2108;
+  --color-amber-100: #3d2b0a;
+  --color-amber-200: #78350f;
+  --color-amber-300: #92400e;
+  --color-amber-600: #fbbf24;
+  --color-amber-700: #fbbf24;
+  --color-amber-800: #fcd34d;
+  --color-amber-900: #fde68a;
+  --color-emerald-50: #0b2a22;
+  --color-emerald-100: #0f3a2e;
+  --color-emerald-200: #065f46;
+  --color-emerald-600: #34d399;
+  --color-emerald-700: #6ee7b7;
+  --color-emerald-800: #a7f3d0;
+  --color-sky-700: #7dd3fc;
+
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.35), 0 1px 2px -1px rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+  --shadow-popover: 0 8px 24px -4px rgb(0 0 0 / 0.5), 0 2px 8px -2px rgb(0 0 0 / 0.35);
+}
+/* bg-white = permukaan (kartu, dropdown, input); border putih di titik notifikasi mengikuti. */
+.dark .bg-white {
+  background-color: var(--surface);
+}
+.dark .border-white {
+  border-color: var(--surface);
 }
 
 @theme inline {
@@ -85,7 +181,10 @@
 
 /**
  * Kepadatan tampilan (Pengaturan > Tampilan). "Sedang" = nilai bawaan lama;
- * diatur lewat atribut data-density di <html>.
+ * diatur lewat atribut data-density di <html>. Selisihnya sengaja besar:
+ * ukuran font dasar html ikut berubah (semua jarak dan teks Tailwind berbasis
+ * rem ikut membesar/mengecil), ditambah variabel khusus untuk tombol, isian,
+ * baris tabel, dan padding halaman.
  */
 :root {
   --d-ctl-y: 0.5rem;
@@ -96,23 +195,25 @@
   --d-page: 2rem;
 }
 [data-density="compact"] {
-  --d-ctl-y: 0.3125rem;
-  --d-ctl-x: 0.75rem;
-  --d-cell-y: 0.4375rem;
-  --d-cell-x: 0.75rem;
-  --d-head-y: 0.375rem;
-  --d-page: 1rem;
+  font-size: 14px;
+  --d-ctl-y: 0.25rem;
+  --d-ctl-x: 0.625rem;
+  --d-cell-y: 0.25rem;
+  --d-cell-x: 0.625rem;
+  --d-head-y: 0.25rem;
+  --d-page: 0.75rem;
 }
 [data-density="spacious"] {
-  --d-ctl-y: 0.6875rem;
-  --d-ctl-x: 1rem;
-  --d-cell-y: 1.0625rem;
-  --d-cell-x: 1.25rem;
-  --d-head-y: 0.875rem;
-  --d-page: 2.5rem;
+  font-size: 17.5px;
+  --d-ctl-y: 0.875rem;
+  --d-ctl-x: 1.25rem;
+  --d-cell-y: 1.375rem;
+  --d-cell-x: 1.5rem;
+  --d-head-y: 1.125rem;
+  --d-page: 3rem;
 }
 
-:root {
+:root:not(.dark) {
   color-scheme: light;
 }
 
@@ -131,11 +232,74 @@ body {
 
 body {
   font-family: var(--font-sans);
-  background-color: #f7f8fa;
-  color: #0f172a;
+  background-color: var(--background);
+  color: var(--foreground);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+}
+
+/**
+ * Latar: pita sutra abu-abu yang melengkung dan bergeser pelan, lalu butiran noise
+ * tipis. Pitanya gambar SVG yang sudah di-blur sekali saat digambar; sesudah itu
+ * hanya transform yang dianimasikan (diproses compositor, tanpa filter berjalan),
+ * jadi nyaris tanpa beban GPU dan tidak mengganggu WebLLM. Dua lapisan (html dan
+ * body) bergerak berlawanan arah dengan kecepatan beda supaya terasa berlapis.
+ * Lapisan di belakang konten (z-index -1); wrapper halaman harus transparan.
+ */
+html::before,
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  pointer-events: none;
+  z-index: -1;
+}
+html::before,
+body::before {
+  inset: -10% -30%;
+  background: var(--silk) center / 100% 100% no-repeat;
+  will-change: transform;
+}
+html::before {
+  animation: silk-a 40s ease-in-out infinite alternate;
+}
+body::before {
+  opacity: 0.7;
+  animation: silk-b 55s ease-in-out infinite alternate;
+}
+body::after {
+  inset: 0;
+  opacity: var(--grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+:root {
+  --silk: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 1600 900%22 preserveAspectRatio=%22none%22%3E%3Cdefs%3E%3ClinearGradient id=%22g%22 x1=%220%22 x2=%221%22 y1=%220%22 y2=%220%22%3E%3Cstop offset=%220%22 stop-color=%22%23000%22 stop-opacity=%220%22/%3E%3Cstop offset=%22.35%22 stop-color=%22%23000%22 stop-opacity=%221%22/%3E%3Cstop offset=%22.7%22 stop-color=%22%23000%22 stop-opacity=%22.35%22/%3E%3Cstop offset=%221%22 stop-color=%22%23000%22 stop-opacity=%220%22/%3E%3C/linearGradient%3E%3Cfilter id=%22b%22 x=%22-10%25%22 y=%22-10%25%22 width=%22120%25%22 height=%22120%25%22%3E%3CfeGaussianBlur stdDeviation=%2216%22/%3E%3C/filter%3E%3C/defs%3E%3Cg filter=%22url(%23b)%22%3E%3Cpath d=%22M-100 520 C250 330 550 700 850 520 S1350 330 1700 480 L1700 600 C1350 460 1100 650 850 640 S250 500 -100 650Z%22 fill=%22url(%23g)%22 fill-opacity=%220.1%22/%3E%3Cpath d=%22M-100 300 C300 150 600 420 900 270 S1400 120 1700 250 L1700 330 C1400 200 1150 380 900 350 S300 230 -100 400Z%22 fill=%22url(%23g)%22 fill-opacity=%220.07%22/%3E%3Cpath d=%22M-100 760 C300 640 650 900 1000 740 S1450 600 1700 720 L1700 820 C1450 700 1200 860 1000 850 S300 760 -100 880Z%22 fill=%22url(%23g)%22 fill-opacity=%220.08%22/%3E%3Cpath d=%22M-100 110 C250 20 650 260 1000 110 S1450 -20 1700 90 L1700 190 C1450 80 1200 240 1000 220 S300 90 -100 230Z%22 fill=%22url(%23g)%22 fill-opacity=%220.05%22/%3E%3C/g%3E%3C/svg%3E");
+}
+.dark {
+  --silk: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 1600 900%22 preserveAspectRatio=%22none%22%3E%3Cdefs%3E%3ClinearGradient id=%22g%22 x1=%220%22 x2=%221%22 y1=%220%22 y2=%220%22%3E%3Cstop offset=%220%22 stop-color=%22%23fff%22 stop-opacity=%220%22/%3E%3Cstop offset=%22.35%22 stop-color=%22%23fff%22 stop-opacity=%221%22/%3E%3Cstop offset=%22.7%22 stop-color=%22%23fff%22 stop-opacity=%22.35%22/%3E%3Cstop offset=%221%22 stop-color=%22%23fff%22 stop-opacity=%220%22/%3E%3C/linearGradient%3E%3Cfilter id=%22b%22 x=%22-10%25%22 y=%22-10%25%22 width=%22120%25%22 height=%22120%25%22%3E%3CfeGaussianBlur stdDeviation=%2216%22/%3E%3C/filter%3E%3C/defs%3E%3Cg filter=%22url(%23b)%22%3E%3Cpath d=%22M-100 520 C250 330 550 700 850 520 S1350 330 1700 480 L1700 600 C1350 460 1100 650 850 640 S250 500 -100 650Z%22 fill=%22url(%23g)%22 fill-opacity=%220.12%22/%3E%3Cpath d=%22M-100 300 C300 150 600 420 900 270 S1400 120 1700 250 L1700 330 C1400 200 1150 380 900 350 S300 230 -100 400Z%22 fill=%22url(%23g)%22 fill-opacity=%220.08%22/%3E%3Cpath d=%22M-100 760 C300 640 650 900 1000 740 S1450 600 1700 720 L1700 820 C1450 700 1200 860 1000 850 S300 760 -100 880Z%22 fill=%22url(%23g)%22 fill-opacity=%220.09%22/%3E%3Cpath d=%22M-100 110 C250 20 650 260 1000 110 S1450 -20 1700 90 L1700 190 C1450 80 1200 240 1000 220 S300 90 -100 230Z%22 fill=%22url(%23g)%22 fill-opacity=%220.06%22/%3E%3C/g%3E%3C/svg%3E");
+}
+@keyframes silk-a {
+  from {
+    transform: translate3d(-9%, -2%, 0) rotate(-1.5deg);
+  }
+  to {
+    transform: translate3d(9%, 3%, 0) rotate(1.5deg);
+  }
+}
+@keyframes silk-b {
+  from {
+    transform: scaleX(-1) translate3d(-7%, 3%, 0) rotate(1deg);
+  }
+  to {
+    transform: scaleX(-1) translate3d(7%, -3%, 0) rotate(-1deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html::before,
+  body::before {
+    animation: none;
+  }
 }
 
 h1,
@@ -167,7 +331,7 @@ h6 {
 /* Scrollbar tipis ala dashboard modern — tidak mencolok, tetap fungsional */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 transparent;
+  scrollbar-color: var(--color-slate-300) transparent;
 }
 *::-webkit-scrollbar {
   width: 8px;
@@ -177,11 +341,11 @@ h6 {
   background: transparent;
 }
 *::-webkit-scrollbar-thumb {
-  background-color: #cbd5e1;
+  background-color: var(--color-slate-300);
   border-radius: 9999px;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background-color: #94a3b8;
+  background-color: var(--color-slate-400);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -226,14 +390,14 @@ h6 {
     background-color: var(--color-brand-700);
   }
   .btn-secondary {
-    background-color: #fff;
-    color: #334155;
-    border: 1px solid #e2e8f0;
+    background-color: var(--surface);
+    color: var(--color-slate-700);
+    border: 1px solid var(--color-slate-200);
     box-shadow: var(--shadow-xs);
   }
   .btn-secondary:hover:not(:disabled) {
-    background-color: #f8fafc;
-    border-color: #cbd5e1;
+    background-color: var(--color-slate-50);
+    border-color: var(--color-slate-300);
   }
   .btn-danger {
     background-color: #dc2626;
@@ -245,35 +409,35 @@ h6 {
   }
   .btn-ghost {
     background-color: transparent;
-    color: #475569;
+    color: var(--color-slate-600);
   }
   .btn-ghost:hover:not(:disabled) {
-    background-color: #f1f5f9;
-    color: #0f172a;
+    background-color: var(--color-slate-100);
+    color: var(--color-slate-900);
   }
 
   .field-label {
     display: block;
     font-size: 0.75rem;
     font-weight: 500;
-    color: #475569;
+    color: var(--color-slate-600);
     margin-bottom: 0.3rem;
   }
   .field-input {
     width: 100%;
     border-radius: 0.5rem;
-    border: 1px solid #e2e8f0;
-    background-color: #fff;
+    border: 1px solid var(--color-slate-200);
+    background-color: var(--surface);
     padding: var(--d-ctl-y) 0.75rem;
     font-size: 0.8125rem;
-    color: #0f172a;
+    color: var(--color-slate-900);
     transition: border-color 0.12s ease, box-shadow 0.12s ease;
   }
   .field-input::placeholder {
-    color: #94a3b8;
+    color: var(--color-slate-400);
   }
   .field-input:hover {
-    border-color: #cbd5e1;
+    border-color: var(--color-slate-300);
   }
   .field-input:focus {
     outline: none;
@@ -281,16 +445,16 @@ h6 {
     box-shadow: 0 0 0 3px var(--color-brand-100);
   }
   .field-input:disabled {
-    background-color: #f8fafc;
-    color: #94a3b8;
+    background-color: var(--color-slate-50);
+    color: var(--color-slate-400);
     cursor: not-allowed;
   }
 
   /* Bayangan di tepi kiri/kanan hanya tampil bila isi masih bisa digeser (tabel lebar di tablet dan HP). */
   .scroll-shadows {
     background:
-      linear-gradient(to right, #fff 30%, rgba(255, 255, 255, 0)) left center,
-      linear-gradient(to left, #fff 30%, rgba(255, 255, 255, 0)) right center,
+      linear-gradient(to right, var(--surface) 30%, transparent) left center,
+      linear-gradient(to left, var(--surface) 30%, transparent) right center,
       radial-gradient(farthest-side at 0 50%, rgba(15, 23, 42, 0.18), rgba(15, 23, 42, 0)) left center,
       radial-gradient(farthest-side at 100% 50%, rgba(15, 23, 42, 0.18), rgba(15, 23, 42, 0)) right center;
     background-repeat: no-repeat;
@@ -299,8 +463,8 @@ h6 {
   }
 
   .card {
-    background-color: #fff;
-    border: 1px solid #e5e9f0;
+    background-color: var(--surface);
+    border: 1px solid var(--surface-border);
     border-radius: 0.75rem;
     box-shadow: var(--shadow-xs);
   }
@@ -317,24 +481,24 @@ h6 {
     border: 1px solid transparent;
   }
   .badge-emerald {
-    background-color: #ecfdf5;
-    color: #047857;
-    border-color: #a7f3d0;
+    background-color: var(--color-emerald-50);
+    color: var(--color-emerald-700);
+    border-color: var(--color-emerald-200);
   }
   .badge-amber {
-    background-color: #fffbeb;
-    color: #b45309;
-    border-color: #fde68a;
+    background-color: var(--color-amber-50);
+    color: var(--color-amber-700);
+    border-color: var(--color-amber-200);
   }
   .badge-red {
-    background-color: #fef2f2;
-    color: #b91c1c;
-    border-color: #fecaca;
+    background-color: var(--color-red-50);
+    color: var(--color-red-700);
+    border-color: var(--color-red-200);
   }
   .badge-slate {
-    background-color: #f1f5f9;
-    color: #475569;
-    border-color: #e2e8f0;
+    background-color: var(--color-slate-100);
+    color: var(--color-slate-600);
+    border-color: var(--color-slate-200);
   }
   .badge-blue {
     background-color: var(--color-brand-50);

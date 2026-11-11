@@ -24,7 +24,7 @@ export function PublicNav({ loggedIn }: { loggedIn: boolean }) {
     <nav aria-label="Utama" className="flex items-center gap-1">
       {link("/about", "Tentang")}
       {loggedIn ? (
-        <Link href="/menu" className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-medium text-white no-underline">
+        <Link href="/menu" className="rounded-full bg-foreground px-3 py-1.5 text-xs font-medium text-background no-underline">
           Buka Aplikasi
         </Link>
       ) : (
@@ -33,7 +33,7 @@ export function PublicNav({ loggedIn }: { loggedIn: boolean }) {
           <Link
             href="/signup"
             aria-current={pathname === "/signup" ? "page" : undefined}
-            className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-medium text-white no-underline"
+            className="rounded-full bg-foreground px-3 py-1.5 text-xs font-medium text-background no-underline"
           >
             Daftar
           </Link>

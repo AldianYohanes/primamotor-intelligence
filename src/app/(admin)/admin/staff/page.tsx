@@ -1,12 +1,11 @@
 import { Suspense } from "react";
 import { StaffModule } from "@/src/modules/staff/Component";
+import { SkeletonPage } from "@/src/components/ui/skeleton";
 
 export default function StaffPage() {
   return (
     <Suspense
-      fallback={
-        <div className="p-6 text-sm text-slate-400">Memuat halaman staf…</div>
-      }
+      fallback={<SkeletonPage />}
     >
       <StaffModule />
     </Suspense>

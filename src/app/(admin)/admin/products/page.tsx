@@ -1,12 +1,11 @@
 import { Suspense } from "react";
 import { ProductsModule } from "@/src/modules/products/Component";
+import { SkeletonPage } from "@/src/components/ui/skeleton";
 
 export default function ProductsPage() {
   return (
     <Suspense
-      fallback={
-        <div className="p-6 text-sm text-slate-400">Memuat halaman produk…</div>
-      }
+      fallback={<SkeletonPage />}
     >
       <ProductsModule />
     </Suspense>

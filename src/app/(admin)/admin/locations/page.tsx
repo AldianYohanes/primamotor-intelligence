@@ -1,12 +1,11 @@
 import { Suspense } from "react";
 import { LocationsModule } from "@/src/modules/locations/Component";
+import { SkeletonPage } from "@/src/components/ui/skeleton";
 
 export default function LocationsPage() {
   return (
     <Suspense
-      fallback={
-        <div className="p-6 text-sm text-slate-400">Memuat lokasi…</div>
-      }
+      fallback={<SkeletonPage />}
     >
       <LocationsModule />
     </Suspense>

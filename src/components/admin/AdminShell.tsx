@@ -69,7 +69,7 @@ export function AdminShell({ role, staffName, tenantName, isForeignTenant, unrea
     exact ? pathname === href : pathname === href || pathname.startsWith(href + "/");
 
   return (
-    <div className="flex min-h-dvh bg-[#f7f8fa]">
+    <div className="flex min-h-dvh">
       {/* Sidebar desktop: lebar penuh mulai lg, jalur ikon 64 px di tablet supaya isi halaman tidak terhimpit. */}
       <aside className="hidden w-16 shrink-0 flex-col border-r border-slate-200 bg-white sm:flex lg:w-60">
         <SidebarContent

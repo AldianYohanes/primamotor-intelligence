@@ -6,7 +6,7 @@ export default async function PosPage() {
   const ctx = await requirePage("pos.use");
 
   return (
-    <div className="bg-[#f7f8fa]">
+    <div>
       <AppHeader
         title="Kasir (POS)"
         subtitle={`${ctx.staff.fullName} · ${ctx.tenant.name}`}

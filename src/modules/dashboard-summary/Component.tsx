@@ -106,16 +106,16 @@ export function DashboardSummaryModule() {
                     <stop offset="100%" stopColor="#2563eb" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" vertical={false} />
                 <XAxis
                   dataKey="dayLabel"
-                  tick={{ fontSize: 11, fill: "#64748b" }}
-                  axisLine={{ stroke: "#e2e8f0" }}
+                  tick={{ fontSize: 11, fill: "var(--chart-tick)" }}
+                  axisLine={{ stroke: "var(--chart-axis)" }}
                   tickLine={false}
                   interval={rangeDays === 30 ? 3 : 0}
                 />
                 <YAxis
-                  tick={{ fontSize: 11, fill: "#64748b" }}
+                  tick={{ fontSize: 11, fill: "var(--chart-tick)" }}
                   axisLine={false}
                   tickLine={false}
                   tickFormatter={(v: number) =>
@@ -125,7 +125,9 @@ export function DashboardSummaryModule() {
                 <Tooltip
                   contentStyle={{
                     borderRadius: 8,
-                    border: "1px solid #e2e8f0",
+                    border: "1px solid var(--chart-axis)",
+                    backgroundColor: "var(--surface)",
+                    color: "var(--foreground)",
                     boxShadow: "0 4px 12px -2px rgb(15 23 42 / 0.08)",
                     fontSize: 12,
                   }}

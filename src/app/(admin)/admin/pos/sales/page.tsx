@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { requirePage } from "@/src/lib/auth/staff-context";
 import { can } from "@/src/lib/auth/rbac";
 import { PosSalesModule } from "@/src/modules/pos-sales/Component";
+import { SkeletonPage } from "@/src/components/ui/skeleton";
 
 export default async function PosSalesPage() {
   // Beda dari page.tsx lain di admin (murni Suspense shell) — halaman ini
@@ -14,11 +15,7 @@ export default async function PosSalesPage() {
 
   return (
     <Suspense
-      fallback={
-        <div className="p-6 text-sm text-slate-400">
-          Memuat riwayat penjualan…
-        </div>
-      }
+      fallback={<SkeletonPage />}
     >
       <PosSalesModule canVoid={canVoid} />
     </Suspense>

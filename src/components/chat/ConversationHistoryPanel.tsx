@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import clsx from "clsx";
 import { History, MessageSquare, X } from "lucide-react";
 import type { ConversationSummary } from "@/src/lib/agents/conversation";
+import { SkeletonList } from "@/src/components/ui/skeleton";
 
 interface Props {
   currentConversationId: string | null;
@@ -91,7 +92,7 @@ export function ConversationHistoryPanel({
 
         <div className="flex-1 overflow-y-auto">
           {items === null && !failed && (
-            <p className="p-6 text-center text-sm text-slate-500">Memuat riwayat…</p>
+            <div className="p-4"><SkeletonList rows={6} label="Memuat riwayat" /></div>
           )}
           {failed && (
             <p className="p-6 text-center text-sm text-red-600">

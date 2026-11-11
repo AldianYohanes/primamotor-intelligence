@@ -7,6 +7,7 @@ import { useGetStockCard } from "./hooks/use-get-stock-card";
 import { TRANSACTION_TYPE_LABELS } from "./mappers/mappers";
 import type { StockCardRow } from "./data/response";
 import { Select } from "@/src/components/ui/select";
+import { SkeletonList } from "@/src/components/ui/skeleton";
 
 const PAGE_SIZE = 20;
 
@@ -129,7 +130,7 @@ export function StockCardModule({ productId }: { productId: string }) {
       )}
 
       <div className="card divide-y divide-slate-100">
-        {isLoading && rows.length === 0 && <p className="p-4 text-sm text-slate-400">Memuat riwayat…</p>}
+        {isLoading && rows.length === 0 && <div className="p-4"><SkeletonList rows={5} label="Memuat riwayat stok" /></div>}
         {!isLoading && rows.length === 0 && !error && (
           <p className="p-4 text-sm text-slate-400">Belum ada transaksi untuk filter ini.</p>
         )}

@@ -53,6 +53,7 @@ import { useStockSyncStore } from "@/src/lib/stores/stock-sync-store";
 import { MutationChoiceCard } from "./MutationChoiceCard";
 import { ProcessDetails } from "./ProcessDetails";
 import { EXAMPLE_QUESTIONS, MAX_CHAT_MESSAGE_LENGTH, interruptionReason, shouldSubmitOnEnter, turnErrorMessage, unansweredQuestion } from "./chat-ui";
+import { SkeletonChat } from "@/src/components/ui/skeleton";
 
 interface Props {
   /** Tenant aktif (bagi super admin bisa tenant lain). */
@@ -428,7 +429,7 @@ export function ChatWindow({
 
   if (modelStatus === "unsupported") {
     return (
-      <div className="flex h-dvh items-center justify-center bg-[#f7f8fa] p-6 text-center">
+      <div className="flex h-dvh items-center justify-center p-6 text-center">
         <div className="card max-w-sm space-y-2.5 p-6">
           <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-500">
             <MonitorX size={20} />
@@ -451,7 +452,7 @@ export function ChatWindow({
 
   if (modelStatus === "error" && engineError) {
     return (
-      <div className="flex h-dvh items-center justify-center bg-[#f7f8fa] p-6 text-center">
+      <div className="flex h-dvh items-center justify-center p-6 text-center">
         <div className="card max-w-sm space-y-2.5 p-6">
           <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-red-50 text-red-600">
             <AlertTriangle size={20} />
@@ -507,7 +508,7 @@ export function ChatWindow({
   }
 
   return (
-    <div className="flex h-dvh flex-col bg-[#f7f8fa]">
+    <div className="flex h-dvh flex-col">
       <AppHeader
         title="Asisten Stok"
         subtitle={`${fullName} · ${tenantName}`}
@@ -566,11 +567,7 @@ export function ChatWindow({
         aria-label="Percakapan dengan asisten"
         className="flex-1 space-y-3 overflow-y-auto p-4"
       >
-        {loadingHistory && (
-          <p className="mt-8 text-center text-sm text-slate-500">
-            Memuat riwayat percakapan…
-          </p>
-        )}
+        {loadingHistory && <SkeletonChat label="Memuat riwayat percakapan" />}
         {engine && !loadingHistory && messages.length === 0 && (
           <div className="mx-auto mt-10 max-w-xs text-center">
             <div className="mx-auto mb-3 flex h-9 w-9 items-center justify-center rounded-full bg-brand-50 text-brand-600">

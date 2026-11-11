@@ -29,6 +29,7 @@ import type { PaymentMethod, SaleSummaryPaymentMethod, PaymentLinePayload } from
 import type { CustomerResponse, ShiftResponse, ShiftReportTotalsResponse } from "./data/response";
 import { formatRupiah, generateIdempotencyKey, getQuickCashAmounts, moveHighlight } from "./utils/utils";
 import { Select } from "@/src/components/ui/select";
+import { SkeletonList } from "@/src/components/ui/skeleton";
 
 interface CartLine {
   productId: string;
@@ -461,7 +462,7 @@ export function PosTerminalModule({ staffName }: { staffName: string }) {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-0 bg-[#f7f8fa] pb-20 lg:grid-cols-[1fr_400px] lg:pb-0">
+    <div className="grid grid-cols-1 gap-0 pb-20 lg:grid-cols-[1fr_400px] lg:pb-0">
       {/* Panel kiri: pencarian & katalog produk */}
       <div className="flex flex-col p-4 sm:p-6 lg:h-[calc(100dvh-52px)]">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -1138,7 +1139,7 @@ function ShiftPanel({
         {!closedResult && currentShift && !showCloseForm && (
           <div className="space-y-3 text-sm">
             <p className="text-xs text-slate-500">Dibuka {new Date(currentShift.opened_at).toLocaleString("id-ID")}</p>
-            {isLoadingReport && <p className="text-xs text-slate-500">Memuat laporan…</p>}
+            {isLoadingReport && <SkeletonList rows={3} label="Memuat laporan" />}
             {report && <ShiftTotalsSummary totals={report} />}
             {error && <p className="text-xs text-red-600">{error}</p>}
             <button onClick={() => setShowCloseForm(true)} className="btn btn-danger w-full py-2">
@@ -1231,7 +1232,7 @@ function Receipt({ success, onNewSale }: { success: CheckoutSuccess; onNewSale: 
   }, [onNewSale]);
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-[#f7f8fa] p-4">
+    <div className="flex min-h-dvh items-center justify-center p-4">
       <style>{`
         @media print {
           @page { size: ${PAPER_WIDTHS[paperWidth]}mm auto; margin: 0; }
