@@ -36,6 +36,7 @@ export interface Database {
           is_active: boolean
           failed_login_attempts: number
           locked_until: string | null
+          show_model_details: boolean
           created_at: string
           updated_at: string
         }
@@ -787,6 +788,7 @@ export interface Database {
       auth_business_id: { Args: Record<string, never>; Returns: string }
       is_super_admin: { Args: Record<string, never>; Returns: boolean }
       is_full_access: { Args: Record<string, never>; Returns: boolean }
+      set_show_model_details: { Args: { p_value: boolean }; Returns: undefined }
     }
     Enums: {
       user_role: 'admin' | 'owner' | 'staff'

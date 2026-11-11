@@ -3,7 +3,14 @@ import type { StoredChatMessage } from "@/src/lib/agents/conversation";
 import { ProcessDetails } from "./ProcessDetails";
 import { InferenceSummary } from "./InferenceStats";
 
-export function MessageBubble({ message }: { message: StoredChatMessage }) {
+export function MessageBubble({
+  message,
+  showDetails = false,
+}: {
+  message: StoredChatMessage;
+  /** Waktu selesai dan "Detail proses"; mati kecuali staf menyalakannya di Pengaturan. */
+  showDetails?: boolean;
+}) {
   if (message.role === "tool" || message.role === "system") return null;
 
   const isUser = message.role === "user";
@@ -19,10 +26,10 @@ export function MessageBubble({ message }: { message: StoredChatMessage }) {
       >
         {message.content}
       </div>
-      {!isUser && message.inference && (
+      {showDetails && !isUser && message.inference && (
         <InferenceSummary totalMs={message.inference.totalMs} />
       )}
-      {!isUser && message.trace && <ProcessDetails steps={message.trace} />}
+      {showDetails && !isUser && message.trace && <ProcessDetails steps={message.trace} />}
     </div>
   );
 }

@@ -32,7 +32,7 @@ export function createStaffContextMock(getClient: () => AnyClient) {
     const tenant = { id: staff.business_id, slug: staff.business_slug ?? "toko", name: "Toko" };
     const ctx = {
       userId: user.id,
-      staff: { id: staff.id, role, username: staff.username ?? "staf", fullName: staff.full_name ?? "Staf" },
+      staff: { id: staff.id, role, username: staff.username ?? "staf", fullName: staff.full_name ?? "Staf", showModelDetails: staff.show_model_details === true },
       ownBusiness: tenant,
       tenant,
       isForeignTenant: false,

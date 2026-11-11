@@ -15,6 +15,7 @@ export default async function ChatPage() {
       username={ctx.staff.username}
       fullName={ctx.staff.fullName}
       modules={modulesFor(ctx.staff.role)}
+      showModelDetails={ctx.staff.showModelDetails}
     />
   );
 }
