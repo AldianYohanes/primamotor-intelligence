@@ -236,6 +236,15 @@ export function pendingForStaff(rows: CachedConversationMessage[], staffId: stri
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
 }
 
+/**
+ * Galat insert yang tidak akan pernah berhasil kalau diulang: kebijakan RLS menolak (42501) atau
+ * percakapannya sudah tidak ada (23503, pelanggaran foreign key). Beda dengan galat jaringan,
+ * yang tidak membawa kode Postgres dan layak dicoba lagi nanti.
+ */
+export function isPermanentInsertError(error: { code?: string | null } | null | undefined): boolean {
+  return error?.code === "42501" || error?.code === "23503";
+}
+
 async function flushPendingMessagesOnce(
   supabase: ReturnType<typeof createClient>,
   staffId: string,
@@ -252,7 +261,14 @@ async function flushPendingMessagesOnce(
     const withTrace: AgentMessageInsert = msg.trace ? { ...row, trace: msg.trace as unknown as Json } : row;
     let { error } = await supabase.from("agent_messages").insert(withTrace);
     // Kolom trace belum ada (migrasi 0036 belum jalan): pesannya tetap dikirim tanpa trace.
-    if (error && msg.trace) ({ error } = await supabase.from("agent_messages").insert(row));
+    if (error && msg.trace && !isPermanentInsertError(error)) ({ error } = await supabase.from("agent_messages").insert(row));
+    // Ditolak permanen (percakapan sudah tidak ada, mis. setelah Reset data eval, atau bukan milik tenant ini):
+    // pesan ini tidak akan pernah terkirim. Dibuang dan dilewati; kalau tidak, satu pesan yatim menahan semua
+    // pesan di belakangnya selamanya (ditemukan di uji offline 13 Nov 2026: 39 pesan tertahan, 403 RLS).
+    if (error && isPermanentInsertError(error)) {
+      await cache.pendingMessages.delete(msg.id);
+      continue;
+    }
     // Masih gagal (masih offline?): berhenti di sini supaya urutan tetap terjaga; sisanya dicoba lagi nanti.
     if (error) break;
 
