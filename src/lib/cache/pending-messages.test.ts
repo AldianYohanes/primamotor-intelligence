@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { pendingForStaff, type CachedConversationMessage } from "@/src/lib/cache/indexeddb";
+import { isPermanentInsertError, pendingForStaff, type CachedConversationMessage } from "@/src/lib/cache/indexeddb";
 import { formatSyncAge } from "@/src/lib/stores/stock-sync-store";
 
 const msg = (id: string, created_at: string, staff_id?: string, pending_sync = true): CachedConversationMessage => ({
@@ -26,6 +26,20 @@ describe("pendingForStaff", () => {
 
   it("baris lama tanpa staff_id tetap dikirim supaya tidak hilang", () => {
     expect(pendingForStaff([msg("lama", "2026-10-01T00:00:00Z")], "s9").map((m) => m.id)).toEqual(["lama"]);
+  });
+});
+
+describe("isPermanentInsertError", () => {
+  it("menganggap penolakan RLS dan foreign key sebagai galat permanen", () => {
+    expect(isPermanentInsertError({ code: "42501" })).toBe(true);
+    expect(isPermanentInsertError({ code: "23503" })).toBe(true);
+  });
+
+  it("galat jaringan atau kolom trace yang belum ada tetap layak dicoba lagi", () => {
+    expect(isPermanentInsertError(null)).toBe(false);
+    expect(isPermanentInsertError({})).toBe(false);
+    expect(isPermanentInsertError({ code: "PGRST204" })).toBe(false);
+    expect(isPermanentInsertError({ code: "42703" })).toBe(false);
   });
 });
 
