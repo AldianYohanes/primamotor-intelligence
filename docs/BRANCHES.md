@@ -23,6 +23,8 @@ Hasil uji sesudah gabung: `vitest run` 733 tes lulus, `tsc --noEmit` bersih. Saa
 
 Pada 12 November 2026, 5 galat lint lama (TenantApprovalList, EnableNotificationsBanner, online-status, pos-terminal) diselesaikan di `master`: `online-status` memakai `useSyncExternalStore`, sisanya diberi komentar `eslint-disable` beserta alasan. `bun run lint` sekarang 0 galat (6 peringatan). `vitest run` 733 tes lulus, `tsc --noEmit` bersih.
 
+Pada 13 November 2026, `fix/pending-queue-skip-rejected` (38a1725) digabung ke `master` lokal (b4a9237, tanpa push): antrean pesan offline membuang pesan yang ditolak server secara permanen (kode 42501 atau 23503) supaya satu pesan yatim tidak menahan seluruh antrean. Terbukti di aplikasi (39 pesan tertahan menjadi 0); belum diuji ulang di `/eval`. Branch-nya aman dihapus.
+
 Yang **tidak** masuk: `agent/effort-akurasi` (tingkat cepat/normal/teliti dengan Router voting, dan `search_products_fuzzy`). Bentroknya di inti Router (14 bagian di `agent-loop.ts`, `EvalRunner.tsx`, `router-step.ts`, `run-store.ts`) karena `master` memakai Router versi baru. Disimpan sebagai tag `arsip/effort-akurasi` (76e9fb0). Mau dipakai lagi, fitur voting harus ditulis ulang di atas Router yang sekarang dan diuji ulang.
 
 ## Branch dan folder kerja yang masih ada
